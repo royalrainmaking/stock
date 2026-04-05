@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>StockFanggie – ระบบคลังสินค้า</title>
+  <meta name="description" content="ระบบคลังสินค้าออนไลน์ – สินค้าไม่หาย คิดเงินครบ ตรวจสอบย้อนหลังได้" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Login Screen -->
+    <div id="login-screen" class="screen active">
+      <div class="login-bg">
+        <div class="login-orb orb1"></div>
+        <div class="login-orb orb2"></div>
+        <div class="login-orb orb3"></div>
+      </div>
+      <div class="login-card">
+        <div class="login-logo">
+          <div class="logo-icon">
+            <span class="material-icons">inventory_2</span>
+          </div>
+          <h1 class="logo-title">StockFanggie</h1>
+          <p class="logo-sub">ระบบจัดการคลังสินค้า</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <div class="form-group">
+            <label for="login-username">ชื่อผู้ใช้</label>
+            <input type="text" id="login-username" placeholder="กรอกชื่อผู้ใช้" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="login-password">รหัสผ่าน</label>
+            <div class="password-wrap">
+              <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password" required />
+              <button type="button" class="pwd-toggle" onclick="togglePassword('login-password', this)">
+                <span class="material-icons">visibility</span>
+              </button>
+            </div>
+          </div>
+          <div id="login-error" class="error-msg hidden"></div>
+          <button type="submit" class="btn btn-primary btn-full" id="login-btn">
+            <span class="material-icons">login</span>
+            <span class="btn-text">เข้าสู่ระบบ</span>
+            <span class="btn-spinner hidden">
+              <span class="material-icons" style="animation:spin 0.8s linear infinite;display:inline-block">autorenew</span>
+            </span>
+          </button>
+        </form>
+        <div class="login-footer">
+          <p>ระบบคลังสินค้า v1.0 &nbsp;|&nbsp; Powered by Google Sheets</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="screen hidden">
+      <!-- Top Nav -->
+      <nav class="topnav" id="topnav">
+        <div class="nav-left">
+          <button class="menu-btn" id="menu-toggle" onclick="toggleSidebar()">
+            <span class="material-icons">menu</span>
+          </button>
+          <div class="nav-brand">
+            <div class="nav-logo">
+              <span class="material-icons">inventory_2</span>
+            </div>
+            <span class="nav-title">StockFanggie</span>
+          </div>
+        </div>
+        <div class="nav-right">
+          <div class="nav-badge" id="nav-role-badge"></div>
+          <div class="nav-user" onclick="toggleUserMenu()">
+            <div class="user-avatar" id="nav-avatar">U</div>
+            <span class="user-name" id="nav-username">User</span>
+            <span class="material-icons caret" style="font-size:16px;color:var(--text-muted)">expand_more</span>
+          </div>
+          <div class="user-dropdown hidden" id="user-dropdown">
+            <button onclick="showPage('change-password')">
+              <span class="material-icons">lock</span> เปลี่ยนรหัสผ่าน
+            </button>
+            <button onclick="logout()">
+              <span class="material-icons">logout</span> ออกจากระบบ
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-menu" id="sidebar-menu"></div>
+      </aside>
+      <div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+      <!-- Page Content -->
+      <main class="page-content" id="page-content">
+        <!-- Pages will be injected here -->
+        <div id="page-dashboard" class="page hidden"></div>
+        <div id="page-products" class="page hidden"></div>
+        <div id="page-central-stock" class="page hidden"></div>
+        <div id="page-employee-stock" class="page hidden"></div>
+        <div id="page-receive-goods" class="page hidden"></div>
+        <div id="page-transfer" class="page hidden"></div>
+        <div id="page-consign" class="page hidden"></div>
+        <div id="page-billing" class="page hidden"></div>
+        <div id="page-sales-report" class="page hidden"></div>
+        <div id="page-logs" class="page hidden"></div>
+        <div id="page-users" class="page hidden"></div>
+        <div id="page-warehouses" class="page hidden"></div>
+        <div id="page-change-password" class="page hidden"></div>
+        <div id="page-order-request" class="page hidden"></div>
+        <div id="page-tax-invoice" class="page hidden"></div>
+      </main>
+    </div>
+
+    <!-- Global Toast -->
+    <div id="toast-container"></div>
+
+    <!-- Global Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
+      <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h3 id="modal-title">Modal</h3>
+          <button class="modal-close" onclick="closeModal()">
+            <span class="material-icons">close</span>
+          </button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer" id="modal-footer"></div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="loading-spinner">
+        <div class="spinner-ring"></div>
+        <p>กำลังโหลด...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="auth.js"></script>
+  <script src="ui.js"></script>
+  <script src="pages/dashboard.js"></script>
+  <script src="pages/products.js"></script>
+  <script src="pages/central-stock.js"></script>
+  <script src="pages/employee-stock.js"></script>
+  <script src="pages/receive-goods.js"></script>
+  <script src="pages/transfer.js"></script>
+  <script src="pages/consign.js"></script>
+  <script src="pages/billing.js"></script>
+  <script src="pages/sales-report.js"></script>
+  <script src="pages/logs.js"></script>
+  <script src="pages/users.js"></script>
+  <script src="pages/warehouses.js"></script>
+  <script src="pages/change-password.js"></script>
+  <script src="pages/order-request.js"></script>
+  <script src="pages/tax-invoice.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
