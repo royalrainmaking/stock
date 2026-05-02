@@ -4,7 +4,7 @@
 
 const CONFIG = {
   // ── Google Apps Script URL (Copy URL ที่ได้จากการ Deploy Web App มาวางที่นี่) ───
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbzeb4sGuEoQP5WBUy3UQ-GicfDKGSG7gp9gHiefkRQ7u2sRB3aT-9eGobFil762FwQfOw/exec', // วางลิงก์ Web App ตรงนี้ (เช่น https://script.google.com/macros/s/xxx/exec)
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzOzoxyu-KYTKqdTZbYWqX7bMkIvNeiLclJo9lZsX0Lu4tCiestwlbOmHcNx24zGeQ2Mg/exec',
 
   // ── Demo Mode: true = ใช้ข้อมูล Demo (ไม่ต้อง GAS) ───────
   // ตั้งเป็น false และใส่ GAS_URL จริง เมื่อ Deploy แล้ว
@@ -38,6 +38,8 @@ const SHEETS = {
   BILLING: 'Billing',
   LOGS: 'Logs',
   ORDERS: 'Orders',
+  SHOPS: 'Shops',
+  SHOP_STOCK: 'ShopStock',
 };
 
 // Roles
@@ -45,6 +47,10 @@ const ROLES = {
   ADMIN: 'admin',
   STOCK: 'stock',
   CASHIER: 'cashier',
+  EMPLOYEE: 'employee',
+  SELL: 'sell',
+  CUSTOMER: 'customer',
+  PART_TIME: 'part_time',
 };
 
 // Transaction types

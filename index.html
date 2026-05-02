@@ -10,6 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Leaflet Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- HTML to Image -->
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 </head>
 <body>
   <div id="app">
@@ -103,8 +108,14 @@
         <div id="page-products" class="page hidden"></div>
         <div id="page-central-stock" class="page hidden"></div>
         <div id="page-employee-stock" class="page hidden"></div>
+        <div id="page-cancel-consign" class="page hidden"></div>
         <div id="page-receive-goods" class="page hidden"></div>
+        <div id="page-receive-history" class="page hidden"></div>
         <div id="page-transfer" class="page hidden"></div>
+        <div id="page-transfer-history" class="page hidden"></div>
+        <div id="page-billing-history" class="page hidden"></div>
+        <div id="page-movement-history" class="page hidden"></div>
+        <div id="page-movement" class="page hidden"></div>
         <div id="page-consign" class="page hidden"></div>
         <div id="page-billing" class="page hidden"></div>
         <div id="page-sales-report" class="page hidden"></div>
@@ -112,8 +123,13 @@
         <div id="page-users" class="page hidden"></div>
         <div id="page-warehouses" class="page hidden"></div>
         <div id="page-change-password" class="page hidden"></div>
+        <div id="page-picking" class="page hidden"></div>
         <div id="page-order-request" class="page hidden"></div>
         <div id="page-tax-invoice" class="page hidden"></div>
+        <!-- Shops -->
+        <div id="page-shops" class="page hidden"></div>
+        <div id="page-shop-stock" class="page hidden"></div>
+        <div id="page-shop-map" class="page hidden"></div>
       </main>
     </div>
 
@@ -152,16 +168,26 @@
   <script src="pages/central-stock.js"></script>
   <script src="pages/employee-stock.js"></script>
   <script src="pages/receive-goods.js"></script>
+  <script src="pages/receive-history.js"></script>
   <script src="pages/transfer.js"></script>
+  <script src="pages/transfer-history.js"></script>
+  <script src="pages/movement-history.js"></script>
+  <script src="pages/movement.js"></script>
   <script src="pages/consign.js"></script>
+  <script src="pages/cancel-consign.js"></script>
   <script src="pages/billing.js"></script>
   <script src="pages/sales-report.js"></script>
   <script src="pages/logs.js"></script>
   <script src="pages/users.js"></script>
   <script src="pages/warehouses.js"></script>
   <script src="pages/change-password.js"></script>
+  <script src="pages/picking.js"></script>
   <script src="pages/order-request.js"></script>
   <script src="pages/tax-invoice.js"></script>
+  <script src="pages/billing-history.js"></script>
+  <script src="pages/shops.js"></script>
+  <script src="pages/shop-stock.js"></script>
+  <script src="pages/shop-map.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

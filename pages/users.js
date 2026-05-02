@@ -11,17 +11,24 @@ PAGES['users'] = {
     el.innerHTML = `
       <div class="page-header">
         <div>
-          <h2 class="page-title">จัดการผู้ใช้</h2>
-          <p class="page-subtitle">สร้าง / แก้ไข / ลบ ผู้ใช้งานและกำหนดสิทธิ์</p>
+          <h2 class="page-title">จัดการผู้ใช้งาน</h2>
+          <p class="page-subtitle">เพิ่ม แก้ไข และกำหนดสิทธิ์การใช้งานของพนักงานและตัวแทน (User Management)</p>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary" onclick="PAGES.users.openAdd()"><span class="material-icons">add</span> เพิ่มผู้ใช้</button>
+          <button class="btn btn-primary" onclick="PAGES.users.openAdd()">
+            <span class="material-icons">person_add</span> เพิ่มผู้ใช้ใหม่
+          </button>
         </div>
       </div>
       <div class="card mb-16">
-        <div class="search-bar">
-          <span class="search-icon"><span class="material-icons">search</span></span>
-          <input type="text" placeholder="ค้นหาชื่อหรือ username..." oninput="PAGES.users.doSearch(this.value)" />
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="search-bar" style="flex:1; margin:0">
+            <span class="search-icon"><span class="material-icons">search</span></span>
+            <input type="text" placeholder="ค้นหาชื่อ, Username หรืออีเมล..." oninput="PAGES.users.doSearch(this.value)" />
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="PAGES.users.load()">
+            <span class="material-icons">refresh</span> รีเฟรช
+          </button>
         </div>
       </div>
       <div class="card">
@@ -62,34 +69,49 @@ PAGES['users'] = {
     this._users.forEach(u => { if (roleCounts[u.role] !== undefined) roleCounts[u.role]++; });
 
     document.getElementById('users-table').innerHTML = `
-      <div class="mini-cards mb-16">
-        <div class="mini-card"><div class="mini-val text-primary-color">${this._users.length}</div><div class="mini-label">ผู้ใช้ทั้งหมด</div></div>
-        <div class="mini-card"><div class="mini-val" style="color:var(--primary-light)">${roleCounts.admin}</div><div class="mini-label">Admin</div></div>
-        <div class="mini-card"><div class="mini-val" style="color:var(--accent)">${roleCounts.stock}</div><div class="mini-label">Stock</div></div>
-        <div class="mini-card"><div class="mini-val" style="color:var(--secondary)">${roleCounts.cashier}</div><div class="mini-label">Cashier</div></div>
+      <div class="stats-grid mb-16">
+        <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">people</span></div><div class="stat-label">ผู้ใช้ทั้งหมด</div><div class="stat-value text-primary-color">${this._users.length}</div></div>
+        <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">admin_panel_settings</span></div><div class="stat-label">Admin</div><div class="stat-value" style="color:var(--primary-light)">${roleCounts.admin}</div></div>
+        <div class="stat-card orange"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label">Stock</div><div class="stat-value" style="color:var(--accent)">${roleCounts.stock}</div></div>
+        <div class="stat-card pink"><div class="stat-bg-icon"><span class="material-icons">point_of_sale</span></div><div class="stat-label">Cashier</div><div class="stat-value" style="color:var(--secondary)">${roleCounts.cashier}</div></div>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>#</th><th>Avatar</th><th>ชื่อแสดง</th><th>Username</th>
-            <th>Email</th><th>Role</th><th>สถานะ</th><th class="td-center">จัดการ</th>
+            <th>#</th><th>Avatar</th><th>ชื่อแสดง / ชื่อจริง</th><th>Username</th>
+            <th>เบอร์โทร / Email</th><th>Role</th><th>เงินประกัน</th><th>สถานะ</th><th class="td-center">จัดการ</th>
           </tr></thead>
           <tbody>
             ${data.map((u, i) => `
               <tr>
                 <td class="text-muted">${i+1}</td>
                 <td>
-                  <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem">
-                    ${(u.displayName||u.username||'?').charAt(0).toUpperCase()}
-                  </div>
+                  ${UI.avatar(u.avatar, u.displayName || u.username, 36)}
                 </td>
-                <td class="td-bold">${u.displayName || '-'}</td>
-                <td><code style="color:var(--primary-light);font-size:0.82rem">${u.username}</code></td>
-                <td style="font-size:0.82rem;color:var(--text-secondary)">${u.email || '-'}</td>
-                <td>${UI.roleBadge(u.role)}</td>
                 <td>
-                  <span class="status-dot ${u.active ? 'dot-green' : 'dot-red'}"></span>
-                  ${u.active ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                  <div class="td-bold">${u.displayName || '-'}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted)">${u.fullName || ''}</div>
+                </td>
+                <td><code style="color:var(--primary-light);font-size:0.82rem">${u.username}</code></td>
+                <td>
+                  <div style="font-size:0.85rem">${u.phone || '-'}</div>
+                  <div style="font-size:0.72rem;color:var(--text-muted)">${u.email || '-'}</div>
+                </td>
+                <td>${UI.roleBadge(u.role)}</td>
+                <td class="td-right">฿${UI.currency(u.deposit || 0)}</td>
+                <td>
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <div>
+                      <span class="status-dot ${u.active ? 'dot-green' : 'dot-red'}"></span>
+                      <span style="font-size:0.85rem">${u.active ? 'ใช้งาน' : 'ปิดใช้งาน'}</span>
+                    </div>
+                    ${u.whActive !== null ? `
+                      <div style="font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:4px">
+                        <span class="status-dot ${u.whActive ? 'dot-green' : 'dot-red'}" style="width:6px;height:6px"></span>
+                        ${u.whName}: ${u.whActive ? 'เปิด' : 'ปิด'}
+                      </div>
+                    ` : ''}
+                  </div>
                 </td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
@@ -110,37 +132,52 @@ PAGES['users'] = {
 
   _openForm(user) {
     const isEdit = !!user;
-    const u = user || { username: '', displayName: '', email: '', role: 'stock', active: true, isEmployee: false };
+    const u = user || { username: '', displayName: '', fullName: '', phone: '', email: '', address: '', avatar: '', role: 'stock', active: true, isEmployee: false, deposit: 0 };
     openModal(isEdit ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้ใหม่', `
       <div class="form-row">
-        <div class="form-group"><label>ชื่อแสดง *</label><input id="uf-name" value="${u.displayName||''}" placeholder="ชื่อ นามสกุล" /></div>
+        <div class="form-group"><label>ชื่อในระบบ (Display Name) *</label><input id="uf-name" value="${u.displayName||''}" placeholder="ชื่อเรียกสั้นๆ" /></div>
         <div class="form-group"><label>Username *</label><input id="uf-user" value="${u.username||''}" placeholder="username" ${isEdit?'readonly style="opacity:0.6"':''} /></div>
       </div>
+      <div class="form-group"><label>ชื่อ-นามสกุล (Full Name) *</label><input id="uf-fullname" value="${u.fullName||''}" placeholder="ชื่อ และ นามสกุล จริง" /></div>
       <div class="form-row">
+        <div class="form-group"><label>เบอร์โทรศัพท์</label><input id="uf-phone" value="${u.phone||''}" placeholder="08x-xxx-xxxx" /></div>
         <div class="form-group"><label>Email</label><input id="uf-email" type="email" value="${u.email||''}" placeholder="email@example.com" /></div>
+      </div>
+      <div class="form-group"><label>ที่อยู่</label><textarea id="uf-address" rows="2" placeholder="ที่อยู่ปัจจุบัน">${u.address||''}</textarea></div>
+      <div class="form-row">
         <div class="form-group"><label>Role *</label>
           <select id="uf-role">
-            <option value="stock" ${u.role==='stock'?'selected':''}>Stock – คลังสินค้า</option>
-            <option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier – แคชเชียร์</option>
             <option value="admin" ${u.role==='admin'?'selected':''}>Admin – ผู้ดูแลระบบ</option>
+            <option value="stock" ${u.role==='stock'?'selected':''}>Stock – คลังสินค้ากลาง</option>
+            <option value="cashier" ${u.role==='cashier'?'selected':''}>Cashier – แคชเชียร์</option>
+            <option value="employee" ${u.role==='employee'?'selected':''}>Employee – พนักงานทั่วไป</option>
+            <option value="sell" ${u.role==='sell'?'selected':''}>Sales – พนักงานขาย</option>
+            <option value="customer" ${u.role==='customer'?'selected':''}>Customer – ลูกค้า/ตัวแทน</option>
+            <option value="part_time" ${u.role==='part_time'?'selected':''}>Part-time – พนักงานชั่วคราว</option>
           </select>
         </div>
+        <div class="form-group"><label>เงินประกันสินค้า (บาท)</label><input type="number" id="uf-deposit" value="${u.deposit||0}" step="100" /></div>
       </div>
+      <div class="form-group"><label>รูปภาพ Profile (URL)</label><input id="uf-avatar" value="${u.avatar||''}" placeholder="https://..." /></div>
       ${!isEdit ? `
         <div class="form-group"><label>รหัสผ่านเริ่มต้น *</label>
           <div class="password-wrap">
-            <input type="password" id="uf-pass" placeholder="รหัสผ่านเริ่มต้น (ผู้ใช้เปลี่ยนได้ทีหลัง)" />
-            <button type="button" class="pwd-toggle" onclick="togglePassword('uf-pass',this)">👁</button>
+            <input type="password" id="uf-pass" placeholder="รหัสผ่านเริ่มต้น (ผู้ใช้สามารถเปลี่ยนทีหลังได้)" />
+            <button type="button" class="pwd-toggle" onclick="togglePassword('uf-pass',this)">
+              <span class="material-icons">visibility</span>
+            </button>
           </div>
         </div>
       ` : ''}
-      <div style="display:flex;align-items:center;gap:10px">
-        <label class="toggle"><input type="checkbox" id="uf-active" ${u.active?'checked':''}><span class="toggle-slider"></span></label>
-        <span style="font-size:0.88rem">เปิดใช้งาน</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <label class="toggle"><input type="checkbox" id="uf-emp" ${u.isEmployee?'checked':''}><span class="toggle-slider"></span></label>
-        <span style="font-size:0.88rem">เป็นพนักงาน (มีคลังพนักงาน)</span>
+      <div style="display:flex;gap:24px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <label class="toggle"><input type="checkbox" id="uf-active" ${u.active?'checked':''}><span class="toggle-slider"></span></label>
+          <span style="font-size:0.88rem">เปิดใช้งาน</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <label class="toggle"><input type="checkbox" id="uf-emp" ${u.isEmployee?'checked':''}><span class="toggle-slider"></span></label>
+          <span style="font-size:0.88rem">เป็นพนักงานขาย/เบิกสินค้าได้</span>
+        </div>
       </div>
       ${isEdit ? `
         <div class="alert alert-info">
@@ -160,14 +197,19 @@ PAGES['users'] = {
     const data = {
       id: id || undefined,
       displayName: get('uf-name')?.value?.trim(),
+      fullName: get('uf-fullname')?.value?.trim(),
       username: get('uf-user')?.value?.trim(),
+      phone: get('uf-phone')?.value?.trim(),
       email: get('uf-email')?.value?.trim(),
+      address: get('uf-address')?.value?.trim(),
+      avatar: get('uf-avatar')?.value?.trim(),
       role: get('uf-role')?.value,
       active: get('uf-active')?.checked,
       isEmployee: get('uf-emp')?.checked,
+      deposit: Number(get('uf-deposit')?.value) || 0,
       password: id ? undefined : get('uf-pass')?.value,
     };
-    if (!data.displayName || !data.username) return UI.toast('กรุณากรอกชื่อและ Username', 'warning');
+    if (!data.displayName || !data.fullName || !data.username) return UI.toast('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน', 'warning');
     if (!id && !data.password) return UI.toast('กรุณากรอกรหัสผ่านเริ่มต้น', 'warning');
     try {
       UI.loading(true);

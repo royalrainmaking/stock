@@ -99,7 +99,7 @@ PAGES['logs'] = {
     const actionColors = {
       login: 'badge-blue', receive: 'badge-green', transfer: 'badge-blue',
       consign: 'badge-yellow', billing: 'badge-green', adjust: 'badge-yellow',
-      delete: 'badge-red',
+      delete: 'badge-red', product: 'badge-blue', order: 'badge-accent'
     };
 
     const totalPages = Math.ceil(this._total / CONFIG.PAGE_SIZE);
@@ -119,7 +119,13 @@ PAGES['logs'] = {
                 <td class="text-muted">${(this._page - 1) * CONFIG.PAGE_SIZE + i + 1}</td>
                 <td style="white-space:nowrap;font-size:0.82rem">${UI.dateTimeStr(log.ts)}</td>
                 <td>
-                  <div class="fw-bold" style="font-size:0.88rem">${log.user || '-'}</div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    ${(() => {
+                      const u = this._users.find(ux => ux.username === log.username);
+                      return UI.avatar(u?.avatar, log.username, 24);
+                    })()}
+                    <div class="fw-bold" style="font-size:0.88rem">${log.username || '-'}</div>
+                  </div>
                 </td>
                 <td>
                   <span class="badge ${actionColors[log.action] || 'badge-gray'}">
@@ -139,8 +145,8 @@ PAGES['logs'] = {
   exportCSV() {
     if (!this._logs.length) return UI.toast('ไม่มีข้อมูล', 'warning');
     const headers = ['วันที่/เวลา', 'ผู้ใช้', 'ประเภท', 'รายละเอียด'];
-    const rows = this._logs.map(l => [l.ts, l.user, l.action, l.detail]);
-    const csv = [headers, ...rows].map(r => r.map(v => `"${v || ''}"`).join(',')).join('\n');
+    const rows = this._logs.map(l => [UI.dateTimeStr(l.ts), l.username, l.action, l.detail]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${(String(v)||'').replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\ufeff'+csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

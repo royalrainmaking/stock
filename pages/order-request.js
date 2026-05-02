@@ -6,6 +6,7 @@ PAGES['order-request'] = {
   _products: [],
   _items: [],
   _orders: [],
+  _users: [],
 
   async render() {
     const el = document.getElementById('page-order-request');
@@ -52,9 +53,10 @@ PAGES['order-request'] = {
 
   async loadData() {
     try {
-      const [pr, or] = await Promise.all([API.getProducts(), API.getOrders()]);
+      const [pr, or, ur] = await Promise.all([API.getProducts(), API.getOrders(), API.getUsers()]);
       this._products = pr.products || [];
       this._orders = or.orders || [];
+      this._users = ur.users || [];
       const sel = document.getElementById('or-product');
       if (sel) sel.innerHTML = '<option value="">-- เลือกสินค้า --</option>' +
         this._products.map(p => `<option value="${p.id}" data-upc="${p.unitsPerCase||1}">${p.code} – ${p.name}</option>`).join('');
@@ -140,9 +142,15 @@ PAGES['order-request'] = {
     el.innerHTML = this._orders.slice(0, 20).map(o => `
       <div class="card mb-8" style="padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
-          <div>
-            <div class="fw-bold" style="font-size:0.88rem">${UI.dateStr(o.date)}</div>
-            <div style="font-size:0.78rem;color:var(--text-muted)">โดย ${o.requestedBy || '-'}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${(() => {
+              const u = this._users.find(ux => ux.displayName === o.requestedBy || ux.username === o.requestedBy);
+              return UI.avatar(u?.avatar, o.requestedBy, 32);
+            })()}
+            <div>
+              <div class="fw-bold" style="font-size:0.88rem">${UI.dateStr(o.date)}</div>
+              <div style="font-size:0.78rem;color:var(--text-muted)">โดย ${o.requestedBy || '-'}</div>
+            </div>
           </div>
           <span class="badge ${o.status === 'approved' ? 'badge-green' : o.status === 'rejected' ? 'badge-red' : 'badge-yellow'}">
             ${o.status === 'approved' ? '<span class="material-icons" style="font-size:12px;vertical-align:middle">check_circle</span> อนุมัติ' : o.status === 'rejected' ? '<span class="material-icons" style="font-size:12px;vertical-align:middle">cancel</span> ปฏิเสธ' : '<span class="material-icons" style="font-size:12px;vertical-align:middle">schedule</span> รอ'}

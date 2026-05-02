@@ -11,19 +11,24 @@ PAGES['products'] = {
     el.innerHTML = `
       <div class="page-header">
         <div>
-          <h2 class="page-title">จัดการสินค้า</h2>
-          <p class="page-subtitle">เพิ่ม / แก้ไข / ลบ รายการสินค้าในระบบ</p>
+          <h2 class="page-title">รายการสินค้า</h2>
+          <p class="page-subtitle">จัดการข้อมูลสินค้า ราคาทุน และราคาจำหน่ายในระบบ (Master Data)</p>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary" onclick="PAGES.products.openAdd()"><span class="material-icons">add</span> เพิ่มสินค้า</button>
+          <button class="btn btn-primary" onclick="PAGES.products.openAdd()">
+            <span class="material-icons">add_circle</span> เพิ่มสินค้าใหม่
+          </button>
         </div>
       </div>
       <div class="card mb-16">
-        <div class="input-group" style="margin:0">
-          <div class="search-bar">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="search-bar" style="flex:1; margin:0">
             <span class="search-icon"><span class="material-icons">search</span></span>
-            <input type="text" placeholder="ค้นหาสินค้า..." id="product-search" oninput="PAGES.products.doSearch(this.value)" />
+            <input type="text" placeholder="ค้นหาด้วยชื่อสินค้า, รหัส หรือหมวดหมู่..." id="product-search" oninput="PAGES.products.doSearch(this.value)" />
           </div>
+          <button class="btn btn-secondary btn-sm" onclick="PAGES.products.load()">
+            <span class="material-icons">refresh</span> รีเฟรช
+          </button>
         </div>
       </div>
       <div class="card">
@@ -38,7 +43,7 @@ PAGES['products'] = {
       const res = await API.getProducts();
       this._products = res.products || [];
       this.renderTable();
-    } catch(e) {
+    } catch (e) {
       document.getElementById('products-table').innerHTML = `<div class="alert alert-danger"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">warning</span>${e.message}</div>`;
     }
   },
@@ -53,7 +58,7 @@ PAGES['products'] = {
     return this._products.filter(p =>
       p.name.toLowerCase().includes(this._search) ||
       p.code.toLowerCase().includes(this._search) ||
-      (p.category||'').toLowerCase().includes(this._search)
+      (p.category || '').toLowerCase().includes(this._search)
     );
   },
 
@@ -67,33 +72,39 @@ PAGES['products'] = {
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>รหัส</th><th>ชื่อสินค้า</th><th>หมวด</th><th>หน่วย</th>
-            <th class="td-right">ต้นทุน (บวก VAT)</th>
-            <th class="td-right">ราคาพนักงาน</th>
-            <th class="td-right">ราคาขาย</th>
-            <th class="td-center">รูป</th>
+            <th>#</th>
+            <th>รูป</th>
+            <th>ข้อมูลสินค้า</th>
+            <th>หมวดหมู่</th>
+            <th class="td-center">บรรจุภัณฑ์</th>
+            <th class="td-right">ต้นทุนรวม VAT</th>
+            <th class="td-right">ส่งเซลล์</th>
+            <th class="td-right">ค่าคอมฯ</th>
+            <th class="td-right">ส่งร้านค้า</th>
             <th class="td-center">จัดการ</th>
           </tr></thead>
           <tbody>
             ${data.map(p => `
-              <tr>
-                <td><code style="color:var(--primary-light);font-size:0.82rem">${p.code}</code></td>
-                <td class="td-bold">${p.name}</td>
-                <td><span class="badge badge-gray">${p.category||'-'}</span></td>
-                <td>${p.unit}</td>
-                <td class="td-right">฿${UI.currency(p.costVat)}</td>
-                <td class="td-right">฿${UI.currency(p.empVat)}</td>
-                <td class="td-right text-success fw-bold">฿${UI.currency(p.sellPrice)}</td>
-                <td class="td-center">
-                  ${p.imageUrl
-                    ? `<img src="${p.imageUrl}" class="product-img" alt="${p.name}" onerror="this.style.display='none'" />`
-                    : '<div class="product-img-placeholder"><span class="material-icons">inventory_2</span></div>'
-                  }
+              <tr style="transition:var(--transition)" onpointerenter="this.style.background='var(--bg-hover)'" onpointerleave="this.style.background='transparent'">
+                <td class="text-muted">${data.indexOf(p) + 1}</td>
+                <td>${UI.image(p.imageUrl, 'product-img')}</td>
+                <td>
+                  <div class="td-bold" style="font-size:0.95rem">${p.name}</div>
+                  <div style="font-size:0.75rem;color:var(--primary-light);font-family:monospace;font-weight:700">${p.code}</div>
                 </td>
+                <td><span class="badge badge-gray" style="font-weight:600">${p.category || '-'}</span></td>
+                <td class="td-center">
+                  <div style="font-size:0.8rem;color:var(--text-secondary)">📦 ${p.unitsPerCase || '-'} / 🍱 ${p.unitsPerTray || '-'}</div>
+                  <div style="font-size:0.7rem;color:var(--text-muted)">หน่วย: ${p.unit}</div>
+                </td>
+                <td class="td-right td-bold" style="color:var(--text-primary)">฿${UI.currency(p.costVat)}</td>
+                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(p.sellWholesale)}</td>
+                <td class="td-right" style="color:#BE185D;font-weight:700">฿${UI.currency(p.sellCommission)}</td>
+                <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(p.shopWholesale)}</td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
-                    <button class="btn btn-secondary btn-xs" onclick="PAGES.products.openEdit('${p.id}')"><span class="material-icons">edit</span></button>
-                    <button class="btn btn-danger btn-xs" onclick="PAGES.products.doDelete('${p.id}')"><span class="material-icons">delete</span></button>
+                    <button class="btn btn-secondary btn-icon" onclick="PAGES.products.openEdit('${p.id}')" title="แก้ไข"><span class="material-icons" style="font-size:16px">edit</span></button>
+                    <button class="btn btn-danger btn-icon" onclick="PAGES.products.doDelete('${p.id}')" title="ลบ"><span class="material-icons" style="font-size:16px">delete</span></button>
                   </div>
                 </td>
               </tr>
@@ -110,37 +121,38 @@ PAGES['products'] = {
 
   _openForm(product) {
     const isEdit = !!product;
-    const p = product || { code:'', name:'', category:'', unit:'ขวด', unitsPerCase:'', costNoVat:'', costVat:'', empNoVat:'', empVat:'', fridgeNoVat:'', fridgeVat:'', sellPrice:'', imageUrl:'' };
+    const p = product || { code: '', name: '', category: '', unit: 'ขวด', unitsPerCase: '', unitsPerTray: '', costNoVat: '', costVat: '', agentProfit: '', sellWholesale: '', sellCommission: '', shopWholesale: '', imageUrl: '' };
     openModal(isEdit ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่', `
       <div class="form-row">
         <div class="form-group"><label>รหัสสินค้า *</label><input id="pf-code" value="${p.code}" placeholder="P10400" /></div>
-        <div class="form-group"><label>หมวดหมู่</label><input id="pf-cat" value="${p.category||''}" placeholder="100ml" /></div>
+        <div class="form-group"><label>หมวดหมู่</label><input id="pf-cat" value="${p.category || ''}" placeholder="100ml" /></div>
       </div>
       <div class="form-group"><label>ชื่อสินค้า *</label><input id="pf-name" value="${p.name}" placeholder="ชื่อสินค้า" /></div>
-      <div class="form-row">
-        <div class="form-group"><label>หน่วย</label>
+        <div class="form-group"><label>หน่วยเรียกสินค้า</label>
           <select id="pf-unit">
-            ${['ขวด','ถุง','กล่อง','ชิ้น','อัน','แพ็ค'].map(u=>`<option ${p.unit===u?'selected':''}>${u}</option>`).join('')}
+            ${['ขวด', 'ถ้วย', 'ชุด', 'กล่อง', 'ชิ้น', 'อัน', 'แพ็ค'].map(u => `<option ${p.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label>จำนวน/ลัง</label><input id="pf-upc" type="number" value="${p.unitsPerCase||''}" placeholder="64" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>จำนวนขวด</label><input id="pf-upc" type="number" value="${p.unitsPerCase || ''}" placeholder="ตัวอย่าง 64" /></div>
+        <div class="form-group"><label>จำนวน ขวด/ถาด</label><input id="pf-upt" type="number" value="${p.unitsPerTray || ''}" placeholder="ตัวอย่าง 30" /></div>
       </div>
       <hr class="section-divider" />
-      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px">💰 ราคา (กรอกบาท)</p>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px">💰 รายละเอียดราคา (บาท)</p>
       <div class="form-row">
-        <div class="form-group"><label>ต้นทุน (ไม่รวม VAT)</label><input id="pf-costnoVat" type="number" step="0.01" value="${p.costNoVat||''}" /></div>
-        <div class="form-group"><label>ต้นทุน (รวม VAT)</label><input id="pf-costvat" type="number" step="0.01" value="${p.costVat||''}" /></div>
+        <div class="form-group"><label>ต้นทุน (ไม่รวม VAT)</label><input id="pf-costnoVat" type="number" step="0.01" value="${p.costNoVat || ''}" /></div>
+        <div class="form-group"><label>ต้นทุน (รวม VAT)</label><input id="pf-costvat" type="number" step="0.01" value="${p.costVat || ''}" /></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>ราคาพนักงาน (ไม่รวม VAT)</label><input id="pf-empnoVat" type="number" step="0.01" value="${p.empNoVat||''}" /></div>
-        <div class="form-group"><label>ราคาพนักงาน (รวม VAT)</label><input id="pf-empvat" type="number" step="0.01" value="${p.empVat||''}" /></div>
+        <div class="form-group"><label>กำไรเอเย่นต์</label><input id="pf-agent" type="number" step="0.01" value="${p.agentProfit || ''}" /></div>
+        <div class="form-group"><label>ราคาส่งเซลล์</label><input id="pf-sellwh" type="number" step="0.01" value="${p.sellWholesale || ''}" /></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>ราคาตู้แช่ (ไม่รวม VAT)</label><input id="pf-fridgenoVat" type="number" step="0.01" value="${p.fridgeNoVat||''}" /></div>
-        <div class="form-group"><label>ราคาตู้แช่ (รวม VAT)</label><input id="pf-fridgevat" type="number" step="0.01" value="${p.fridgeVat||''}" /></div>
+        <div class="form-group"><label>ค่าคอมเซลล์</label><input id="pf-sellcom" type="number" step="0.01" value="${p.sellCommission || ''}" /></div>
+        <div class="form-group"><label>ราคาส่งร้านค้า</label><input id="pf-shopwh" type="number" step="0.01" value="${p.shopWholesale || ''}" /></div>
       </div>
-      <div class="form-group"><label>ราคาขาย</label><input id="pf-sell" type="number" step="0.01" value="${p.sellPrice||''}" /></div>
-      <div class="form-group"><label>URL รูปสินค้า (Google Drive / URL)</label><input id="pf-img" value="${p.imageUrl||''}" placeholder="https://..." /></div>
+      <div class="form-group"><label>URL รูปสินค้า (Google Drive / URL)</label><input id="pf-img" value="${p.imageUrl || ''}" placeholder="https://..." /></div>
     `, `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
       <button class="btn btn-primary" onclick="PAGES.products.saveForm('${isEdit ? p.id : ''}')">
@@ -154,11 +166,14 @@ PAGES['products'] = {
     const data = {
       id: id || undefined,
       code: get('pf-code'), name: get('pf-name'), category: get('pf-cat'),
-      unit: get('pf-unit'), unitsPerCase: Number(get('pf-upc')),
-      costNoVat: Number(get('pf-costnoVat')), costVat: Number(get('pf-costvat')),
-      empNoVat: Number(get('pf-empnoVat')), empVat: Number(get('pf-empvat')),
-      fridgeNoVat: Number(get('pf-fridgenoVat')), fridgeVat: Number(get('pf-fridgevat')),
-      sellPrice: Number(get('pf-sell')), imageUrl: get('pf-img'),
+      unit: get('pf-unit'),
+      unitsPerCase: Number(get('pf-upc')) || 0,
+      unitsPerTray: Number(get('pf-upt')) || 0,
+      costNoVat: Number(get('pf-costnoVat')),
+      costVat: Number(get('pf-costvat')),
+      agentProfit: Number(get('pf-agent')), sellWholesale: Number(get('pf-sellwh')),
+      sellCommission: Number(get('pf-sellcom')), shopWholesale: Number(get('pf-shopwh')),
+      imageUrl: get('pf-img'),
     };
     if (!data.code || !data.name) return UI.toast('กรุณากรอกรหัสและชื่อสินค้า', 'warning');
     try {
@@ -168,7 +183,7 @@ PAGES['products'] = {
       closeModal();
       UI.toast(id ? 'แก้ไขสินค้าเรียบร้อย ✅' : 'เพิ่มสินค้าเรียบร้อย ✅', 'success');
       await this.load();
-    } catch(e) {
+    } catch (e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
     } finally { UI.loading(false); }
   },
@@ -181,7 +196,7 @@ PAGES['products'] = {
       await API.deleteProduct(id);
       UI.toast('ลบสินค้าเรียบร้อย ✅', 'success');
       await this.load();
-    } catch(e) {
+    } catch (e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
     } finally { UI.loading(false); }
   }

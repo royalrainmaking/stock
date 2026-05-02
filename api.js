@@ -7,15 +7,15 @@ const API = {
     const url = new URL(CONFIG.GAS_URL);
     url.searchParams.set('action', action);
     url.searchParams.set('token', AUTH.getToken());
+    url.searchParams.set('_t', Date.now()); // Prevent GET caching
     Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null) url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
+      // Skip reserved keys that would override route params
+      if (k === 'action' || k === 'token' || k === '_t') return;
+      if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
     });
     return fetch(url.toString())
       .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        return data;
-      });
+      .then(data => this._handleData(data));
   },
 
   _post(action, body = {}) {
@@ -24,13 +24,20 @@ const API = {
     url.searchParams.set('token', AUTH.getToken());
     return fetch(url.toString(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(body),
     }).then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        return data;
-      });
+      .then(data => this._handleData(data));
+  },
+
+  _handleData(data) {
+    if (data.error) {
+      if (data.error.includes('Unauthorized')) {
+        setTimeout(() => typeof logout === 'function' && logout(), 500);
+      }
+      throw new Error(data.error);
+    }
+    return data;
   },
 
   // ── Auth ──────────────────────────────
@@ -63,15 +70,24 @@ const API = {
   getCentralStock(warehouseId) { return this._call('getCentralStock', { warehouseId }); },
   getEmployeeStock(employeeId) { return this._call('getEmployeeStock', { employeeId }); },
   getAllEmployeeStocks(date) { return this._call('getAllEmployeeStocks', { date }); },
+  getMovementHistory(params) { return this._call('getMovementHistory', params); },
 
   receiveGoods(data) { return this._post('receiveGoods', data); },
-  transferToEmployee(data) { return this._post('transferToEmployee', data); },
+  requestTransfer(data) { return this._post('requestTransfer', data); },
+  getPickingTasks() { return this._call('getPickingTasks'); },
+  confirmPicking(id, items) { return this._post('confirmPicking', { id, items }); },
+  rejectPicking(id) { return this._call('rejectPicking', { id }); },
+  deletePicking(id) { return this._call('deletePicking', { id }); },
   consignFromEmployee(data) { return this._post('consignFromEmployee', data); },
+  cancelConsign(data) { return this._post('cancelConsign', data); },
+  moveStock(data) { return this._post('moveStock', data); },
   adjustStock(data) { return this._post('adjustStock', data); },
+  adjustCentralStockBatch(data) { return this._post('adjustCentralStockBatch', data); },
   orderRequest(data) { return this._post('orderRequest', data); },
 
   // ── Billing ───────────────────────────
   getBillingList(date) { return this._call('getBillingList', { date }); },
+  getBillingHistory(startDate, endDate) { return this._call('getBillingHistory', { startDate, endDate }); },
   doBilling(data) { return this._post('doBilling', data); },
   getBillingDetail(billingId) { return this._call('getBillingDetail', { billingId }); },
   generateTaxInvoice(billingId) { return this._call('generateTaxInvoice', { billingId }); },
@@ -79,8 +95,18 @@ const API = {
   // ── Reports ───────────────────────────
   getDashboard(period, year, month, day) { return this._call('getDashboard', { period, year, month, day }); },
   getSalesReport(startDate, endDate, warehouseId) { return this._call('getSalesReport', { startDate, endDate, warehouseId }); },
-  getLogs(startDate, endDate, userId, action, page) { return this._call('getLogs', { startDate, endDate, userId, action, page }); },
+  getLogs(startDate, endDate, userId, filterAction, page) { return this._call('getLogs', { startDate, endDate, userId, filterAction, page }); },
   getOrders() { return this._call('getOrders'); },
+  // ── Shops ────────────────────────────
+  getShops() { return this._call('getShops'); },
+  createShop(data) { return this._post('createShop', data); },
+  updateShop(data) { return this._post('updateShop', data); },
+  deleteShop(shopId) { return this._post('deleteShop', { shopId }); },
+  getShopStock(shopId) { return this._call('getShopStock', { shopId }); },
+  getShopHistory(shopId) { return this._call('getShopHistory', { shopId }); },
+  moveToShop(data) { return this._post('moveToShop', data); },
+  swapShopStock(data) { return this._post('swapShopStock', data); },
+  returnFromShop(data) { return this._post('returnFromShop', data); },
 };
 
 // ── Demo/local mode when GAS not configured ──────────────────
@@ -207,13 +233,31 @@ if (IS_DEMO) {
       { date: todayStr(), product: '80g วุ้นมะพร้าว', units: 31, revenue: 4340, warehouseName: 'คลังพนักงาน – นางสาว ข.' },
     ]
   });
+  API.getBillingHistory = (startDate, endDate) => Promise.resolve({
+    billings: [
+      { id: 'B001', date: todayStr(), warehouseId: 'EW001', warehouseName: 'คลังพนักงาน – นาย ก.', employee: DEMO_DATA.users[0], totalAmt: 15400, totalUnits: 45, createdAt: new Date().toISOString() },
+      { id: 'B002', date: todayStr(), warehouseId: 'EW002', warehouseName: 'คลังพนักงาน – นางสาว ข.', employee: DEMO_DATA.users[1], totalAmt: 8200, totalUnits: 28, createdAt: new Date(Date.now()-3600000).toISOString() },
+    ]
+  });
+  API.getBillingDetail = (id) => Promise.resolve({
+    billing: {
+       id: id, date: todayStr(), warehouseId: 'EW001', warehouseName: 'คลังพนักงาน – นาย ก.', employee: DEMO_DATA.users[0],
+       totalAmt: 15400, totalUnits: 45, createdAt: new Date().toISOString(),
+       items: JSON.stringify([
+         { productId: 'P001', sold: 30, pricePerUnit: 350 },
+         { productId: 'P002', sold: 15, pricePerUnit: 380 }
+       ])
+    }
+  });
   API.getLogs = () => Promise.resolve({
     logs: [
-      { ts: new Date().toISOString(), user: 'admin', action: 'login', detail: 'เข้าสู่ระบบ' },
-      { ts: new Date().toISOString(), user: 'stock01', action: 'transfer', detail: 'เบิก 100ml DR-1 M&M x20 → คลังพนักงาน นาย ก.' },
-      { ts: new Date().toISOString(), user: 'cashier01', action: 'billing', detail: 'คิดเงิน นาย ก. วันนี้' },
+      { ts: new Date().toISOString(), username: 'admin',     action: 'login',    detail: 'เข้าสู่ระบบ' },
+      { ts: new Date().toISOString(), username: 'stock01',   action: 'transfer', detail: 'เบิก 100ml DR-1 M&M x20 → คลังพนักงาน นาย ก.' },
+      { ts: new Date().toISOString(), username: 'cashier01', action: 'billing',  detail: 'คิดเงิน นาย ก. วันนี้' },
+      { ts: new Date(Date.now() - 3600000).toISOString(), username: 'stock01',   action: 'receive',  detail: 'รับสินค้าเข้าคลัง 1 – 100ml DR-1 M&M x100' },
+      { ts: new Date(Date.now() - 7200000).toISOString(), username: 'admin',     action: 'adjust',   detail: 'ปรับยอด P001 คลัง W001' },
     ],
-    total: 3
+    total: 5
   });
   API.receiveGoods = (data) => {
     data.items.forEach(item => {
@@ -233,6 +277,28 @@ if (IS_DEMO) {
     });
     return Promise.resolve({ success: true });
   };
+  API.returnGoods = (data) => Promise.resolve({ success: true });
+  API.moveStock = (data) => {
+    data.items.forEach(item => {
+      // Find source
+      let src = DEMO_DATA.centralStock.find(s => s.productId === item.productId && s.warehouseId === data.fromWhId)
+             || DEMO_DATA.employeeStock.find(s => s.productId === item.productId && s.warehouseId === data.fromWhId);
+      if (src) src.qty = Math.max(0, src.qty - item.qty);
+      
+      // Find or create target
+      const tWh = DEMO_DATA.warehouses.find(w => w.id === data.toWhId);
+      if (tWh?.type === 'central') {
+        let tgt = DEMO_DATA.centralStock.find(s => s.productId === item.productId && s.warehouseId === data.toWhId);
+        if (tgt) tgt.qty += item.qty;
+        else DEMO_DATA.centralStock.push({ productId: item.productId, warehouseId: data.toWhId, qty: item.qty, unit: item.unit });
+      } else {
+        let tgt = DEMO_DATA.employeeStock.find(s => s.productId === item.productId && s.warehouseId === data.toWhId);
+        if (tgt) tgt.qty += item.qty;
+        else DEMO_DATA.employeeStock.push({ productId: item.productId, warehouseId: data.toWhId, qty: item.qty, consigned: 0, unit: item.unit });
+      }
+    });
+    return Promise.resolve({ success: true });
+  };
   API.consignFromEmployee = (data) => {
     data.items.forEach(item => {
       const es = DEMO_DATA.employeeStock.find(s => s.productId === item.productId && s.warehouseId === data.fromWarehouseId);
@@ -241,6 +307,17 @@ if (IS_DEMO) {
     return Promise.resolve({ success: true });
   };
   API.doBilling = (data) => {
+    if (data.items) {
+      data.items.forEach(item => {
+        const es = DEMO_DATA.employeeStock.find(s => s.productId === item.productId && s.warehouseId === data.warehouseId && s.expiryDate === item.expiryDate);
+        if (es) {
+          es.qty = item.consigned || 0;
+          es.consigned = 0;
+        }
+      });
+      // Remove items with zero quantity
+      DEMO_DATA.employeeStock = DEMO_DATA.employeeStock.filter(s => s.qty > 0);
+    }
     return Promise.resolve({ success: true, billingId: 'B' + Date.now(), totalAmt: data.totalAmt || 0 });
   };
   API.createUser = (data) => {
@@ -286,6 +363,27 @@ if (IS_DEMO) {
     return Promise.resolve({ success: true });
   };
   API.changePassword = (op, np) => Promise.resolve({ success: true });
+  API.adjustCentralStockBatch = (data) => {
+    const { warehouseId, productId, originalExpiry, newExpiry, newQty } = data;
+    const batchIndex = DEMO_DATA.centralStock.findIndex(s => 
+      s.warehouseId === warehouseId && 
+      s.productId === productId && 
+      (s.expiryDate || '9999-12-31') === originalExpiry
+    );
+    if (batchIndex >= 0) {
+      if (newQty <= 0) {
+        DEMO_DATA.centralStock.splice(batchIndex, 1);
+      } else {
+        DEMO_DATA.centralStock[batchIndex].qty = newQty;
+        DEMO_DATA.centralStock[batchIndex].expiryDate = newExpiry;
+      }
+    } else if (newQty > 0) {
+      DEMO_DATA.centralStock.push({
+        warehouseId, productId, qty: newQty, expiryDate: newExpiry, unit: data.unit || ''
+      });
+    }
+    return Promise.resolve({ success: true });
+  };
   API.orderRequest = (data) => Promise.resolve({ success: true });
   API.getOrders = () => Promise.resolve({ orders: [] });
   API.generateTaxInvoice = (bid) => Promise.resolve({ invoiceNumber: 'INV-' + Date.now(), items: [] });

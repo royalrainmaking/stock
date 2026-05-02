@@ -11,12 +11,13 @@ PAGES['warehouses'] = {
     el.innerHTML = `
       <div class="page-header">
         <div>
-          <h2 class="page-title">จัดการคลัง</h2>
-          <p class="page-subtitle">เพิ่ม / ลบ คลังกลางและคลังพนักงาน</p>
+          <h2 class="page-title">จัดการคลังสินค้า</h2>
+          <p class="page-subtitle">จัดการคลังสินค้าส่วนกลาง และคลังพนักงานรายบุคคล (Warehouse Management)</p>
         </div>
         <div class="page-actions">
-          <button class="btn btn-accent" onclick="PAGES.warehouses.openAdd('central')"><span class="material-icons">warehouse</span> เพิ่มคลังกลาง</button>
-          <button class="btn btn-primary" onclick="PAGES.warehouses.openAdd('employee')"><span class="material-icons">person_pin</span> เพิ่มคลังพนักงาน</button>
+          <button class="btn btn-primary" onclick="PAGES.warehouses.load()">
+            <span class="material-icons">refresh</span> รีเฟรช
+          </button>
         </div>
       </div>
       <div id="wh-body">${UI.spinner()}</div>
@@ -45,7 +46,7 @@ PAGES['warehouses'] = {
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h3 style="font-size:1rem;font-weight:700"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">warehouse</span>คลังกลาง (${central.length})</h3>
-            <button class="btn btn-accent btn-sm" onclick="PAGES.warehouses.openAdd('central')">+ เพิ่ม</button>
+            <button class="btn btn-accent btn-sm" onclick="PAGES.warehouses.openAdd('central')"><span class="material-icons" style="font-size:16px">add</span> เพิ่มคลังกลาง</button>
           </div>
           ${central.length ? central.map(w => this._whCard(w)).join('') : UI.emptyState('warehouse', 'ยังไม่มีคลังกลาง', '')}
         </div>
@@ -53,7 +54,7 @@ PAGES['warehouses'] = {
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
             <h3 style="font-size:1rem;font-weight:700"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">person_pin</span>คลังพนักงาน (${employee.length})</h3>
-            <button class="btn btn-primary btn-sm" onclick="PAGES.warehouses.openAdd('employee')">+ เพิ่ม</button>
+            <button class="btn btn-primary btn-sm" onclick="PAGES.warehouses.openAdd('employee')"><span class="material-icons" style="font-size:16px">add</span> เพิ่มคลังพนักงาน</button>
           </div>
           ${employee.length ? employee.map(w => this._whCard(w)).join('') : UI.emptyState('person_pin', 'ยังไม่มีคลังพนักงาน', '')}
         </div>
@@ -66,10 +67,13 @@ PAGES['warehouses'] = {
     return `
       <div class="card mb-16" style="border-left:3px solid ${w.type==='central'?'var(--accent)':'var(--primary)'}">
         <div style="display:flex;align-items:center;justify-content:space-between">
-          <div>
-            <div class="fw-bold">${w.name}</div>
-            ${w.location ? `<div style="font-size:0.78rem;color:var(--text-muted)"><span class="material-icons" style="font-size:13px;vertical-align:middle">location_on</span> ${w.location}</div>` : ''}
-            ${emp ? `<div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px"><span class="material-icons" style="font-size:13px;vertical-align:middle">person</span> ${emp.displayName}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:12px">
+            ${w.type === 'central' ? UI.avatar(w.avatar, w.name, 40, 'warehouse') : UI.avatar(emp?.avatar, emp?.displayName || w.name, 40, 'user')}
+            <div>
+              <div class="fw-bold">${w.name}</div>
+              ${w.location ? `<div style="font-size:0.78rem;color:var(--text-muted)"><span class="material-icons" style="font-size:13px;vertical-align:middle">location_on</span> ${w.location}</div>` : ''}
+              ${emp ? `<div style="font-size:0.82rem;color:var(--text-secondary);margin-top:4px"><span class="material-icons" style="font-size:13px;vertical-align:middle">person</span> ${emp.displayName}</div>` : ''}
+            </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
             <span class="badge ${w.active ? 'badge-green' : 'badge-gray'}">${w.active ? 'ใช้งาน' : 'ปิด'}</span>
@@ -87,10 +91,9 @@ PAGES['warehouses'] = {
   _openForm(wh, defaultType = 'central') {
     const isEdit = !!wh;
     const w = wh || { name: '', type: defaultType, location: '', employeeId: '', active: true };
-    const empUsers = this._users.filter(u => u.isEmployee || u.role === 'stock');
     openModal(isEdit ? 'แก้ไขคลัง' : 'เพิ่มคลังใหม่', `
-      <div class="form-group"><label>ประเภทคลัง</label>
-        <select id="wf-type" onchange="PAGES.warehouses.onTypeChange(this.value)">
+      <div class="form-group" ${!isEdit ? 'style="display:none"' : ''}><label>ประเภทคลัง</label>
+        <select id="wf-type" ${isEdit && w.type === 'employee' ? 'disabled' : ''}>
           <option value="central" ${w.type==='central'?'selected':''}>คลังกลาง</option>
           <option value="employee" ${w.type==='employee'?'selected':''}>คลังพนักงาน</option>
         </select>
@@ -101,13 +104,8 @@ PAGES['warehouses'] = {
       <div class="form-group"><label>สถานที่ / สาขา</label>
         <input id="wf-loc" value="${w.location||''}" placeholder="เช่น DMP" />
       </div>
-      <div id="wf-emp-group" ${w.type!=='employee'?'style="display:none"':''}>
-        <div class="form-group"><label>พนักงานที่รับผิดชอบ</label>
-          <select id="wf-emp">
-            <option value="">-- เลือกพนักงาน --</option>
-            ${empUsers.map(u => `<option value="${u.id}" ${w.employeeId===u.id?'selected':''}>${u.displayName} (${u.username})</option>`).join('')}
-          </select>
-        </div>
+      <div class="form-group"><label>ลิงก์รูปภาพ Google Drive (ถ้ามี)</label>
+        <input id="wf-avatar" value="${w.avatar||''}" placeholder="ลิงก์รูปภาพของคลัง" />
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <label class="toggle"><input type="checkbox" id="wf-active" ${w.active?'checked':''}><span class="toggle-slider"></span></label>
@@ -121,10 +119,6 @@ PAGES['warehouses'] = {
     `);
   },
 
-  onTypeChange(type) {
-    const g = document.getElementById('wf-emp-group');
-    if (g) g.style.display = type === 'employee' ? '' : 'none';
-  },
 
   async saveForm(id) {
     const data = {
@@ -132,7 +126,7 @@ PAGES['warehouses'] = {
       name: document.getElementById('wf-name')?.value?.trim(),
       type: document.getElementById('wf-type')?.value,
       location: document.getElementById('wf-loc')?.value?.trim(),
-      employeeId: document.getElementById('wf-emp')?.value || '',
+      avatar: document.getElementById('wf-avatar')?.value?.trim(),
       active: document.getElementById('wf-active')?.checked,
     };
     if (!data.name) return UI.toast('กรุณากรอกชื่อคลัง', 'warning');

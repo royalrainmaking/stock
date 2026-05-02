@@ -5,6 +5,7 @@
 PAGES['dashboard'] = {
   _period: 'week',
   _data: null,
+  _products: [],
 
   async render() {
     const el = document.getElementById('page-dashboard');
@@ -36,8 +37,12 @@ PAGES['dashboard'] = {
   async load() {
     try {
       const now = new Date();
-      const res = await API.getDashboard(this._period, now.getFullYear(), now.getMonth()+1, now.getDate());
+      const [res, prodRes] = await Promise.all([
+        API.getDashboard(this._period, now.getFullYear(), now.getMonth()+1, now.getDate()),
+        API.getProducts()
+      ]);
       this._data = res;
+      this._products = prodRes.products || [];
       this.renderBody(res);
     } catch(e) {
       document.getElementById('dashboard-body').innerHTML = `<div class="alert alert-danger"><span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px">warning</span>โหลดข้อมูลไม่สำเร็จ: ${e.message}</div>`;
@@ -55,25 +60,26 @@ PAGES['dashboard'] = {
           <div class="stat-value text-primary-color">฿${UI.currency(data.totalSalesToday, 0)}</div>
           <div class="stat-sub">รวม ${UI.currency(data.totalUnitsToday, 0)} หน่วย</div>
         </div>
+        
         <div class="stat-card pink">
           <div class="stat-bg-icon"><span class="material-icons">group</span></div>
           <div class="stat-label">พนักงานที่ Active</div>
           <div class="stat-value" style="color:var(--secondary)">${data.activeEmployees}</div>
           <div class="stat-sub">คน</div>
         </div>
-        <div class="stat-card green">
-          <div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div>
-          <div class="stat-label">สินค้าสต็อกต่ำ</div>
-          <div class="stat-value" style="color:var(--accent)">${data.lowStockCount}</div>
-          <div class="stat-sub">รายการ</div>
+
+        <div class="stat-card red" style="background:#FCE8E6;border-color:#F8D7DA">
+          <div class="stat-bg-icon"><span class="material-icons">cancel</span></div>
+          <div class="stat-label" style="color:#C62828">หมดอายุแล้ว</div>
+          <div class="stat-value" style="color:#C62828">${data.expiredCount || 0}</div>
+          <div class="stat-sub">ล็อตสินค้า</div>
         </div>
+
         <div class="stat-card orange">
-          <div class="stat-bg-icon"><span class="material-icons">trending_up</span></div>
-          <div class="stat-label">เฉลี่ย/วัน (สัปดาห์)</div>
-          <div class="stat-value" style="color:var(--warning)">
-            ฿${UI.currency(Math.round((data.salesByDay||[]).reduce((a,d)=>a+d.value,0) / Math.max(1,(data.salesByDay||[]).length)), 0)}
-          </div>
-          <div class="stat-sub">บาท/วัน</div>
+          <div class="stat-bg-icon"><span class="material-icons">timer</span></div>
+          <div class="stat-label">ใกล้หมดอายุ (30ว)</div>
+          <div class="stat-value" style="color:var(--warning)">${data.expiringCount || 0}</div>
+          <div class="stat-sub">ล็อตสินค้า</div>
         </div>
       </div>
 
@@ -109,7 +115,15 @@ PAGES['dashboard'] = {
                 const pct = Math.round((p.units/totalUnits)*100);
                 return `<tr>
                   <td>${i+1}</td>
-                  <td class="td-bold">${p.name}</td>
+                  <td class="td-bold">
+                    <div style="display:flex;align-items:center;gap:12px">
+                      ${(() => {
+                        const pFound = this._products.find(px => px.name === p.name);
+                        return UI.image(pFound?.imageUrl, 'product-img', 'width:32px;height:32px;border-radius:4px');
+                      })()}
+                      <span>${p.name}</span>
+                    </div>
+                  </td>
                   <td class="td-right">${UI.currency(p.units, 0)}</td>
                   <td class="td-right text-success fw-bold">฿${UI.currency(p.revenue, 0)}</td>
                   <td style="min-width:120px">
