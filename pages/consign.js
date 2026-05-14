@@ -12,20 +12,26 @@ PAGES['consign'] = {
     const el = document.getElementById('page-consign');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">รับฝากสินค้าคืน</h2>
-          <p class="page-subtitle">บันทึกสินค้าที่พนักงานฝากคืนเข้าระบบ (Consign Back)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#E91E8C,#AD1457)">
+            <span class="material-icons">assignment_return</span>
+          </div>
+          <div>
+            <h2 class="page-title">รับฝากสินค้าคืน</h2>
+            <p class="page-subtitle">บันทึกสินค้าที่พนักงานฝากคืนเข้าระบบ</p>
+          </div>
         </div>
         <div class="page-actions">
-           <button class="btn btn-secondary btn-sm" onclick="showPage('movement-history')">
+          <button class="btn btn-secondary btn-sm" onclick="showPage('movement-history')">
             <span class="material-icons">history</span> ดูประวัติการทำรายการ
           </button>
         </div>
       </div>
       <div class="grid-2">
         <!-- 1. Source Info -->
-        <div class="card">
-          <div class="card-title">1. คลังพนักงาน</div>
+        <div class="card step-card">
+          <div class="step-badge">1</div>
+          <div class="card-title"><span class="material-icons" style="color:#E91E8C">person_pin</span>คลังพนักงาน</div>
           <div class="form-group">
             <label>เลือกพนักงานที่ฝากคืน *</label>
             <div id="co-emp-picker-btn" class="product-picker-trigger" onclick="PAGES.consign.openEmployeePicker()">
@@ -40,8 +46,9 @@ PAGES['consign'] = {
         </div>
 
         <!-- 2. Configuration -->
-        <div class="card">
-          <div class="card-title">2. ข้อมูลการฝาก</div>
+        <div class="card step-card">
+          <div class="step-badge">2</div>
+          <div class="card-title"><span class="material-icons" style="color:#1A73E8">edit_note</span>ข้อมูลการฝาก</div>
           <div class="form-group"><label>วันที่ฝากคืน</label>
             <div id="co-datetime-display" style="
               display:flex;align-items:center;gap:10px;
@@ -67,8 +74,9 @@ PAGES['consign'] = {
       </div>
 
       <!-- 3. Product Selection -->
-      <div class="card mt-16">
-        <div class="card-title">3. เลือกรายการสินค้า</div>
+      <div class="card mt-16 step-card">
+        <div class="step-badge">3</div>
+        <div class="card-title"><span class="material-icons" style="color:#00897B">inventory</span>เลือกรายการสินค้า</div>
         <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังพนักงาน (ด้านบน) ก่อนกดเลือกสินค้า</p>
         <button id="co-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES.consign.openProductPicker()" disabled>
           <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังพนักงานก่อน
@@ -76,7 +84,8 @@ PAGES['consign'] = {
       </div>
 
       <!-- 4. Summary -->
-      <div class="card mt-16">
+      <div class="card mt-16 step-card">
+        <div class="step-badge">4</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div class="card-title" style="margin:0">4. รายการที่ต้องการฝากคืน</div>
           <button class="btn btn-primary" onclick="PAGES.consign.submit()">

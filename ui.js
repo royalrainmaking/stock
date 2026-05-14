@@ -58,18 +58,21 @@ const UI = {
   avatar(url, name, size = 40, type = 'user', className = '') {
     const defaultUser = 'https://storage.googleapis.com/fastwork-static/748949a9-a424-466f-a248-e75d2b682171.jpg';
     const defaultWh = 'https://storage.googleapis.com/fastwork-static/6fb5cf34-a09d-440e-a059-599144515c1d.jpg';
-    const placeholder = (type === 'warehouse' || type === 'store') ? defaultWh : defaultUser;
+    const placeholder = (type === 'warehouse' || type === 'store' || type === 'shop') ? defaultWh : defaultUser;
 
     const fallbackHTML = `<img src="${placeholder}" class="${className}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" />`;
 
-    if (!url || typeof url !== 'string' || url.trim() === '' || url === 'null') return fallbackHTML;
+    // ตรวจสอบค่าว่างหรือค่าที่ผิดพลาดจากระบบหลังบ้าน
+    if (!url || typeof url !== 'string' || url.trim() === '' || url === 'null' || url === 'undefined') return fallbackHTML;
     
-    const isValidUrl = /^(http|https|\/|data:)/.test(url.trim());
+    const cleanUrl = url.trim();
+    const isValidUrl = /^(http|https|\/|data:)/.test(cleanUrl);
     if (!isValidUrl) return fallbackHTML;
 
-    let finalUrl = url.trim();
-    if (url.includes('drive.google.com')) {
-      const match = url.match(/id=([a-zA-Z0-9_-]{28,})/ ) || url.match(/file\/d\/([a-zA-Z0-9_-]{28,})/);
+    let finalUrl = cleanUrl;
+    // รองรับ Google Drive Link
+    if (cleanUrl.includes('drive.google.com')) {
+      const match = cleanUrl.match(/id=([a-zA-Z0-9_-]{28,})/ ) || cleanUrl.match(/file\/d\/([a-zA-Z0-9_-]{28,})/);
       if (match) {
         finalUrl = `https://lh3.googleusercontent.com/d/${match[1]}=w400-h400`;
       }
@@ -173,9 +176,18 @@ const UI = {
     return `<div class="empty-state"><div class="empty-icon">${iconHtml}</div><h4>${title}</h4><p>${detail}</p></div>`;
   },
 
-  // ── Spinner inline ───────────────────────────────────────
+  // ── Spinner / Skeleton inline ───────────────────────────
   spinner() {
-    return '<div style="display:flex;justify-content:center;padding:40px"><div class="spinner-ring"></div></div>';
+    return `<div style="padding:24px">
+      ${[100,70,45,80,55].map(w => `<div class="skeleton skel-row" style="width:${w}%"></div>`).join('')}
+    </div>`;
+  },
+
+  skeletonTable(cols = 5, rows = 5) {
+    const hd = Array(cols).fill('<th><div class="skeleton skel-row w100"></div></th>').join('');
+    const td = Array(cols).fill('<td><div class="skeleton skel-row w70"></div></td>').join('');
+    const tr = Array(rows).fill(`<tr>${td}</tr>`).join('');
+    return `<div class="table-wrap card" style="padding:0"><table><thead><tr>${hd}</tr></thead><tbody>${tr}</tbody></table></div>`;
   },
 
   // ── Simple paginator ─────────────────────────────────────
@@ -300,22 +312,36 @@ function showPage(pageId) {
 }
 
 // ── Sidebar menu builder ──────────────────────────────────
+// Map section names to icon color classes
+const SECTION_ICON_CLASS = {
+  'ภาพรวม': 'ic-overview',
+  'การทำรายการ': 'ic-transaction',
+  'การเงิน': 'ic-finance',
+  'ตรวจสอบสต็อก': 'ic-stock',
+  'ประวัติรายการ': 'ic-history',
+  'ระบบร้านค้า (Consignment)': 'ic-shop',
+  'จัดการระบบ': 'ic-admin',
+  'บัญชีผู้ใช้': 'ic-account',
+};
+
 function buildSidebar() {
   const role = AUTH.getRole();
   const menu = getSidebarMenu(role);
   const container = document.getElementById('sidebar-menu');
-  container.innerHTML = menu.map(section => `
+  container.innerHTML = menu.map(section => {
+    const icClass = SECTION_ICON_CLASS[section.section] || '';
+    return `
     <div class="sidebar-section">${section.section}</div>
     ${section.items.map(item => `
       <button class="sidebar-item" data-page="${item.page}" onclick="showPage('${item.page}')">
-        <span class="sidebar-icon">
+        <span class="sidebar-icon ${icClass}">
           <span class="material-icons">${item.icon}</span>
         </span>
         <span style="flex:1">${item.label}</span>
         ${item.badgeId ? `<span id="badge-${item.badgeId}" class="sidebar-badge" style="display:none"></span>` : ''}
       </button>
     `).join('')}
-  `).join('');
+  `}).join('');
   UI.refreshBadges();
 }
 
@@ -333,11 +359,11 @@ function getSidebarMenu(role) {
       section: 'การทำรายการ',
       roles: ['admin', 'stock', 'cashier'],
       items: [
-        { page: 'receive-goods', icon: 'add_shopping_cart', label: 'รับสินค้าเข้า (Receive)', roles: ['admin', 'stock'] },
-        { page: 'transfer', icon: 'swap_horiz', label: 'เบิกสินค้า (Transfer)', roles: ['admin', 'stock', 'cashier'] },
-        { page: 'consign', icon: 'assignment_return', label: 'ฝากสินค้า (Consign)', roles: ['admin', 'stock'] },
-        { page: 'cancel-consign', icon: 'undo', label: 'ยกเลิกฝาก (Cancel)', roles: ['admin', 'stock'] },
-        { page: 'movement', icon: 'sync_alt', label: 'ย้ายสต็อก (Internal)', roles: ['admin', 'stock'] },
+        { page: 'receive-goods', icon: 'add_shopping_cart', label: 'รับสินค้าเข้า', roles: ['admin', 'stock'] },
+        { page: 'transfer', icon: 'swap_horiz', label: 'เบิกสินค้า', roles: ['admin', 'stock', 'cashier'] },
+        { page: 'consign', icon: 'assignment_return', label: 'ฝากสินค้า', roles: ['admin', 'stock'] },
+        { page: 'cancel-consign', icon: 'undo', label: 'ยกเลิกฝาก', roles: ['admin', 'stock'] },
+        { page: 'movement', icon: 'sync_alt', label: 'ย้ายสต็อก', roles: ['admin', 'stock'] },
         { page: 'picking', icon: 'fact_check', label: 'รอจัดสินค้า', roles: ['admin', 'stock'], badgeId: 'picking' },
       ]
     },
@@ -362,10 +388,10 @@ function getSidebarMenu(role) {
       section: 'ประวัติรายการ',
       roles: ['admin', 'stock', 'cashier'],
       items: [
-        { page: 'billing-history', icon: 'payments', label: 'ประวัติคิดเงินพนักงาน', roles: ['admin', 'cashier'] },
+        { page: 'billing-history', icon: 'payments', label: 'ประวัติคิดเงิน', roles: ['admin', 'cashier'] },
         { page: 'receive-history', icon: 'history_edu', label: 'ประวัติรับสินค้า', roles: ['admin', 'stock'] },
         { page: 'transfer-history', icon: 'manage_search', label: 'ประวัติการเบิก', roles: ['admin', 'stock', 'cashier'] },
-        { page: 'movement-history', icon: 'timeline', label: 'ประวัติการย้ายคลัง', roles: ['admin', 'stock'] },
+        { page: 'movement-history', icon: 'timeline', label: 'ประวัติย้ายคลัง', roles: ['admin', 'stock'] },
       ]
     },
     {

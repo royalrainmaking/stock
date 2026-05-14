@@ -18,30 +18,38 @@ PAGES['sales-report'] = {
     const el = document.getElementById('page-sales-report');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">รายงานยอดขาย</h2>
-          <p class="page-subtitle">สรุปยอดขายรายวัน / รายเดือน / รายปี</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#7B1FA2,#4A148C)">
+            <span class="material-icons">bar_chart</span>
+          </div>
+          <div>
+            <h2 class="page-title">รายงานยอดขาย</h2>
+            <p class="page-subtitle">สรุปยอดขายรายวัน / รายเดือน / รายปี</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary btn-sm" onclick="PAGES['sales-report'].exportCSV()"><span class="material-icons">file_download</span> ส่งออก CSV</button>
         </div>
       </div>
-      <div class="card mb-16">
-        <div class="input-group" style="margin:0;flex-wrap:wrap">
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">จากวันที่</label>
-            <input type="date" id="sr-start" value="${this._startDate}" style="min-width:150px" />
+
+      <div class="filter-card">
+        <form onsubmit="PAGES['sales-report'].load(); event.preventDefault()">
+          <div class="form-group" style="width:150px">
+            <label>จากวันที่</label>
+            <input type="date" id="sr-start" value="${this._startDate}" />
           </div>
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">ถึงวันที่</label>
-            <input type="date" id="sr-end" value="${this._endDate}" style="min-width:150px" />
+          <div class="form-group" style="width:150px">
+            <label>ถึงวันที่</label>
+            <input type="date" id="sr-end" value="${this._endDate}" />
           </div>
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">พนักงาน/คลัง</label>
-            <select id="sr-wh" style="min-width:200px"><option value="">-- ทุกคลัง --</option></select>
+          <div class="form-group" style="width:220px">
+            <label>พนักงาน / คลัง</label>
+            <select id="sr-wh"><option value="">-- ทุกคลัง --</option></select>
           </div>
-          <button class="btn btn-primary" onclick="PAGES['sales-report'].load()"><span class="material-icons">search</span> ค้นหา</button>
-        </div>
+          <button type="submit" class="btn btn-primary" style="height:42px">
+            <span class="material-icons">search</span> ค้นหา
+          </button>
+        </form>
       </div>
       <div id="sr-summary" class="stats-grid" style="margin-bottom:16px"></div>
       <div class="card">

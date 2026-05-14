@@ -11,9 +11,14 @@ PAGES['picking'] = {
     const el = document.getElementById('page-picking');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">รอจัดสินค้า</h2>
-          <p class="page-subtitle">รายการเบิกที่รอการจัดของและส่งมอบให้พนักงาน – Picking Queue</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#1565C0,#0D47A1)">
+            <span class="material-icons">fact_check</span>
+          </div>
+          <div>
+            <h2 class="page-title">รอจัดสินค้า</h2>
+            <p class="page-subtitle">รายการเบิกที่รอการจัดของและส่งมอบให้พนักงาน – Picking Queue</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary btn-sm" onclick="PAGES['picking'].load()">
@@ -77,12 +82,12 @@ PAGES['picking'] = {
             <div class="picking-wh">
               <div class="wh-path">
                 <div style="display:flex;align-items:center;gap:6px">
-                  ${UI.avatar(fromWh.employeeAvatar || fromWh.avatar, fromWh.name, 28)}
+                  ${UI.avatar(fromWh.employeeAvatar || fromWh.avatar, fromWh.name, 28, 'warehouse')}
                   <span class="wh-name">${fromWh.name || task.fromWhId}</span>
                 </div>
                 <span class="material-icons wh-arrow">arrow_forward</span>
                 <div style="display:flex;align-items:center;gap:6px">
-                  ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 28)}
+                  ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 28, toWh.type === 'central' ? 'warehouse' : 'user')}
                   <span class="wh-name highlight">${toWh.employeeName || toWh.name || task.toWhId}</span>
                 </div>
               </div>

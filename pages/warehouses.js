@@ -10,22 +10,40 @@ PAGES['warehouses'] = {
     const el = document.getElementById('page-warehouses');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">จัดการคลังสินค้า</h2>
-          <p class="page-subtitle">จัดการคลังสินค้าส่วนกลาง และคลังพนักงานรายบุคคล (Warehouse Management)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#F9AB00,#E65100)">
+            <span class="material-icons">warehouse</span>
+          </div>
+          <div>
+            <h2 class="page-title">จัดการคลังสินค้า</h2>
+            <p class="page-subtitle">จัดการคลังสินค้าส่วนกลาง และคลังพนักงานรายบุคคล</p>
+          </div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary" onclick="PAGES.warehouses.load()">
+          <button class="btn btn-secondary btn-sm" onclick="PAGES.warehouses.load()">
             <span class="material-icons">refresh</span> รีเฟรช
           </button>
         </div>
       </div>
-      <div id="wh-body">${UI.spinner()}</div>
+      <div id="wh-body">
+        <div class="grid-2">
+          <div><div class="skeleton" style="height:200px;margin-bottom:16px"></div><div class="skeleton" style="height:100px"></div></div>
+          <div><div class="skeleton" style="height:200px;margin-bottom:16px"></div><div class="skeleton" style="height:100px"></div></div>
+        </div>
+      </div>
     `;
     await this.load();
   },
 
   async load() {
+    const bodyEl = document.getElementById('wh-body');
+    if (bodyEl) {
+      bodyEl.innerHTML = `
+        <div class="grid-2">
+          <div><div class="skeleton" style="height:150px;margin-bottom:16px"></div><div class="skeleton" style="height:80px"></div></div>
+          <div><div class="skeleton" style="height:150px;margin-bottom:16px"></div><div class="skeleton" style="height:80px"></div></div>
+        </div>`;
+    }
     try {
       const [whr, ur] = await Promise.all([API.getWarehouses(), API.getUsers()]);
       this._warehouses = whr.warehouses || [];

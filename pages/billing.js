@@ -11,9 +11,14 @@ PAGES['billing'] = {
     const el = document.getElementById('page-billing');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">คิดเงินพนักงาน (Cashier)</h2>
-          <p class="page-subtitle">หักยอดขายรายวันและออกใบเสร็จรับเงิน</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#E91E8C,#AD1457)">
+            <span class="material-icons">payments</span>
+          </div>
+          <div>
+            <h2 class="page-title">คิดเงินพนักงาน</h2>
+            <p class="page-subtitle">หักยอดขายรายวันและออกใบเสร็จรับเงิน</p>
+          </div>
         </div>
         <div class="page-actions">
           <div class="form-group" style="margin:0;flex-direction:row;align-items:center;gap:8px">
@@ -23,6 +28,7 @@ PAGES['billing'] = {
           <button class="btn btn-secondary btn-sm" onclick="PAGES.billing.load()"><span class="material-icons">refresh</span> รีเฟรช</button>
         </div>
       </div>
+
       <div id="billing-body">${UI.spinner()}</div>
     `;
     this.injectStyles();

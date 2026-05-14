@@ -12,9 +12,19 @@ PAGES['cancel-consign'] = {
     const el = document.getElementById('page-cancel-consign');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ยกเลิกฝากสินค้า (Cancel Consign)</h2>
-          <p class="page-subtitle">เปลี่ยนสถานะสินค้า "ฝากคืน" กลับมาเป็น "พร้อมคิดเงิน" เพื่อให้เก็บยอดขายประจำวันได้</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#F57C00,#E65100)">
+            <span class="material-icons">undo</span>
+          </div>
+          <div>
+            <h2 class="page-title">ยกเลิกฝากสินค้า (Cancel Consign)</h2>
+            <p class="page-subtitle">เปลี่ยนสถานะสินค้า "ฝากคืน" กลับมาเป็น "พร้อมคิดเงิน" เพื่อให้เก็บยอดขายประจำวันได้</p>
+          </div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary btn-sm" onclick="PAGES['cancel-consign'].render()">
+            <span class="material-icons">refresh</span> รีเฟรช
+          </button>
         </div>
       </div>
 

@@ -14,12 +14,17 @@ PAGES['shop-map'] = {
     const el = document.getElementById('page-shop-map');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">แผนที่ร้านค้า</h2>
-          <p class="page-subtitle">แสดงตำแหน่งและจัดการร้านค้าทั้งหมดบนแผนที่</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#795548,#5D4037)">
+            <span class="material-icons">explore</span>
+          </div>
+          <div>
+            <h2 class="page-title">แผนที่ร้านค้า</h2>
+            <p class="page-subtitle">แสดงตำแหน่งและจัดการร้านค้าทั้งหมดบนแผนที่</p>
+          </div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary" onclick="PAGES['shop-map'].openAdd()">
+          <button class="btn btn-primary btn-sm" onclick="PAGES['shop-map'].openAdd()">
             <span class="material-icons">add_location_alt</span> เพิ่มร้านค้าใหม่
           </button>
         </div>

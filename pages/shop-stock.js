@@ -19,9 +19,14 @@ PAGES['shop-stock'] = {
     const el = document.getElementById('page-shop-stock');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">จัดการสต็อกร้านค้า</h2>
-          <p class="page-subtitle">จัดการสินค้าฝากวาง สลับล็อต และรับคืนสินค้าจากร้านค้า (Shop Inventory)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#795548,#5D4037)">
+            <span class="material-icons">inventory_2</span>
+          </div>
+          <div>
+            <h2 class="page-title">จัดการสต็อกร้านค้า</h2>
+            <p class="page-subtitle">จัดการสินค้าฝากวาง สลับล็อต และรับคืนสินค้าจากร้านค้า</p>
+          </div>
         </div>
         <div class="page-actions">
            <button class="btn btn-secondary btn-sm" onclick="PAGES['shop-stock'].openHistoryModal()">

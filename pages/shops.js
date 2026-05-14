@@ -13,9 +13,14 @@ PAGES['shops'] = {
     const el = document.getElementById('page-shops');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">รายชื่อร้านค้า</h2>
-          <p class="page-subtitle">จัดการข้อมูลพิกัด รูปภาพ และพนักงานดูแลร้านค้าในระบบ (Shop Directory)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#FF6D00,#E65100)">
+            <span class="material-icons">storefront</span>
+          </div>
+          <div>
+            <h2 class="page-title">รายชื่อร้านค้า</h2>
+            <p class="page-subtitle">จัดการข้อมูลพิกัด รูปภาพ และพนักงานดูแลร้านค้าในระบบ (Shop Directory)</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-primary" onclick="PAGES.shops.openAdd()">
@@ -23,16 +28,16 @@ PAGES['shops'] = {
           </button>
         </div>
       </div>
-      <div class="card mb-16">
-        <div style="display:flex;gap:12px;align-items:center">
-          <div class="search-bar" style="flex:1; margin:0">
-            <span class="search-icon"><span class="material-icons">search</span></span>
+      <div class="filter-card">
+        <form onsubmit="event.preventDefault()">
+          <div class="form-group" style="flex:1;min-width:260px">
+            <label>ค้นหาร้านค้า</label>
             <input type="text" placeholder="ค้นหาชื่อร้าน, รหัส หรือเบอร์โทร..." oninput="PAGES.shops.doSearch(this.value)" />
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="PAGES.shops.load()">
+          <button type="button" class="btn btn-secondary btn-sm" style="height:42px" onclick="PAGES.shops.load()">
             <span class="material-icons">refresh</span> รีเฟรช
           </button>
-        </div>
+        </form>
       </div>
 
       <div id="shops-list">${UI.spinner()}</div>

@@ -10,9 +10,14 @@ PAGES['users'] = {
     const el = document.getElementById('page-users');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">จัดการผู้ใช้งาน</h2>
-          <p class="page-subtitle">เพิ่ม แก้ไข และกำหนดสิทธิ์การใช้งานของพนักงานและตัวแทน (User Management)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#D93025,#B71C1C)">
+            <span class="material-icons">group</span>
+          </div>
+          <div>
+            <h2 class="page-title">จัดการผู้ใช้งาน</h2>
+            <p class="page-subtitle">เพิ่ม แก้ไข และกำหนดสิทธิ์การใช้งานของพนักงาน</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-primary" onclick="PAGES.users.openAdd()">
@@ -20,19 +25,20 @@ PAGES['users'] = {
           </button>
         </div>
       </div>
-      <div class="card mb-16">
-        <div style="display:flex;gap:12px;align-items:center">
-          <div class="search-bar" style="flex:1; margin:0">
-            <span class="search-icon"><span class="material-icons">search</span></span>
+
+      <div class="filter-card">
+        <form onsubmit="event.preventDefault()">
+          <div class="form-group" style="flex:1;min-width:260px">
+            <label>ค้นหาผู้ใช้งาน</label>
             <input type="text" placeholder="ค้นหาชื่อ, Username หรืออีเมล..." oninput="PAGES.users.doSearch(this.value)" />
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="PAGES.users.load()">
+          <button type="button" class="btn btn-secondary btn-sm" style="height:42px" onclick="PAGES.users.load()">
             <span class="material-icons">refresh</span> รีเฟรช
           </button>
-        </div>
+        </form>
       </div>
       <div class="card">
-        <div id="users-table">${UI.spinner()}</div>
+        <div id="users-table">${UI.skeletonTable(5, 5)}</div>
       </div>
     `;
     await this.load();

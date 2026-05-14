@@ -12,9 +12,19 @@ PAGES['order-request'] = {
     const el = document.getElementById('page-order-request');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">แจ้งสั่งสินค้า</h2>
-          <p class="page-subtitle">แจ้งความต้องการสั่งสินค้าเข้าคลังล่วงหน้า</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#004D40)">
+            <span class="material-icons">playlist_add_check</span>
+          </div>
+          <div>
+            <h2 class="page-title">แจ้งสั่งสินค้า</h2>
+            <p class="page-subtitle">แจ้งความต้องการสั่งสินค้าเข้าคลังล่วงหน้า</p>
+          </div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary btn-sm" onclick="PAGES['order-request'].loadData()">
+            <span class="material-icons">refresh</span> รีเฟรช
+          </button>
         </div>
       </div>
       <div class="grid-2">

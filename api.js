@@ -7,9 +7,8 @@ const API = {
     const url = new URL(CONFIG.GAS_URL);
     url.searchParams.set('action', action);
     url.searchParams.set('token', AUTH.getToken());
-    url.searchParams.set('_t', Date.now()); // Prevent GET caching
+    url.searchParams.set('_t', Date.now());
     Object.entries(params).forEach(([k, v]) => {
-      // Skip reserved keys that would override route params
       if (k === 'action' || k === 'token' || k === '_t') return;
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
     });

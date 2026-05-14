@@ -6,15 +6,20 @@ PAGES['movement-history'] = {
   _history: [],
   _warehouses: [],
   _products: [],
-  _users: [],,
+  _users: [],
 
   async render() {
     const el = document.getElementById('page-movement-history');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ประวัติการย้ายคลังสินค้า</h2>
-          <p class="page-subtitle">ตรวจสอบประวัติการโอนย้ายสินค้าระหว่างคลังทั้งหมดในระบบ</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
+            <span class="material-icons">swap_horiz</span>
+          </div>
+          <div>
+            <h2 class="page-title">ประวัติการย้ายคลังสินค้า</h2>
+            <p class="page-subtitle">ตรวจสอบประวัติการโอนย้ายสินค้าระหว่างคลังทั้งหมดในระบบ</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary btn-sm" onclick="PAGES['movement-history'].load()">
@@ -29,17 +34,17 @@ PAGES['movement-history'] = {
         <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมมูลค่าสินค้า (EST)</div><div id="mh-sum-value" class="stat-value">฿0</div></div>
       </div>
 
-      <div class="card mb-16">
-        <form id="mh-filter-form" onsubmit="PAGES['movement-history'].applyFilter(event)" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group mb-0" style="width:150px">
+      <div class="filter-card">
+        <form id="mh-filter-form" onsubmit="PAGES['movement-history'].applyFilter(event)">
+          <div class="form-group" style="width:150px">
             <label>วันที่เริ่มต้น</label>
             <input type="date" id="mh-start-date" onchange="PAGES['movement-history'].applyFilter()" />
           </div>
-          <div class="form-group mb-0" style="width:150px">
+          <div class="form-group" style="width:150px">
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="mh-end-date" onchange="PAGES['movement-history'].applyFilter()" />
           </div>
-          <div class="form-group mb-0" style="flex:1;min-width:200px">
+          <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (รายละเอียด, รหัส)</label>
             <input type="text" id="mh-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['movement-history'].applyFilter()" />
           </div>
@@ -50,7 +55,7 @@ PAGES['movement-history'] = {
       </div>
 
       <div id="mh-list" class="grid-1">
-        ${UI.spinner()}
+        ${UI.skeletonTable(7, 8)}
       </div>
     `;
 
@@ -64,6 +69,8 @@ PAGES['movement-history'] = {
   },
 
   async load() {
+    const listEl = document.getElementById('mh-list');
+    if (listEl) listEl.innerHTML = UI.skeletonTable(7, 8);
     try {
       const startDate = document.getElementById('mh-start-date').value;
       const endDate = document.getElementById('mh-end-date').value;
@@ -158,13 +165,13 @@ PAGES['movement-history'] = {
                   </td>
                   <td style="font-size:0.85rem">
                     <div style="display:flex;align-items:center;gap:6px">
-                      ${UI.avatar(fromWh.avatar, fromWh.name, 26)}
+                      ${UI.avatar(fromWh.avatar, fromWh.name, 26, fromWh.type === 'central' ? 'warehouse' : 'user')}
                       <span title="${fromWh.name}">${fromWh.name}</span>
                     </div>
                   </td>
                   <td style="font-size:0.85rem">
                     <div style="display:flex;align-items:center;gap:6px">
-                      ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 26)}
+                      ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 26, toWh.type === 'central' ? 'warehouse' : 'user')}
                       <span title="${toWh.employeeName || toWh.name}">${toWh.employeeName || toWh.name}</span>
                     </div>
                   </td>

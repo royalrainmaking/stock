@@ -7,9 +7,14 @@ PAGES['change-password'] = {
     const el = document.getElementById('page-change-password');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">เปลี่ยนรหัสผ่าน</h2>
-          <p class="page-subtitle">เปลี่ยนรหัสผ่านของคุณ</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#37474F,#263238)">
+            <span class="material-icons">lock_reset</span>
+          </div>
+          <div>
+            <h2 class="page-title">เปลี่ยนรหัสผ่าน</h2>
+            <p class="page-subtitle">อัปเดตรหัสผ่านของคุณเพื่อความปลอดภัย</p>
+          </div>
         </div>
       </div>
       <div style="max-width:480px">

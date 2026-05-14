@@ -14,15 +14,21 @@ PAGES['employee-stock'] = {
     const el = document.getElementById('page-employee-stock');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">คลังสินค้าพนักงาน</h2>
-          <p class="page-subtitle">ตรวจสอบสินค้าคงคลังและยอดขายสะสมรายบุคคล (Employee Inventory)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#1A73E8,#0D47A1)">
+            <span class="material-icons">person_pin</span>
+          </div>
+          <div>
+            <h2 class="page-title">คลังสินค้าพนักงาน</h2>
+            <p class="page-subtitle">ตรวจสอบสินค้าคงคลังและยอดขายสะสมรายบุคคล</p>
+          </div>
         </div>
         <div class="page-actions">
           ${AUTH.hasRole('admin', 'stock') ? '<button class="btn btn-primary btn-sm" onclick="showPage(\'transfer\')"><span class="material-icons">add_circle</span> เบิกสินค้าให้พนักงาน</button>' : ''}
           ${AUTH.hasRole('admin', 'stock') ? '<button class="btn btn-secondary btn-sm" onclick="showPage(\'consign\')"><span class="material-icons">undo</span> รับฝากกลับ</button>' : ''}
         </div>
       </div>
+
 
       <div class="card mb-16">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">

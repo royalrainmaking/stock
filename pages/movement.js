@@ -15,9 +15,14 @@ PAGES.movement = {
     const el = document.getElementById('page-movement');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ย้ายสินค้าระหว่างคลัง</h2>
-          <p class="page-subtitle">โอนย้ายสินค้าระหว่างคลังหลักและคลังพนักงาน (Stock Movement)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00838F,#006064)">
+            <span class="material-icons">swap_horiz</span>
+          </div>
+          <div>
+            <h2 class="page-title">ย้ายสินค้าระหว่างคลัง</h2>
+            <p class="page-subtitle">โอนย้ายสินค้าระหว่างคลังหลักและคลังพนักงาน (Stock Movement)</p>
+          </div>
         </div>
       </div>
 
@@ -214,7 +219,7 @@ PAGES.movement = {
           <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:120x; display:flex; flex-wrap:wrap; gap:12px; margin-bottom:24px">
             ${list.map(w => {
               const isSelected = w.id === otherWhId;
-              const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40);
+              const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40, w.type === 'central' ? 'warehouse' : 'user');
               
               const style = isSelected ? 'opacity:0.4; cursor:not-allowed; background:var(--bg-card2); pointer-events:none' : 'cursor:pointer';
               const onClick = isSelected ? '' : `onclick="PAGES.movement.selectWarehouse('${type}', '${w.id}')"`;
@@ -263,7 +268,7 @@ PAGES.movement = {
        document.getElementById('mv-from-name').style.color = 'var(--primary)';
        document.getElementById('mv-from-meta').textContent = w.type === 'central' ? 'คลังส่วนกลาง' : (w.employeeName || w.name);
        const thumb = document.getElementById('mv-from-thumb');
-       if (thumb) thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40);
+       if (thumb) thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40, w.type === 'central' ? 'warehouse' : 'user');
        document.getElementById('mv-from-btn').classList.add('selected');
        this.loadSourceStock(whId);
     } else {
@@ -272,7 +277,7 @@ PAGES.movement = {
        document.getElementById('mv-to-name').style.color = 'var(--primary)';
        document.getElementById('mv-to-meta').textContent = w.type === 'central' ? 'คลังส่วนกลาง' : (w.employeeName || w.name);
        const thumb = document.getElementById('mv-to-thumb');
-       if (thumb) thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40);
+       if (thumb) thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40, w.type === 'central' ? 'warehouse' : 'user');
        document.getElementById('mv-to-btn').classList.add('selected');
     }
 
@@ -315,7 +320,7 @@ PAGES.movement = {
 
       // Restore thumb
       if (fromThumb) {
-        fromThumb.innerHTML = UI.avatar(wh.employeeAvatar || wh.avatar, wh.employeeName || wh.name, 40);
+        fromThumb.innerHTML = UI.avatar(wh.employeeAvatar || wh.avatar, wh.employeeName || wh.name, 40, wh.type === 'central' ? 'warehouse' : 'user');
       }
       
       this.updateUI();
@@ -324,7 +329,7 @@ PAGES.movement = {
       // Restore thumb on error
       const fromThumb = document.getElementById('mv-from-thumb');
       if (fromThumb) {
-        fromThumb.innerHTML = wh.type === 'employee' ? UI.avatar(wh.employeeAvatar, wh.employeeName, 40) : `<span class="material-icons">logout</span>`;
+        fromThumb.innerHTML = wh.type === 'employee' ? UI.avatar(wh.employeeAvatar, wh.employeeName, 40, 'user') : UI.avatar(wh.avatar, wh.name, 40, 'warehouse');
       }
     }
   },

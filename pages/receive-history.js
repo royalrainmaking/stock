@@ -19,9 +19,14 @@ PAGES['receive-history'] = {
     const el = document.getElementById('page-receive-history');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ประวัติการรับสินค้า</h2>
-          <p class="page-subtitle">ตรวจสอบรายการรับสินค้าเข้าคลังกลางและการนำเข้าย้อนหลัง</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00796B,#004D40)">
+            <span class="material-icons">history_edu</span>
+          </div>
+          <div>
+            <h2 class="page-title">ประวัติการรับสินค้า</h2>
+            <p class="page-subtitle">ตรวจสอบรายการรับสินค้าเข้าคลังกลางและการนำเข้าย้อนหลัง</p>
+          </div>
         </div>
         <div class="page-actions">
            <button class="btn btn-secondary" onclick="PAGES['receive-history'].load()">
@@ -36,23 +41,23 @@ PAGES['receive-history'] = {
         <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมมูลค่าสินค้าประมาณการ</div><div id="rh-sum-value" class="stat-value">฿0</div></div>
       </div>
 
-      <div class="card mb-16">
-        <form id="rh-filter-form" onsubmit="PAGES['receive-history'].applyFilters(event)" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group mb-0" style="width:150px">
+      <div class="filter-card">
+        <form id="rh-filter-form" onsubmit="PAGES['receive-history'].applyFilters(event)">
+          <div class="form-group" style="width:150px">
             <label>วันที่เริ่มต้น</label>
             <input type="date" id="rh-start-date" onchange="PAGES['receive-history'].applyFilters()" />
           </div>
-          <div class="form-group mb-0" style="width:150px">
+          <div class="form-group" style="width:150px">
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="rh-end-date" onchange="PAGES['receive-history'].applyFilters()" />
           </div>
-          <div class="form-group mb-0" style="width:180px">
+          <div class="form-group" style="width:180px">
             <label>เลือกคลัง</label>
             <select id="rh-warehouse" onchange="PAGES['receive-history'].applyFilters()">
               <option value="">ทุกคลังสินค้า</option>
             </select>
           </div>
-          <div class="form-group mb-0" style="flex:1;min-width:200px">
+          <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (เลขอ้างอิง, พาร์ทเนอร์)</label>
             <input type="text" id="rh-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['receive-history'].applyFilters()" />
           </div>
@@ -63,7 +68,7 @@ PAGES['receive-history'] = {
       </div>
 
       <div id="rh-content">
-        ${UI.spinner()}
+        ${UI.skeletonTable(6, 8)}
       </div>
     `;
 
@@ -103,6 +108,7 @@ PAGES['receive-history'] = {
 
   async fetchAndRender() {
     const el = document.getElementById('rh-content');
+    el.innerHTML = UI.skeletonTable(6, 8);
     const filters = {
       startDate: document.getElementById('rh-start-date').value,
       endDate: document.getElementById('rh-end-date').value,
@@ -196,7 +202,7 @@ PAGES['receive-history'] = {
                   </td>
                   <td style="font-size:0.85rem">
                     <div style="display:flex;align-items:center;gap:6px">
-                      ${UI.avatar(wh.avatar, wh.name, 24)}
+                      ${UI.avatar(wh.avatar, wh.name, 24, 'warehouse')}
                       <span>${wh.name}</span>
                     </div>
                   </td>

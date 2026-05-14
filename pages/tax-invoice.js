@@ -12,30 +12,35 @@ PAGES['tax-invoice'] = {
     const el = document.getElementById('page-tax-invoice');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ออกใบกำกับภาษี (Tax Invoice)</h2>
-          <p class="page-subtitle">เลือกรายการคิดเงินเพื่อสร้างใบกำกับภาษีชุดใหญ่</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#7B1FA2,#4A148C)">
+            <span class="material-icons">receipt</span>
+          </div>
+          <div>
+            <h2 class="page-title">ออกใบกำกับภาษี (Tax Invoice)</h2>
+            <p class="page-subtitle">เลือกรายการคิดเงินเพื่อสร้างใบกำกับภาษีชุดใหญ่</p>
+          </div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary btn-lg" id="ti-btn-generate" disabled onclick="PAGES['tax-invoice'].openInvoiceForm()">
+          <button class="btn btn-primary" id="ti-btn-generate" disabled onclick="PAGES['tax-invoice'].openInvoiceForm()">
             <span class="material-icons">description</span> สร้างใบกำกับภาษี (<span id="ti-selected-count">0</span>)
           </button>
         </div>
       </div>
 
-      <div class="card mb-20">
-        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap">
-          <div class="form-group" style="margin:0; flex:1; min-width:150px">
+      <div class="filter-card">
+        <form onsubmit="event.preventDefault()">
+          <div class="form-group" style="width:180px">
             <label>วันที่สรุปยอด</label>
             <input type="date" id="ti-date" value="${this._date}" onchange="PAGES['tax-invoice'].setDate(this.value)" />
           </div>
-          <button class="btn btn-secondary" style="height:45px" onclick="PAGES['tax-invoice'].load()">
+          <button type="button" class="btn btn-secondary" style="height:42px" onclick="PAGES['tax-invoice'].load()">
             <span class="material-icons">refresh</span> รีเฟรช
           </button>
-          <button class="btn btn-outline" style="height:45px" onclick="PAGES['tax-invoice'].toggleSelectAll()">
+          <button type="button" class="btn btn-secondary" style="height:42px" onclick="PAGES['tax-invoice'].toggleSelectAll()">
             <span class="material-icons">done_all</span> เลือกทั้งหมด
           </button>
-        </div>
+        </form>
       </div>
 
       <div id="ti-body">${UI.spinner()}</div>

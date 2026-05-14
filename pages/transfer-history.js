@@ -11,9 +11,14 @@ PAGES['transfer-history'] = {
     const el = document.getElementById('page-transfer-history');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ประวัติการเบิกสินค้า</h2>
-          <p class="page-subtitle">ตรวจสอบสถานะรายการขอเบิกและการจัดส่งสินค้าทั้งหมด</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
+            <span class="material-icons">manage_search</span>
+          </div>
+          <div>
+            <h2 class="page-title">ประวัติการเบิกสินค้า</h2>
+            <p class="page-subtitle">ตรวจสอบสถานะรายการขอเบิกและการจัดส่งสินค้าทั้งหมด</p>
+          </div>
         </div>
         <div class="page-actions">
           <button class="btn btn-secondary btn-sm" onclick="PAGES['transfer-history'].load()">
@@ -22,23 +27,24 @@ PAGES['transfer-history'] = {
         </div>
       </div>
 
+
       <div id="th-summary-ribbon" class="grid-3 mb-16">
         <div class="stat-card blue"><div class="stat-bg-icon"><span class="material-icons">local_shipping</span></div><div class="stat-label">จำนวนใบเบิกทั้งหมด</div><div id="th-sum-count" class="stat-value">0</div></div>
         <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label">รวมสินค้าที่เบิก</div><div id="th-sum-units" class="stat-value">0</div></div>
         <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมมูลค่าสินค้า (EST)</div><div id="th-sum-value" class="stat-value">฿0</div></div>
       </div>
 
-      <div class="card mb-16">
-        <form id="th-filter-form" onsubmit="PAGES['transfer-history'].applyFilter(event)" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group mb-0" style="width:150px">
+      <div class="filter-card">
+        <form id="th-filter-form" onsubmit="PAGES['transfer-history'].applyFilter(event)">
+          <div class="form-group" style="width:150px">
             <label>วันที่เริ่มต้น</label>
             <input type="date" id="th-start-date" onchange="PAGES['transfer-history'].applyFilter()" />
           </div>
-          <div class="form-group mb-0" style="width:150px">
+          <div class="form-group" style="width:150px">
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="th-end-date" onchange="PAGES['transfer-history'].applyFilter()" />
           </div>
-          <div class="form-group mb-0" style="width:160px">
+          <div class="form-group" style="width:160px">
             <label>สถานะ</label>
             <select id="th-status" onchange="PAGES['transfer-history'].applyFilter()">
               <option value="">-- ทั้งหมด --</option>
@@ -47,7 +53,7 @@ PAGES['transfer-history'] = {
               <option value="rejected">❌ ถูกปฏิเสธ</option>
             </select>
           </div>
-          <div class="form-group mb-0" style="flex:1;min-width:200px">
+          <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (เลขอ้างอิง, พนักงาน)</label>
             <input type="text" id="th-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['transfer-history'].applyFilter()" />
           </div>
@@ -58,7 +64,7 @@ PAGES['transfer-history'] = {
       </div>
 
       <div id="th-list" class="grid-1">
-        ${UI.spinner()}
+        ${UI.skeletonTable(6, 8)}
       </div>
     `;
 
@@ -177,12 +183,12 @@ PAGES['transfer-history'] = {
                   <td style="font-size:0.75rem">
                     <div style="display:flex;align-items:center;gap:8px;max-width:300px">
                       <div style="display:flex;align-items:center;gap:4px">
-                        ${UI.avatar(fromWh.avatar, fromWh.name, 22)}
+                        ${UI.avatar(fromWh.avatar, fromWh.name, 22, fromWh.type === 'central' ? 'warehouse' : 'user')}
                         <span style="max-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${fromWh.name}">${fromWh.name}</span>
                       </div>
                       <span class="material-icons" style="font-size:14px;color:var(--text-muted)">arrow_forward</span>
                       <div style="display:flex;align-items:center;gap:4px">
-                        ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 22)}
+                        ${UI.avatar(toWh.employeeAvatar || toWh.avatar, toWh.employeeName || toWh.name, 22, toWh.type === 'central' ? 'warehouse' : 'user')}
                         <span style="max-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${toWh.employeeName || toWh.name}">${toWh.employeeName || toWh.name}</span>
                       </div>
                     </div>

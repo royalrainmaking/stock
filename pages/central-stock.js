@@ -120,9 +120,14 @@ PAGES['central-stock'] = {
     const el = document.getElementById('page-central-stock');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">คลังสินค้าส่วนกลาง</h2>
-          <p class="page-subtitle">จัดการสต็อกและดูความเคลื่อนไหวสินค้าในคลังหลัก (Central Inventory)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#F9AB00,#E65100)">
+            <span class="material-icons">warehouse</span>
+          </div>
+          <div>
+            <h2 class="page-title">คลังสินค้าส่วนกลาง</h2>
+            <p class="page-subtitle">ตรวจสอบสต็อกและความเคลื่อนไหวในคลังหลัก</p>
+          </div>
         </div>
         <div class="page-actions">
           ${AUTH.isAdmin() ? '<button class="btn btn-secondary btn-sm" onclick="showPage(\'receive-goods\')"><span class="material-icons">move_to_inbox</span> รับสินค้าเข้า</button>' : ''}
@@ -130,10 +135,12 @@ PAGES['central-stock'] = {
         </div>
       </div>
 
+
       <!-- Filters -->
-      <div class="card mb-16">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <div class="form-group" style="margin:0">
+      <div class="filter-card">
+        <div class="filter-row">
+          <div class="form-group">
+            <label>เลือกคลังสินค้า</label>
             <select id="cs-wh-filter" onchange="PAGES['central-stock'].setWh(this.value)" style="min-width:220px">
               <option value="">-- ทุกคลัง --</option>
             </select>
@@ -152,6 +159,9 @@ PAGES['central-stock'] = {
           </div>
           <button class="btn btn-secondary btn-sm" onclick="PAGES['central-stock'].load()">
             <span class="material-icons">refresh</span> รีเฟรช
+          </button>
+        </div>
+      </div>
           </button>
         </div>
       </div>

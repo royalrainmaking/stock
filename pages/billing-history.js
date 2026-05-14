@@ -7,19 +7,29 @@ PAGES['billing-history'] = {
   _filters: { startDate: '', endDate: '' },
 
   async render() {
-    this._filters.startDate = this._filters.startDate || UI.todayISO();
+    // ตั้งค่าเริ่มต้นเป็นต้นเดือนปัจจุบัน เพื่อให้เห็นประวัติย้อนหลังทันที
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayISO = firstDay.getFullYear() + '-' + String(firstDay.getMonth() + 1).padStart(2, '0') + '-01';
+
+    this._filters.startDate = this._filters.startDate || firstDayISO;
     this._filters.endDate = this._filters.endDate || UI.todayISO();
 
     const el = document.getElementById('page-billing-history');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">ประวัติการคิดเงิน</h2>
-          <p class="page-subtitle">ตรวจสอบรายการคิดเงินพนักงานย้อนหลังทั้งหมด</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#E91E8C,#AD1457)">
+            <span class="material-icons">payments</span>
+          </div>
+          <div>
+            <h2 class="page-title">ประวัติการคิดเงิน</h2>
+            <p class="page-subtitle">ตรวจสอบรายการคิดเงินพนักงานย้อนหลังทั้งหมด</p>
+          </div>
         </div>
         <div class="page-actions">
-           <button class="btn btn-secondary btn-sm" onclick="PAGES['billing-history'].load()">
-            <span class="material-icons">refresh</span> รีเฟรช
+          <button class="btn btn-secondary btn-sm" onclick="PAGES['billing-history'].load()">
+            <span class="material-icons">refresh</span> รีเฟร็ช
           </button>
         </div>
       </div>
@@ -30,17 +40,17 @@ PAGES['billing-history'] = {
         <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมยอดขายสุทธิ</div><div id="bh-sum-value" class="stat-value">฿0</div></div>
       </div>
 
-      <div class="card mb-16">
-        <form id="bh-filter-form" onsubmit="PAGES['billing-history'].applyFilters(event)" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group mb-0" style="width:150px">
+      <div class="filter-card">
+        <form id="bh-filter-form" onsubmit="PAGES['billing-history'].applyFilters(event)">
+          <div class="form-group" style="width:150px">
             <label>วันที่เริ่มต้น</label>
             <input type="date" id="bh-start-date" value="${this._filters.startDate}" onchange="PAGES['billing-history'].applyFilters()" />
           </div>
-          <div class="form-group mb-0" style="width:150px">
+          <div class="form-group" style="width:150px">
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="bh-end-date" value="${this._filters.endDate}" onchange="PAGES['billing-history'].applyFilters()" />
           </div>
-          <div class="form-group mb-0" style="flex:1;min-width:200px">
+          <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (พนักงาน, เลขอ้างอิง)</label>
             <input type="text" id="bh-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['billing-history'].applyFilters()" />
           </div>
@@ -50,7 +60,7 @@ PAGES['billing-history'] = {
         </form>
       </div>
 
-      <div id="bh-list">${UI.spinner()}</div>
+      <div id="bh-list">${UI.skeletonTable(5, 8)}</div>
     `;
     await this.load();
   },
@@ -59,7 +69,7 @@ PAGES['billing-history'] = {
     this._filters.startDate = document.getElementById('bh-start-date').value;
     this._filters.endDate = document.getElementById('bh-end-date').value;
     const container = document.getElementById('bh-list');
-    container.innerHTML = UI.spinner();
+    if (container) container.innerHTML = UI.skeletonTable(5, 8);
 
     try {
       const res = await API.getBillingHistory(this._filters.startDate, this._filters.endDate);

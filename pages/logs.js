@@ -12,31 +12,39 @@ PAGES['logs'] = {
     const el = document.getElementById('page-logs');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">บันทึกระบบ (Log)</h2>
-          <p class="page-subtitle">ตรวจสอบการทำรายการทั้งหมด – user / วันที่ / เวลา / การกระทำ</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#546E7A,#263238)">
+            <span class="material-icons">history</span>
+          </div>
+          <div>
+            <h2 class="page-title">บันทึกระบบ (Log)</h2>
+            <p class="page-subtitle">ตรวจสอบการทำรายการทั้งหมด – user / วันที่ / เวลา / การกระทำ</p>
+          </div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-secondary btn-sm" onclick="PAGES.logs.exportCSV()">📤 ส่งออก CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="PAGES.logs.exportCSV()">
+            <span class="material-icons">file_download</span> ส่งออก CSV
+          </button>
         </div>
       </div>
-      <div class="card mb-16">
-        <div class="input-group" style="margin:0;flex-wrap:wrap">
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">จากวันที่</label>
-            <input type="date" id="log-start" value="${getDateStr(-7)}" style="min-width:150px" />
+
+      <div class="filter-card">
+        <form onsubmit="PAGES.logs.load(1); event.preventDefault()">
+          <div class="form-group" style="width:150px">
+            <label>จากวันที่</label>
+            <input type="date" id="log-start" value="${getDateStr(-7)}" />
           </div>
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">ถึงวันที่</label>
-            <input type="date" id="log-end" value="${UI.todayISO()}" style="min-width:150px" />
+          <div class="form-group" style="width:150px">
+            <label>ถึงวันที่</label>
+            <input type="date" id="log-end" value="${UI.todayISO()}" />
           </div>
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">ผู้ใช้</label>
-            <select id="log-user" style="min-width:160px"><option value="">-- ทุกผู้ใช้ --</option></select>
+          <div class="form-group" style="width:180px">
+            <label>ผู้ใช้</label>
+            <select id="log-user"><option value="">-- ทุกผู้ใช้ --</option></select>
           </div>
-          <div class="form-group" style="margin:0">
-            <label style="font-size:0.8rem;color:var(--text-muted)">ประเภท</label>
-            <select id="log-action" style="min-width:160px">
+          <div class="form-group" style="width:160px">
+            <label>ประเภท</label>
+            <select id="log-action">
               <option value="">-- ทุกประเภท --</option>
               <option value="login">เข้าสู่ระบบ</option>
               <option value="receive">รับสินค้า</option>
@@ -46,11 +54,14 @@ PAGES['logs'] = {
               <option value="adjust">ปรับยอด</option>
             </select>
           </div>
-          <button class="btn btn-primary" onclick="PAGES.logs.load(1)"><span class="material-icons">search</span> ค้นหา</button>
-        </div>
+          <button type="submit" class="btn btn-primary" style="height:42px">
+            <span class="material-icons">search</span> ค้นหา
+          </button>
+        </form>
       </div>
+
       <div class="card">
-        <div id="log-table">${UI.spinner()}</div>
+        <div id="log-table">${UI.skeletonTable(5, 8)}</div>
       </div>
     `;
     await this.loadUsers();

@@ -11,20 +11,26 @@ PAGES['receive-goods'] = {
     const el = document.getElementById('page-receive-goods');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">รับสินค้าเข้าคลัง</h2>
-          <p class="page-subtitle">บันทึกสินค้าที่รับเข้าคลังกลาง (Stock In)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#1A73E8,#0D47A1)">
+            <span class="material-icons">add_shopping_cart</span>
+          </div>
+          <div>
+            <h2 class="page-title">รับสินค้าเข้าคลัง</h2>
+            <p class="page-subtitle">บันทึกสินค้าเข้าคลังกลาง (Stock In)</p>
+          </div>
         </div>
         <div class="page-actions">
-           <button class="btn btn-secondary btn-sm" onclick="showPage('receive-history')">
+          <button class="btn btn-secondary btn-sm" onclick="showPage('receive-history')">
             <span class="material-icons">history</span> ดูประวัติการรับสินค้า
           </button>
         </div>
       </div>
       <div class="grid-2">
         <!-- 1. Warehouse Info -->
-        <div class="card">
-          <div class="card-title">1. คลังที่รับสินค้า</div>
+        <div class="card step-card">
+          <div class="step-badge">1</div>
+          <div class="card-title"><span class="material-icons" style="color:#1A73E8">warehouse</span>คลังที่รับสินค้า</div>
           <div class="form-group">
             <label>เลือกคลังกลางที่จะนำสินค้าเข้า *</label>
             <div id="rg-wh-picker-btn" class="product-picker-trigger" onclick="PAGES['receive-goods'].openCentralPicker()">
@@ -51,8 +57,9 @@ PAGES['receive-goods'] = {
         </div>
 
         <!-- 2. Document Info -->
-        <div class="card">
-          <div class="card-title">2. รายละเอียดเอกสาร</div>
+        <div class="card step-card">
+          <div class="step-badge">2</div>
+          <div class="card-title"><span class="material-icons" style="color:#9C27B0">description</span>รายละเอียดเอกสาร</div>
           <div class="form-group"><label>เลขที่เอกสาร / บิลรับของ *</label>
             <input type="text" id="rg-docno" placeholder="เช่น RC2604001" style="height:45px; border-radius:12px; padding:0 16px" />
           </div>
@@ -66,8 +73,9 @@ PAGES['receive-goods'] = {
       </div>
 
       <!-- 3. Product Selection -->
-      <div class="card mt-16">
-        <div class="card-title">3. เลือกรายการสินค้าเพื่อเพิ่มเข้าคลัง</div>
+      <div class="card mt-16 step-card">
+        <div class="step-badge">3</div>
+        <div class="card-title"><span class="material-icons" style="color:#00897B">inventory</span>เลือกรายการสินค้าที่จะรับเข้า</div>
         <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังที่จะรับสินค้า (ด้านบน) ก่อนกดเลือกสินค้า</p>
         <button id="rg-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES['receive-goods'].openProductPicker()" disabled>
           <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังรับสินค้าก่อน
@@ -75,7 +83,8 @@ PAGES['receive-goods'] = {
       </div>
 
       <!-- 4. Summary List -->
-      <div class="card mt-16">
+      <div class="card mt-16 step-card">
+        <div class="step-badge">4</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div class="card-title" style="margin:0">4. รายการที่รอรับเข้า</div>
           <button class="btn btn-primary" onclick="PAGES['receive-goods'].submit()" id="rg-submit-btn">
@@ -124,7 +133,7 @@ PAGES['receive-goods'] = {
     
     const html = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding-top:8px;">
       ${this._warehouses.map(w => {
-        const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40);
+        const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40, 'warehouse');
         return `
           <div class="card" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);transition:all 0.2s" onclick="PAGES['receive-goods'].selectCentral('${w.id}')" onpointerenter="this.style.borderColor='var(--primary)';this.style.transform='translateY(-2px)'" onpointerleave="this.style.borderColor='var(--border)';this.style.transform='none'">
             ${avHtml}
@@ -146,7 +155,7 @@ PAGES['receive-goods'] = {
     
     const thumb = document.getElementById('rg-wh-thumb');
     thumb.style.background = 'none';
-    thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40);
+    thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40, 'warehouse');
     
     document.getElementById('rg-wh-name').textContent = w.name;
     document.getElementById('rg-wh-name').style.color = 'var(--primary)';

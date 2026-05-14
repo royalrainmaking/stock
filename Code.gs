@@ -214,7 +214,12 @@ function sheetData(sheet) {
   const headers = data[0].map(h => String(h).trim());
   return data.slice(1).map(row => {
     let obj = {};
-    headers.forEach((h, i) => obj[h] = row[i]);
+    headers.forEach((h, i) => {
+      const val = row[i];
+      obj[h] = val;
+      // เพิ่ม key แบบตัวพิมพ์เล็กเพื่อให้เรียกใช้งานได้ง่ายขึ้น (e.g. obj['Date'] -> obj['date'])
+      obj[h.toLowerCase()] = val;
+    });
     return obj;
   });
 }
@@ -250,7 +255,19 @@ function updateRow(sheet, rowNum, data) {
 function appendRow(sheet, data) {
   const rawHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const headers = rawHeaders.map(h => String(h).trim());
-  const row = headers.map(h => data[h] !== undefined ? data[h] : '');
+  
+  // สร้าง mapping แบบ Case-Insensitive สำหรับข้อมูลที่ส่งมา
+  const dataLower = {};
+  Object.keys(data).forEach(k => dataLower[k.toLowerCase()] = data[k]);
+
+  const row = headers.map(h => {
+    const lowH = h.toLowerCase();
+    // ลองหาจาก key เดิมก่อน ถ้าไม่มีค่อยหาจากตัวพิมพ์เล็ก
+    if (data[h] !== undefined) return data[h];
+    if (dataLower[lowH] !== undefined) return dataLower[lowH];
+    return '';
+  });
+
   const r = sheet.getLastRow() + 1;
   const range = sheet.getRange(r, 1, 1, row.length);
   
@@ -1153,22 +1170,41 @@ function getBillingHistory(user, startDate, endDate) {
   const warehouses = sheetData(getSheet(SN.WAREHOUSES));
   const users = sheetData(getSheet(SN.USERS));
 
+  // ค้นหารายการและกรองตามช่วงวันที่
   const filtered = billings.filter(b => {
-    const ds = b.date instanceof Date ? Utilities.formatDate(b.date, "GMT+7", "yyyy-MM-dd") : String(b.date);
+    // b.date จะทำงานได้ทั้ง 'date' หรือ 'Date' เพราะเราแก้ sheetData แล้ว
+    if (!b.date) return false;
+    const ds = _fmtDate(b.date);
     return (!startDate || ds >= startDate) && (!endDate || ds <= endDate);
   }).map(b => {
     const wh = warehouses.find(w => w.id === b.warehouseId) || {};
-    const emp = users.find(u => u.id === wh.employeeId) || {};
+    const empId = b.employeeid || b.employeeId || wh.employeeid || wh.employeeId;
+    const emp = users.find(u => u.id === empId) || {};
+    
+    let createdAtStr = '';
+    const rawCreatedAt = b.createdat || b.createdAt;
+    if (rawCreatedAt) {
+      const ca = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt);
+      if (!isNaN(ca.getTime())) {
+        createdAtStr = Utilities.formatDate(ca, "GMT+7", "yyyy-MM-dd'T'HH:mm:ss");
+      }
+    }
+
     return {
       ...b,
-      warehouseName: wh.name || b.warehouseId,
+      id: b.id || b.ID,
+      date: _fmtDate(b.date),
+      createdAt: createdAtStr || rawCreatedAt,
+      warehouseName: wh.name || b.warehousename || b.warehouseId,
+      totalUnits: b.totalunits || b.totalUnits || 0,
+      totalAmt: b.totalamt || b.totalAmt || 0,
       employee: {
-        id: emp.id,
-        displayName: emp.displayName || emp.id,
-        avatar: emp.avatar
+        id: emp.id || empId,
+        displayName: emp.displayname || emp.displayName || emp.username || empId || 'ไม่ระบุพนักงาน',
+        avatar: emp.avatar || ''
       }
     };
-  }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
   return { billings: filtered };
 }
@@ -1357,26 +1393,35 @@ function getReceiveHistory(user, params) {
   const warehouseId = params.warehouseId;
   
   let filtered = transactions;
-  if (startDate) filtered = filtered.filter(t => t.createdAt >= startDate);
-  if (endDate) filtered = filtered.filter(t => t.createdAt <= endDate + 'T23:59:59');
-  if (warehouseId) filtered = filtered.filter(t => t.toWarehouseId === warehouseId);
+  if (startDate) filtered = filtered.filter(t => _fmtDate(t.createdAt) >= startDate);
+  if (endDate) filtered = filtered.filter(t => _fmtDate(t.createdAt) <= endDate);
+  if (warehouseId) filtered = filtered.filter(t => (t.toWarehouseId || t.towarehouseid) === warehouseId);
   
   const grouped = {};
   filtered.forEach(t => {
-    const key = t.docNo || t.id;
+    // ใช้ docNo หรือ (เวลา + ชื่อผู้ใช้) เป็น Key ในการรวมกลุ่มรายการที่มาด้วยกัน
+    const key = t.docNo || (t.createdAt + '_' + t.username);
     if (!grouped[key]) {
       grouped[key] = {
-        id: t.id, docNo: t.docNo, createdAt: t.createdAt,
-        toWarehouseId: t.toWarehouseId, username: t.username,
-        supplier: t.supplier, note: t.note, items: []
+        id: t.id, 
+        docNo: t.docNo, 
+        createdAt: t.createdAt,
+        toWarehouseId: t.toWarehouseId || t.towarehouseid, 
+        username: t.username,
+        supplier: t.supplier, 
+        note: t.note, 
+        items: []
       };
     }
     grouped[key].items.push({
-      productId: t.productId, qty: t.qty, unit: t.unit, expiryDate: t.expiryDate
+      productId: t.productId || t.productid, 
+      qty: t.qty, 
+      unit: t.unit, 
+      expiryDate: t.expiryDate || t.expirydate
     });
   });
   
-  return { history: Object.values(grouped).sort((a,b) => b.createdAt.localeCompare(a.createdAt)) };
+  return { history: Object.values(grouped).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))) };
 }
 
 function getReceiveHistoryDetail(user, params) {
@@ -1829,14 +1874,24 @@ function adjustShopInventory(shopId, productId, expiryDate, qty) {
  */
 function _fmtDate(d) {
   if (!d) return '';
+  // ถ้าเป็น Date object ให้ใช้ Utilities.formatDate เพื่อความแม่นยำของ Timezone
+  if (d instanceof Date) {
+    try {
+      return Utilities.formatDate(d, "GMT+7", "yyyy-MM-dd");
+    } catch(e) { /* fallback */ }
+  }
+  
+  // ถ้าเป็น String และอยู่ในรูปแบบ YYYY-MM-DD อยู่แล้วให้คืนค่าเลย
+  const s = String(d).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
+
+  // กรณีอื่นๆ พยายามแปลงเป็น Date ก่อน
   try {
     const dt = new Date(d);
-    if (isNaN(dt.getTime())) return String(d).split('T')[0];
-    const y = dt.getFullYear();
-    const m = ('0' + (dt.getMonth() + 1)).slice(-2);
-    const day = ('0' + dt.getDate()).slice(-2);
-    return `${y}-${m}-${day}`;
+    if (isNaN(dt.getTime())) return s.split(' ')[0]; // Fallback string split
+    return Utilities.formatDate(dt, "GMT+7", "yyyy-MM-dd");
   } catch(e) {
-    return String(d).split('T')[0];
+    return s.split(' ')[0];
   }
 }

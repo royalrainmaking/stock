@@ -11,9 +11,14 @@ PAGES['dashboard'] = {
     const el = document.getElementById('page-dashboard');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">แดชบอร์ดภาพรวม</h2>
-          <p class="page-subtitle">ข้อมูลวันที่ ${UI.dateStr(new Date())}</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#1A73E8,#0D47A1)">
+            <span class="material-icons">dashboard</span>
+          </div>
+          <div>
+            <h2 class="page-title">แดชบอร์ดภาพรวม</h2>
+            <p class="page-subtitle">ข้อมูล ณ วันที่ ${UI.dateStr(new Date())}</p>
+          </div>
         </div>
         <div class="page-actions">
           <div class="tabs" style="margin-bottom:0">

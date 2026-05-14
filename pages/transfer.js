@@ -14,21 +14,27 @@ PAGES['transfer'] = {
     const el = document.getElementById('page-transfer');
     el.innerHTML = `
       <div class="page-header">
-        <div>
-          <h2 class="page-title">เบิกสินค้า (Transfer)</h2>
-          <p class="page-subtitle">โอนสินค้าจากคลังกลางไปคลังพนักงาน (Stock Transfer)</p>
+        <div class="page-title-wrap">
+          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
+            <span class="material-icons">swap_horiz</span>
+          </div>
+          <div>
+            <h2 class="page-title">เบิกสินค้า</h2>
+            <p class="page-subtitle">โอนสินค้าจากคลังกลาง → คลังพนักงาน</p>
+          </div>
         </div>
         <div class="page-actions">
-           <button class="btn btn-secondary btn-sm" onclick="showPage('transfer-history')">
-            <span class="material-icons">history</span> ดูประวัติการเบิกสินค้า
+          <button class="btn btn-secondary btn-sm" onclick="showPage('transfer-history')">
+            <span class="material-icons">history</span> ดูประวัติการเบิก
           </button>
         </div>
       </div>
 
       <div class="grid-2">
         <!-- 1. Source Warehouse -->
-        <div class="card">
-          <div class="card-title">1. คลังต้นทาง (คลังกลาง)</div>
+        <div class="card step-card">
+          <div class="step-badge">1</div>
+          <div class="card-title"><span class="material-icons" style="color:#00897B">warehouse</span>คลังต้นทาง (คลังกลาง)</div>
           <div class="form-group">
             <label>เลือกคลังที่จะเบิกสินค้าออก *</label>
             <div id="tr-from-picker-btn" class="product-picker-trigger" onclick="PAGES.transfer.openCentralPicker()">
@@ -61,8 +67,9 @@ PAGES['transfer'] = {
         </div>
 
         <!-- 2. Target Warehouse & Note -->
-        <div class="card">
-          <div class="card-title">2. คลังปลายทาง (คลังพนักงาน)</div>
+        <div class="card step-card">
+          <div class="step-badge">2</div>
+          <div class="card-title"><span class="material-icons" style="color:#1A73E8">person_pin</span>คลังปลายทาง (พนักงาน)</div>
           <div class="form-group">
             <label>เลือกพนักงานที่จะรับของไป *</label>
             <div id="tr-emp-picker-btn" class="product-picker-trigger" onclick="PAGES.transfer.openEmployeePicker()">
@@ -81,8 +88,9 @@ PAGES['transfer'] = {
       </div>
 
       <!-- 3. Product Selection -->
-      <div class="card mt-16">
-        <div class="card-title">3. เลือกรายการสินค้า</div>
+      <div class="card mt-16 step-card">
+        <div class="step-badge">3</div>
+        <div class="card-title"><span class="material-icons" style="color:#9C27B0">inventory</span>เลือกรายการสินค้า</div>
         <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังต้นทางและปลายทางก่อนกดเลือกสินค้า</p>
         <button id="tr-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES.transfer.openProductPicker()" disabled>
           <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังต้นทางก่อน
@@ -90,7 +98,8 @@ PAGES['transfer'] = {
       </div>
 
       <!-- 4. Summary Table -->
-      <div class="card mt-16">
+      <div class="card mt-16 step-card">
+        <div class="step-badge">4</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div class="card-title" style="margin:0">4. รายการที่ต้องการเบิก</div>
           <button class="btn btn-primary" onclick="PAGES.transfer.submit()">
@@ -149,7 +158,7 @@ PAGES['transfer'] = {
 
     const html = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding-top:8px;">
       ${this._centralWarehouses.map(w => {
-        const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40);
+        const avHtml = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40, 'warehouse');
         return `
           <div class="card" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);transition:all 0.2s" onclick="PAGES.transfer.selectCentral('${w.id}')" onpointerenter="this.style.borderColor='var(--primary)';this.style.transform='translateY(-2px)'" onpointerleave="this.style.borderColor='var(--border)';this.style.transform='none'">
             ${avHtml}
@@ -177,7 +186,7 @@ PAGES['transfer'] = {
 
     const thumb = document.getElementById('tr-from-thumb');
     thumb.style.background = 'none';
-    thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40);
+    thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.name, 40, 'warehouse');
 
     document.getElementById('tr-from-name').textContent = w.name;
     document.getElementById('tr-from-name').style.color = 'var(--primary)';
@@ -215,7 +224,7 @@ PAGES['transfer'] = {
 
       if (fromThumb) {
         const wh = this._centralWarehouses.find(x => x.id === whId);
-        fromThumb.innerHTML = UI.avatar(wh?.employeeAvatar || wh?.avatar, wh?.name, 40);
+        fromThumb.innerHTML = UI.avatar(wh?.employeeAvatar || wh?.avatar, wh?.name, 40, 'warehouse');
       }
 
       if (pickerBtn) {
@@ -257,7 +266,7 @@ PAGES['transfer'] = {
 
     const thumb = document.getElementById('tr-emp-thumb');
     if (thumb) {
-      thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40);
+      thumb.innerHTML = UI.avatar(w.employeeAvatar || w.avatar, w.employeeName || w.name, 40, 'user');
     }
 
     document.getElementById('tr-emp-name').textContent = w.employeeName || w.name;
