@@ -760,21 +760,32 @@ function deleteWarehouse(user, warehouseId) {
   
   // 🔥 ALSO DELETE STOCK FROM THIS WAREHOUSE TO PREVENT GHOST DATA
   const empSheet = getSheet(SN.EMPLOYEE_STOCK);
-  // Iterate backwards to safely delete rows
-  const empRows = empSheet.getDataRange().getValues();
-  const empWhCol = empRows[0].map(h => String(h).trim()).indexOf('warehouseId');
-  if (empWhCol >= 0) {
-    for (let i = empRows.length - 1; i > 0; i--) {
-      if (empRows[i][empWhCol] === warehouseId) empSheet.deleteRow(i + 1);
+  if (empSheet.getLastRow() > 1) {
+    const empRows = empSheet.getDataRange().getValues();
+    if (empRows && empRows.length > 0 && empRows[0]) {
+      const empWhCol = empRows[0].map(h => String(h).trim()).indexOf('warehouseId');
+      if (empWhCol >= 0) {
+        for (let i = empRows.length - 1; i > 0; i--) {
+          if (String(empRows[i][empWhCol]).trim() === String(warehouseId).trim()) {
+            empSheet.deleteRow(i + 1);
+          }
+        }
+      }
     }
   }
 
   const centralSheet = getSheet(SN.CENTRAL_STOCK);
-  const centralRows = centralSheet.getDataRange().getValues();
-  const centralWhCol = centralRows[0].map(h => String(h).trim()).indexOf('warehouseId');
-  if (centralWhCol >= 0) {
-    for (let i = centralRows.length - 1; i > 0; i--) {
-      if (centralRows[i][centralWhCol] === warehouseId) centralSheet.deleteRow(i + 1);
+  if (centralSheet.getLastRow() > 1) {
+    const centralRows = centralSheet.getDataRange().getValues();
+    if (centralRows && centralRows.length > 0 && centralRows[0]) {
+      const centralWhCol = centralRows[0].map(h => String(h).trim()).indexOf('warehouseId');
+      if (centralWhCol >= 0) {
+        for (let i = centralRows.length - 1; i > 0; i--) {
+          if (String(centralRows[i][centralWhCol]).trim() === String(warehouseId).trim()) {
+            centralSheet.deleteRow(i + 1);
+          }
+        }
+      }
     }
   }
 
