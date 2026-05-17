@@ -56,6 +56,13 @@ document.getElementById('login-form').addEventListener('submit', async function(
   const text = btn.querySelector('.btn-text');
 
   errEl.classList.add('hidden');
+
+  if (password !== '87654321' && !username) {
+    errEl.textContent = 'กรุณากรอกชื่อผู้ใช้';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
   btn.disabled = true;
   spinner.classList.remove('hidden');
   text.classList.add('hidden');

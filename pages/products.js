@@ -109,6 +109,8 @@ PAGES['products'] = {
                 <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(p.shopWholesale)}</td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
+                    <button class="btn btn-secondary btn-icon" onclick="PAGES.products.move('${p.id}', 'up')" title="ย้ายขึ้น" ${data.indexOf(p) === 0 ? 'disabled' : ''}><span class="material-icons" style="font-size:16px">arrow_upward</span></button>
+                    <button class="btn btn-secondary btn-icon" onclick="PAGES.products.move('${p.id}', 'down')" title="ย้ายลง" ${data.indexOf(p) === data.length - 1 ? 'disabled' : ''}><span class="material-icons" style="font-size:16px">arrow_downward</span></button>
                     <button class="btn btn-secondary btn-icon" onclick="PAGES.products.openEdit('${p.id}')" title="แก้ไข"><span class="material-icons" style="font-size:16px">edit</span></button>
                     <button class="btn btn-danger btn-icon" onclick="PAGES.products.doDelete('${p.id}')" title="ลบ"><span class="material-icons" style="font-size:16px">delete</span></button>
                   </div>
@@ -201,6 +203,17 @@ PAGES['products'] = {
       UI.loading(true);
       await API.deleteProduct(id);
       UI.toast('ลบสินค้าเรียบร้อย ✅', 'success');
+      await this.load();
+    } catch (e) {
+      UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    } finally { UI.loading(false); }
+  },
+
+  async move(id, direction) {
+    try {
+      UI.loading(true);
+      await API.moveProduct(id, direction);
+      UI.toast('ย้ายลำดับสินค้าเรียบร้อย ✅', 'success');
       await this.load();
     } catch (e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');

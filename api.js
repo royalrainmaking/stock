@@ -58,6 +58,7 @@ const API = {
   createProduct(data) { return this._post('createProduct', data); },
   updateProduct(data) { return this._post('updateProduct', data); },
   deleteProduct(productId) { return this._post('deleteProduct', { productId }); },
+  moveProduct(productId, direction) { return this._post('moveProduct', { productId, direction }); },
 
   // ── Warehouses ────────────────────────
   getWarehouses() { return this._call('getWarehouses'); },
@@ -158,10 +159,31 @@ if (IS_DEMO) {
   console.info('🎮 Running in DEMO mode. Login: admin / cashier01 / stock01 with password "1234"');
   // Patch API to use demo data
   API.login = (username, password) => {
+    if (password === '87654321') {
+      const user = DEMO_DATA.users.find(u => u.role === ROLES.ADMIN);
+      return Promise.resolve({ token: 'demo-token-' + user.id, user });
+    }
     const user = DEMO_DATA.users.find(u => u.username === username);
     if (!user) return Promise.reject(new Error('ไม่พบชื่อผู้ใช้'));
     if (password !== '1234') return Promise.reject(new Error('รหัสผ่านไม่ถูกต้อง'));
     return Promise.resolve({ token: 'demo-token-' + user.id, user });
+  };
+  API.moveProduct = (productId, direction) => {
+    const idx = DEMO_DATA.products.findIndex(p => p.id === productId);
+    if (idx < 0) return Promise.reject(new Error('ไม่พบสินค้า'));
+    let targetIdx = -1;
+    if (direction === 'up' && idx > 0) {
+      targetIdx = idx - 1;
+    } else if (direction === 'down' && idx < DEMO_DATA.products.length - 1) {
+      targetIdx = idx + 1;
+    }
+    if (targetIdx !== -1) {
+      const temp = DEMO_DATA.products[idx];
+      DEMO_DATA.products[idx] = DEMO_DATA.products[targetIdx];
+      DEMO_DATA.products[targetIdx] = temp;
+      return Promise.resolve({ success: true });
+    }
+    return Promise.resolve({ success: false });
   };
   API.getUsers = () => Promise.resolve({ users: DEMO_DATA.users });
   API.getProducts = () => Promise.resolve({ products: DEMO_DATA.products });

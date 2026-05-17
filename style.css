@@ -215,6 +215,17 @@ button { cursor: pointer; font-family: var(--font); }
   color: var(--text-secondary);
 }
 .btn-icon:hover { color: var(--primary); background: var(--bg-hover); border-color: var(--primary); }
+.btn-danger.btn-icon {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  box-shadow: 0 1px 4px rgba(217,48,37,0.3);
+}
+.btn-danger.btn-icon:hover {
+  background: #b52a21;
+  color: #fff;
+  border-color: #b52a21;
+}
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
 /* ── Navigation ──────────────────────── */
