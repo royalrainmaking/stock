@@ -58,7 +58,7 @@ const API = {
   createProduct(data) { return this._post('createProduct', data); },
   updateProduct(data) { return this._post('updateProduct', data); },
   deleteProduct(productId) { return this._post('deleteProduct', { productId }); },
-  moveProduct(productId, direction) { return this._post('moveProduct', { productId, direction }); },
+  saveProductOrder(productIds) { return this._post('saveProductOrder', { productIds }); },
 
   // ── Warehouses ────────────────────────
   getWarehouses() { return this._call('getWarehouses'); },
@@ -168,22 +168,17 @@ if (IS_DEMO) {
     if (password !== '1234') return Promise.reject(new Error('รหัสผ่านไม่ถูกต้อง'));
     return Promise.resolve({ token: 'demo-token-' + user.id, user });
   };
-  API.moveProduct = (productId, direction) => {
-    const idx = DEMO_DATA.products.findIndex(p => p.id === productId);
-    if (idx < 0) return Promise.reject(new Error('ไม่พบสินค้า'));
-    let targetIdx = -1;
-    if (direction === 'up' && idx > 0) {
-      targetIdx = idx - 1;
-    } else if (direction === 'down' && idx < DEMO_DATA.products.length - 1) {
-      targetIdx = idx + 1;
-    }
-    if (targetIdx !== -1) {
-      const temp = DEMO_DATA.products[idx];
-      DEMO_DATA.products[idx] = DEMO_DATA.products[targetIdx];
-      DEMO_DATA.products[targetIdx] = temp;
-      return Promise.resolve({ success: true });
-    }
-    return Promise.resolve({ success: false });
+  API.saveProductOrder = (productIds) => {
+    const reordered = [];
+    productIds.forEach(id => {
+      const p = DEMO_DATA.products.find(x => x.id === id);
+      if (p) reordered.push(p);
+    });
+    DEMO_DATA.products.forEach(p => {
+      if (!reordered.find(x => x.id === p.id)) reordered.push(p);
+    });
+    DEMO_DATA.products = reordered;
+    return Promise.resolve({ success: true });
   };
   API.getUsers = () => Promise.resolve({ users: DEMO_DATA.users });
   API.getProducts = () => Promise.resolve({ products: DEMO_DATA.products });

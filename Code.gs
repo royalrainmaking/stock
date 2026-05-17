@@ -97,7 +97,7 @@ function handleRequest(e) {
       case 'createProduct': result = createProduct(user, body); break;
       case 'updateProduct': result = updateProduct(user, body); break;
       case 'deleteProduct': result = deleteProduct(user, body.productId); break;
-      case 'moveProduct': result = moveProduct(user, body); break;
+      case 'saveProductOrder': result = saveProductOrder(user, body); break;
 
       // Warehouses
       case 'getWarehouses': result = getWarehouses(); break;
@@ -571,62 +571,63 @@ function deleteProduct(user, productId) {
   return { success: true };
 }
 
-function moveProduct(user, body) {
+function saveProductOrder(user, body) {
   requireRole(user, 'admin');
-  const { productId, direction } = body;
-  if (!productId || !direction) throw new Error('ข้อมูลไม่ครบ');
+  const { productIds } = body;
+  if (!productIds || !Array.isArray(productIds)) throw new Error('ข้อมูลไม่ถูกต้อง');
 
   const sheet = getSheet(SN.PRODUCTS);
   const data = sheet.getDataRange().getValues();
-  if (data.length < 3) return { success: true }; // Not enough rows to swap (header + 1 row or less)
+  if (data.length < 3) return { success: true };
 
   const headers = data[0].map(h => String(h).trim());
   const idIdx = headers.indexOf('id');
   const activeIdx = headers.indexOf('active');
   if (idIdx < 0) throw new Error('ไม่พบหลัก ID');
 
-  // Let's get the list of active products and their original row indices
-  const activeProducts = [];
+  const activeRowsMap = {};
+  const inactiveRows = [];
+
   for (let i = 1; i < data.length; i++) {
-    const activeVal = data[i][activeIdx];
+    const row = data[i];
+    const pid = String(row[idIdx]);
+    const activeVal = row[activeIdx];
     const isActive = activeVal === true || activeVal === 'TRUE' || activeVal === true || activeVal === '';
+
     if (isActive) {
-      activeProducts.push({
-        rowNum: i + 1,
-        id: String(data[i][idIdx])
-      });
+      activeRowsMap[pid] = row;
+    } else {
+      inactiveRows.push(row);
     }
   }
 
-  // Find the index of our product in the activeProducts list
-  const idx = activeProducts.findIndex(p => p.id === productId);
-  if (idx < 0) throw new Error('ไม่พบสินค้าที่ต้องการย้าย');
+  const newRows = [];
 
-  let targetIdx = -1;
-  if (direction === 'up' && idx > 0) {
-    targetIdx = idx - 1;
-  } else if (direction === 'down' && idx < activeProducts.length - 1) {
-    targetIdx = idx + 1;
+  productIds.forEach(pid => {
+    if (activeRowsMap[pid]) {
+      newRows.push(activeRowsMap[pid]);
+      delete activeRowsMap[pid];
+    }
+  });
+
+  Object.values(activeRowsMap).forEach(row => {
+    newRows.push(row);
+  });
+
+  inactiveRows.forEach(row => {
+    newRows.push(row);
+  });
+
+  const totalRows = newRows.length;
+  if (totalRows > 0) {
+    if (sheet.getLastRow() > 1) {
+      sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    }
+    sheet.getRange(2, 1, totalRows, sheet.getLastColumn()).setValues(newRows);
   }
 
-  if (targetIdx !== -1) {
-    const row1Num = activeProducts[idx].rowNum;
-    const row2Num = activeProducts[targetIdx].rowNum;
-
-    // Swap row1 and row2 in the Google Sheet
-    const range1 = sheet.getRange(row1Num, 1, 1, sheet.getLastColumn());
-    const range2 = sheet.getRange(row2Num, 1, 1, sheet.getLastColumn());
-    const val1 = range1.getValues()[0];
-    const val2 = range2.getValues()[0];
-
-    range1.setValues([val2]);
-    range2.setValues([val1]);
-
-    writeLog(user, 'moveProduct', `ย้ายลำดับสินค้า ${productId} ${direction}`);
-    return { success: true };
-  }
-
-  return { success: false, error: 'ไม่สามารถย้ายลำดับได้' };
+  writeLog(user, 'saveProductOrder', `บันทึกลำดับสินค้าใหม่ทั้งหมด ${productIds.length} รายการ`);
+  return { success: true };
 }
 
 // ── WAREHOUSES ───────────────────────────────────────────────

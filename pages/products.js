@@ -19,7 +19,10 @@ PAGES['products'] = {
             <p class="page-subtitle">จัดการข้อมูลสินค้า ราคาทุน และราคาจำหน่าย (Master Data)</p>
           </div>
         </div>
-        <div class="page-actions">
+        <div class="page-actions" style="display:flex;gap:10px">
+          <button class="btn btn-success hidden" id="save-order-btn" onclick="PAGES.products.saveOrder()" style="background:var(--success);border-color:var(--success);color:#fff">
+            <span class="material-icons">save</span> บันทึกลำดับ
+          </button>
           <button class="btn btn-primary" onclick="PAGES.products.openAdd()">
             <span class="material-icons">add_circle</span> เพิ่มสินค้าใหม่
           </button>
@@ -49,6 +52,8 @@ PAGES['products'] = {
       const res = await API.getProducts();
       this._products = res.products || [];
       this.renderTable();
+      const btn = document.getElementById('save-order-btn');
+      if (btn) btn.classList.add('hidden');
     } catch (e) {
       document.getElementById('products-table').innerHTML = `<div class="alert alert-danger"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">warning</span>${e.message}</div>`;
     }
@@ -83,7 +88,7 @@ PAGES['products'] = {
             <th>ข้อมูลสินค้า</th>
             <th>หมวดหมู่</th>
             <th class="td-center">บรรจุภัณฑ์</th>
-            <th class="td-right">ต้นทุนรวม VAT</th>
+            <th class="td-right">ต้นทุน (ไม่รวม/รวม)</th>
             <th class="td-right">ส่งเซลล์</th>
             <th class="td-right">ค่าคอมฯ</th>
             <th class="td-right">ส่งร้านค้า</th>
@@ -103,7 +108,10 @@ PAGES['products'] = {
                   <div style="font-size:0.8rem;color:var(--text-secondary)">📦 ${p.unitsPerCase || '-'} / 🍱 ${p.unitsPerTray || '-'}</div>
                   <div style="font-size:0.7rem;color:var(--text-muted)">หน่วย: ${p.unit}</div>
                 </td>
-                <td class="td-right td-bold" style="color:var(--text-primary)">฿${UI.currency(p.costVat)}</td>
+                <td class="td-right">
+                  <div style="font-size:0.8rem;color:var(--text-secondary)">฿${UI.currency(p.costNoVat)}</div>
+                  <div class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">฿${UI.currency(p.costVat)}</div>
+                </td>
                 <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(p.sellWholesale)}</td>
                 <td class="td-right" style="color:#BE185D;font-weight:700">฿${UI.currency(p.sellCommission)}</td>
                 <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(p.shopWholesale)}</td>
@@ -209,11 +217,36 @@ PAGES['products'] = {
     } finally { UI.loading(false); }
   },
 
-  async move(id, direction) {
+  move(id, direction) {
+    const idx = this._products.findIndex(p => p.id === id);
+    if (idx < 0) return;
+
+    let targetIdx = -1;
+    if (direction === 'up' && idx > 0) {
+      targetIdx = idx - 1;
+    } else if (direction === 'down' && idx < this._products.length - 1) {
+      targetIdx = idx + 1;
+    }
+
+    if (targetIdx !== -1) {
+      const temp = this._products[idx];
+      this._products[idx] = this._products[targetIdx];
+      this._products[targetIdx] = temp;
+
+      this.renderTable();
+      const btn = document.getElementById('save-order-btn');
+      if (btn) btn.classList.remove('hidden');
+    }
+  },
+
+  async saveOrder() {
     try {
       UI.loading(true);
-      await API.moveProduct(id, direction);
-      UI.toast('ย้ายลำดับสินค้าเรียบร้อย ✅', 'success');
+      const productIds = this._products.map(p => p.id);
+      await API.saveProductOrder(productIds);
+      UI.toast('บันทึกลำดับสินค้าเรียบร้อย ✅', 'success');
+      const btn = document.getElementById('save-order-btn');
+      if (btn) btn.classList.add('hidden');
       await this.load();
     } catch (e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
