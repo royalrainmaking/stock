@@ -61,6 +61,7 @@ const API = {
   createProduct(data) { return this._post('createProduct', data); },
   updateProduct(data) { return this._post('updateProduct', data); },
   deleteProduct(productId) { return this._post('deleteProduct', { productId }); },
+  deleteProducts(productIds) { return this._post('deleteProducts', { productIds }); },
   saveProductOrder(productIds) { return this._post('saveProductOrder', { productIds }); },
 
   // ── Warehouses ────────────────────────

@@ -98,6 +98,7 @@ function handleRequest(e) {
       case 'createProduct': result = createProduct(user, body); break;
       case 'updateProduct': result = updateProduct(user, body); break;
       case 'deleteProduct': result = deleteProduct(user, body.productId); break;
+      case 'deleteProducts': result = deleteProducts(user, body); break;
       case 'saveProductOrder': result = saveProductOrder(user, body); break;
 
       // Warehouses
@@ -601,6 +602,25 @@ function deleteProduct(user, productId) {
   return { success: true };
 }
 
+function deleteProducts(user, body) {
+  requireRole(user, 'admin');
+  const { productIds } = body;
+  if (!productIds || !Array.isArray(productIds)) throw new Error('ข้อมูลไม่ถูกต้อง');
+  const sheet = getSheet(SN.PRODUCTS);
+  const ci = getColIndex(sheet, 'active');
+  if (ci <= 0) throw new Error('ไม่พบคอลัมน์ active ในชีทสินค้า');
+
+  productIds.forEach(productId => {
+    const rowNum = findRow(sheet, 'id', productId);
+    if (rowNum > 0) {
+      sheet.getRange(rowNum, ci).setValue(false);
+    }
+  });
+
+  writeLog(user, 'deleteProducts', `ลบสินค้าหลายรายการ จำนวน ${productIds.length} รายการ`);
+  return { success: true };
+}
+
 function saveProductOrder(user, body) {
   requireRole(user, 'admin');
   const { productIds } = body;
@@ -622,7 +642,7 @@ function saveProductOrder(user, body) {
     const row = data[i];
     const pid = String(row[idIdx]);
     const activeVal = row[activeIdx];
-    const isActive = activeVal === true || activeVal === 'TRUE' || activeVal === true || activeVal === '';
+    const isActive = _isTrue(activeVal);
 
     if (isActive) {
       activeRowsMap[pid] = row;
@@ -650,10 +670,16 @@ function saveProductOrder(user, body) {
 
   const totalRows = newRows.length;
   if (totalRows > 0) {
-    if (sheet.getLastRow() > 1) {
-      sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    const numCols = newRows[0].length;
+    const lastRow = sheet.getLastRow();
+    
+    // Clear old data safely only using exact column dimensions
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, numCols).clearContent();
     }
-    sheet.getRange(2, 1, totalRows, sheet.getLastColumn()).setValues(newRows);
+    
+    // Write sorted products safely matching data dimensions perfectly
+    sheet.getRange(2, 1, totalRows, numCols).setValues(newRows);
   }
 
   writeLog(user, 'saveProductOrder', `บันทึกลำดับสินค้าใหม่ทั้งหมด ${productIds.length} รายการ`);
