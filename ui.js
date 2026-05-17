@@ -38,11 +38,7 @@ const UI = {
   // ── Number format ────────────────────────────────────────
   currency(n, decimals = 2) {
     if (isNaN(n) || n === null || n === '') return '—';
-    const numStr = String(n);
-    const dotIdx = numStr.indexOf('.');
-    const actualDecimals = dotIdx >= 0 ? numStr.length - dotIdx - 1 : 0;
-    const maxDec = Math.max(decimals, actualDecimals);
-    return Number(n).toLocaleString('th-TH', { minimumFractionDigits: decimals, maximumFractionDigits: maxDec });
+    return Number(n).toLocaleString('th-TH', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   },
   num(n) { return Number(n) || 0; },
 
