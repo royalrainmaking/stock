@@ -31,36 +31,51 @@ PAGES['employee-stock'] = {
 
 
       <div class="card mb-16">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <div class="form-group" style="margin:0">
-            <select id="es-wh-filter" onchange="PAGES['employee-stock'].setWh(this.value)" style="min-width:240px">
-              <option value="">-- ทุกพนักงาน --</option>
-            </select>
+        <div style="display:flex; flex-direction:column; gap:16px">
+          <!-- Employee Avatar Selector -->
+          <div style="width:100%; display:flex; flex-direction:column; gap:8px">
+            <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em">เลือกคลังพนักงาน</div>
+            <div id="es-wh-selector" class="avatar-selector-row" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; padding:4px 0">
+              <!-- Avatar items will be injected here -->
+            </div>
           </div>
-          <div class="search-bar" style="flex:1;min-width:180px">
-            <span class="search-icon"><span class="material-icons">search</span></span>
-            <input type="text" placeholder="ค้นหาสินค้า..." oninput="PAGES['employee-stock'].doSearch(this.value)" />
-          </div>
-          <div style="display:flex;gap:4px;background:var(--bg-card2);border-radius:8px;padding:3px">
-            <button id="es-view-card" class="btn btn-sm btn-primary" onclick="PAGES['employee-stock'].setView('card')" title="Card View">
-              <span class="material-icons">grid_view</span>
+          
+          <div class="section-divider" style="margin:0; opacity:0.5"></div>
+          
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0">
+            <div class="search-bar" style="flex:1;min-width:180px">
+              <span class="search-icon"><span class="material-icons">search</span></span>
+              <input type="text" placeholder="ค้นหาสินค้า..." oninput="PAGES['employee-stock'].doSearch(this.value)" />
+            </div>
+            <div style="display:flex;gap:4px;background:var(--bg-card2);border-radius:8px;padding:3px">
+              <button id="es-view-card" class="btn btn-sm btn-primary" onclick="PAGES['employee-stock'].setView('card')" title="Card View">
+                <span class="material-icons">grid_view</span>
+              </button>
+              <button id="es-view-table" class="btn btn-sm btn-secondary" onclick="PAGES['employee-stock'].setView('table')" title="Table View">
+                <span class="material-icons">table_rows</span>
+              </button>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="PAGES['employee-stock'].load()">
+              <span class="material-icons">refresh</span> รีเฟรช
             </button>
-            <button id="es-view-table" class="btn btn-sm btn-secondary" onclick="PAGES['employee-stock'].setView('table')" title="Table View">
-              <span class="material-icons">table_rows</span>
-            </button>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="PAGES['employee-stock'].load()">
-            <span class="material-icons">refresh</span> รีเฟรช
-          </button>
         </div>
       </div>
+      <style>
+        .avatar-select-item { box-shadow:var(--shadow-sm); }
+        .avatar-select-item:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+      </style>
 
       <div id="es-content">${UI.spinner()}</div>
     `;
     await this.load();
   },
 
-  setWh(v) { this._selectedWh = v; this.renderContent(); },
+  setWh(v) { 
+    this._selectedWh = v; 
+    this.renderWarehouses();
+    this.renderContent(); 
+  },
   doSearch(v) { this._search = v.toLowerCase(); this.renderContent(); },
   setView(mode) {
     this._viewMode = mode;
@@ -82,7 +97,35 @@ PAGES['employee-stock'] = {
     return { label: 'ปกติ', color: 'var(--success)', bg: '#E6F4EA' };
   },
 
+  showWhLoading(show) {
+    const selector = document.getElementById('es-wh-selector');
+    if (!selector) return;
+    const activeItem = selector.querySelector('.avatar-select-item[style*="border-color:var(--primary)"]') 
+      || selector.querySelector('.avatar-select-item[style*="border-color: var(--primary)"]');
+    if (!activeItem) return;
+    
+    const avatarEl = activeItem.querySelector('div:first-child') || activeItem.querySelector('.user-avatar') || activeItem.querySelector('.avatar-placeholder');
+    if (!avatarEl) return;
+
+    if (show) {
+      if (!activeItem._originalAvatarHtml) {
+        activeItem._originalAvatarHtml = avatarEl.innerHTML;
+        activeItem._originalAvatarBg = avatarEl.style.background;
+      }
+      avatarEl.style.background = 'none';
+      avatarEl.innerHTML = '<span class="material-icons rotating" style="color:var(--primary); font-size:24px">sync</span>';
+    } else {
+      if (activeItem._originalAvatarHtml) {
+        avatarEl.innerHTML = activeItem._originalAvatarHtml;
+        avatarEl.style.background = activeItem._originalAvatarBg || '';
+        delete activeItem._originalAvatarHtml;
+        delete activeItem._originalAvatarBg;
+      }
+    }
+  },
+
   async load() {
+    this.showWhLoading(true);
     try {
       const [stockRes, whRes, prRes] = await Promise.all([
         API.getAllEmployeeStocks(),
@@ -93,16 +136,64 @@ PAGES['employee-stock'] = {
       this._warehouses = (whRes.warehouses || []).filter(w => w.type === 'employee');
       this._products = prRes.products || [];
 
-      const sel = document.getElementById('es-wh-filter');
-      if (sel) {
-        sel.innerHTML = '<option value="">-- ทุกพนักงาน --</option>' +
-          this._warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
-        sel.value = this._selectedWh;
-      }
+      this.renderWarehouses();
       this.renderContent();
     } catch (e) {
       document.getElementById('es-content').innerHTML = `<div class="alert alert-danger"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">warning</span>${e.message}</div>`;
+    } finally {
+      this.showWhLoading(false);
     }
+  },
+
+  renderWarehouses() {
+    const container = document.getElementById('es-wh-selector');
+    if (!container) return;
+
+    const isAllActive = !this._selectedWh;
+    const allActiveStyle = isAllActive 
+      ? 'border-color:var(--primary); background:var(--bg-card); box-shadow:var(--shadow-lg); transform:translateY(-2px)' 
+      : 'border-color:var(--border-light); background:transparent';
+    const allAvatarHtml = `
+      <div style="
+        width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+        display:flex; align-items:center; justify-content:center; color:#fff
+      ">
+        <span class="material-icons" style="font-size:20px">people</span>
+      </div>
+    `;
+
+    let html = `
+      <div class="avatar-select-item" onclick="PAGES['employee-stock'].setWh('')" style="
+        display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; padding:6px 12px;
+        border-radius:12px; border:2px solid; transition:all 0.2s; min-width:90px; text-align:center; ${allActiveStyle}
+      " onpointerenter="this.style.borderColor='var(--primary)'" onpointerleave="this.style.borderColor='${isAllActive ? 'var(--primary)' : 'var(--border-light)'}'">
+        ${allAvatarHtml}
+        <div style="font-size:0.75rem; font-weight:700; color:${isAllActive ? 'var(--primary)' : 'var(--text-secondary)'}">ทุกพนักงาน</div>
+      </div>
+    `;
+
+    this._warehouses.forEach(w => {
+      const isActive = this._selectedWh === w.id;
+      const activeStyle = isActive 
+        ? 'border-color:var(--primary); background:var(--bg-card); box-shadow:var(--shadow-lg); transform:translateY(-2px)' 
+        : 'border-color:var(--border-light); background:transparent';
+      
+      const stockItem = this._allStock.find(item => item.warehouse.id === w.id) || {};
+      const emp = stockItem.employee || {};
+      const avHtml = UI.avatar(emp.avatar || w.avatar, emp.displayName || w.name, 42);
+
+      html += `
+        <div class="avatar-select-item" onclick="PAGES['employee-stock'].setWh('${w.id}')" style="
+          display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; padding:6px 12px;
+          border-radius:12px; border:2px solid; transition:all 0.2s; min-width:90px; text-align:center; ${activeStyle}
+        " onpointerenter="this.style.borderColor='var(--primary)'" onpointerleave="this.style.borderColor='${isActive ? 'var(--primary)' : 'var(--border-light)'}'">
+          ${avHtml}
+          <div style="font-size:0.75rem; font-weight:700; color:${isActive ? 'var(--primary)' : 'var(--text-secondary)'}">${emp.displayName || w.name}</div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
   },
 
   renderContent() {

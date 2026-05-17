@@ -186,8 +186,9 @@ const UI = {
 
   // ── Spinner / Skeleton inline ───────────────────────────
   spinner() {
-    return `<div style="padding:24px">
-      ${[100,70,45,80,55].map(w => `<div class="skeleton skel-row" style="width:${w}%"></div>`).join('')}
+    return `<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:48px; gap:12px; color:var(--text-muted)">
+      <span class="material-icons rotating" style="font-size:36px; color:var(--primary)">sync</span>
+      <span style="font-size:0.9rem; font-weight:600">กำลังโหลดข้อมูล...</span>
     </div>`;
   },
 
@@ -236,12 +237,25 @@ const UI = {
     if (!role || (role !== 'admin' && role !== 'stock')) return;
     try {
       const res = await API.getPickingTasks();
-      const count = (res.tasks || []).length;
+      const newTasks = res.tasks || [];
+      const count = newTasks.length;
       this.setBadge('picking', count);
+
+      // If currently on the picking queue page, update it instantly if there's any task list change
+      if (currentPage === 'picking') {
+        const pPage = PAGES['picking'];
+        if (pPage) {
+          const oldTaskIds = (pPage._tasks || []).map(t => t.id).sort().join(',');
+          const newTaskIds = newTasks.map(t => t.id).sort().join(',');
+          if (oldTaskIds !== newTaskIds) {
+            await pPage.load();
+          }
+        }
+      }
     } catch (e) { console.error('Badge refresh failed', e); }
   },
 
-  startAutoRefresh(ms = 60000) {
+  startAutoRefresh(ms = 30000) { // Changed default interval to 30s for more responsive updates
     if (this._refreshInterval) clearInterval(this._refreshInterval);
     this.refreshBadges(); // First pull
     this._refreshInterval = setInterval(() => this.refreshBadges(), ms);
@@ -250,13 +264,6 @@ const UI = {
   stopAutoRefresh() {
     if (this._refreshInterval) clearInterval(this._refreshInterval);
     this._refreshInterval = null;
-  },
-  async refreshBadges() {
-    try {
-      const res = await API.getPickingTasks();
-      const count = res.tasks?.length || 0;
-      this.setBadge('picking', count);
-    } catch (e) { }
   }
 };
 

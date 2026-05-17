@@ -24,12 +24,18 @@ PAGES.movement = {
             <p class="page-subtitle">โอนย้ายสินค้าระหว่างคลังหลักและคลังพนักงาน (Stock Movement)</p>
           </div>
         </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary btn-sm" onclick="showPage('movement-history')">
+            <span class="material-icons">history</span> ดูประวัติย้ายคลัง
+          </button>
+        </div>
       </div>
 
       <div class="grid-2">
         <!-- Source Warehouse -->
-        <div class="card">
-          <div class="card-title">1. คลังต้นทาง</div>
+        <div class="card step-card">
+          <div class="step-badge">1</div>
+          <div class="card-title"><span class="material-icons" style="color:#00838F">logout</span>คลังต้นทาง</div>
           <div class="form-group">
             <label>เลือกคลังที่จะย้ายของออก *</label>
             <div id="mv-from-btn" class="product-picker-trigger" onclick="PAGES.movement.openWarehousePicker('from')">
@@ -67,8 +73,9 @@ PAGES.movement = {
         </div>
 
         <!-- Target Warehouse -->
-        <div class="card">
-          <div class="card-title">2. คลังปลายทาง</div>
+        <div class="card step-card">
+          <div class="step-badge">2</div>
+          <div class="card-title"><span class="material-icons" style="color:#006064">login</span>คลังปลายทาง</div>
           <div class="form-group">
             <label>เลือกคลังที่จะรับของเข้า *</label>
             <div id="mv-to-btn" class="product-picker-trigger" onclick="PAGES.movement.openWarehousePicker('to')">
@@ -86,15 +93,17 @@ PAGES.movement = {
         </div>
       </div>
 
-      <div class="card mt-16">
-        <div class="card-title">3. เลือกรายการสินค้า</div>
+      <div class="card mt-16 step-card">
+        <div class="step-badge">3</div>
+        <div class="card-title"><span class="material-icons" style="color:#9C27B0">inventory</span>เลือกรายการสินค้า</div>
         <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังต้นทางและปลายทางก่อนกดเลือกสินค้า</p>
         <button id="mv-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; border-radius:16px; font-size:1.1rem; box-shadow:var(--shadow-lg)" onclick="PAGES.movement.openProductPicker()" disabled>
           <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังต้นทางก่อน
         </button>
       </div>
 
-      <div class="card mt-16">
+      <div class="card mt-16 step-card">
+        <div class="step-badge">4</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div class="card-title" style="margin:0">4. รายการที่ต้องการย้าย</div>
           <button id="mv-submit-btn" class="btn btn-primary" onclick="PAGES.movement.submit()" disabled>
