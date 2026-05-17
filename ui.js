@@ -5,6 +5,17 @@
 // Global page registry – must be declared before any page files load
 const PAGES = {};
 
+// Global inline SVG placeholders to prevent quote-nesting conflicts in HTML attributes (e.g. onerror)
+const userSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="gu" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ea4335"/><stop offset="100%" stop-color="#a50e0e"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(#gu)"/><path d="M50 20a15 15 0 1 0 0 30 15 15 0 0 0 0-30zm0 37.5c-20 0-35 10-35 22.5h70c0-12.5-15-22.5-35-22.5z" fill="#ffffff"/></svg>`;
+
+const whSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="gw" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1a73e8"/><stop offset="100%" stop-color="#0d47a1"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(#gw)"/><path d="M20 75h60V40L50 20 20 40v35zm10-25h12v12H30V50zm28 0h12v12H58V50z" fill="#ffffff"/></svg>`;
+
+const productSvgRaw = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="10" fill="#f1f3f4"/><path d="M35 30h30v40H35z" fill="none" stroke="#9e9e9e" stroke-width="4"/><path d="M50 18L25 35h50z" fill="none" stroke="#9e9e9e" stroke-width="4"/></svg>`;
+
+window.DEFAULT_USER_SVG = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(userSvgRaw)));
+window.DEFAULT_WH_SVG = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(whSvgRaw)));
+window.DEFAULT_PRODUCT_SVG = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(productSvgRaw)));
+
 const UI = {
   // ── Toast notifications ──────────────────────────────────
   toast(message, type = 'info', duration = 3500) {
@@ -56,10 +67,7 @@ const UI = {
   todayISO() { return new Date().toISOString().split('T')[0]; },
 
   avatar(url, name, size = 40, type = 'user', className = '') {
-    const defaultUser = 'https://storage.googleapis.com/fastwork-static/748949a9-a424-466f-a248-e75d2b682171.jpg';
-    const defaultWh = 'https://storage.googleapis.com/fastwork-static/6fb5cf34-a09d-440e-a059-599144515c1d.jpg';
-    const placeholder = (type === 'warehouse' || type === 'store' || type === 'shop') ? defaultWh : defaultUser;
-
+    const placeholder = (type === 'warehouse' || type === 'store' || type === 'shop') ? window.DEFAULT_WH_SVG : window.DEFAULT_USER_SVG;
     const fallbackHTML = `<img src="${placeholder}" class="${className}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" />`;
 
     // ตรวจสอบค่าว่างหรือค่าที่ผิดพลาดจากระบบหลังบ้าน
@@ -78,11 +86,11 @@ const UI = {
       }
     }
 
-    return `<img src="${finalUrl}" class="${className}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.onerror=null; this.src='${placeholder}'" />`;
+    const placeholderVarName = (type === 'warehouse' || type === 'store' || type === 'shop') ? 'window.DEFAULT_WH_SVG' : 'window.DEFAULT_USER_SVG';
+    return `<img src="${finalUrl}" class="${className}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.onerror=null; this.src=${placeholderVarName}" />`;
   },
 
   image(url, className = '', style = '') {
-    const defaultImg = 'https://storage.googleapis.com/fastwork-static/inventory-placeholder.png'; 
     if (!url || typeof url !== 'string' || url.trim() === '' || url === 'null') {
       return `<div class="product-img-placeholder ${className}" style="${style}"><span class="material-icons">inventory_2</span></div>`;
     }
@@ -95,7 +103,7 @@ const UI = {
       }
     }
 
-    return `<img src="${finalUrl}" class="${className}" style="${style}" onerror="this.onerror=null; this.src='https://storage.googleapis.com/fastwork-static/6fb5cf34-a09d-440e-a059-599144515c1d.jpg'" />`;
+    return `<img src="${finalUrl}" class="${className}" style="${style}" onerror="this.onerror=null; this.src=window.DEFAULT_PRODUCT_SVG" />`;
   },
 
   // ── Debounce ─────────────────────────────────────────────

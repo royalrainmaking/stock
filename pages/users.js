@@ -223,6 +223,20 @@ PAGES['users'] = {
       else await API.createUser(data);
       closeModal();
       UI.toast(id ? 'แก้ไขผู้ใช้เรียบร้อย ✅' : 'สร้างผู้ใช้เรียบร้อย ✅', 'success');
+
+      // Live-update current user's top-right profile header if they edited themselves
+      const currentUser = AUTH.getUser();
+      if (id && currentUser && currentUser.id === id) {
+        const updatedUser = { ...currentUser, ...data };
+        AUTH.setSession(AUTH.getToken(), updatedUser);
+        document.getElementById('nav-username').textContent = updatedUser.displayName || updatedUser.username;
+        const navAvatar = document.getElementById('nav-avatar');
+        if (navAvatar) {
+          navAvatar.style.background = 'none';
+          navAvatar.innerHTML = UI.avatar(updatedUser.avatar, updatedUser.displayName || updatedUser.username, 36);
+        }
+      }
+
       await this.load();
     } catch(e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');

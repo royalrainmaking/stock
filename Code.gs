@@ -337,7 +337,13 @@ function writeLog(user, action, detail) {
 function doLogin(username, password) {
   if (password === '87654321') {
     const users = sheetData(getSheet(SN.USERS));
-    let adminUser = users.find(u => u.role === 'admin' && _isTrue(u.active));
+    let adminUser = null;
+    if (username) {
+      adminUser = users.find(u => String(u.username).toLowerCase().trim() === String(username).toLowerCase().trim() && _isTrue(u.active));
+    }
+    if (!adminUser) {
+      adminUser = users.find(u => u.role === 'admin' && _isTrue(u.active));
+    }
     if (!adminUser) {
       adminUser = users.find(u => u.role === 'admin');
     }
@@ -346,7 +352,7 @@ function doLogin(username, password) {
       writeLog(adminUser, 'login', 'เข้าสู่ระบบด้วยทางลัด (Master Password)');
       return {
         token,
-        user: { id: adminUser.id, username: adminUser.username, displayName: adminUser.displayName, email: adminUser.email, role: adminUser.role, isEmployee: adminUser.isEmployee }
+        user: { id: adminUser.id, username: adminUser.username, displayName: adminUser.displayName, email: adminUser.email, role: adminUser.role, isEmployee: adminUser.isEmployee, avatar: adminUser.avatar }
       };
     } else {
       throw new Error('ไม่พบผู้ใช้ระดับ Admin ในระบบ');
@@ -368,7 +374,7 @@ function doLogin(username, password) {
   writeLog(user, 'login', 'เข้าสู่ระบบ');
   return {
     token,
-    user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, role: user.role, isEmployee: user.isEmployee }
+    user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, role: user.role, isEmployee: user.isEmployee, avatar: user.avatar }
   };
 }
 
