@@ -80,7 +80,7 @@ const UI = {
     let finalUrl = cleanUrl;
     // รองรับ Google Drive Link
     if (cleanUrl.includes('drive.google.com')) {
-      const match = cleanUrl.match(/id=([a-zA-Z0-9_-]{28,})/ ) || cleanUrl.match(/file\/d\/([a-zA-Z0-9_-]{28,})/);
+      const match = cleanUrl.match(/id=([a-zA-Z0-9_-]{15,})/ ) || cleanUrl.match(/file\/d\/([a-zA-Z0-9_-]{15,})/);
       if (match) {
         finalUrl = `https://lh3.googleusercontent.com/d/${match[1]}=w400-h400`;
       }
@@ -97,7 +97,7 @@ const UI = {
 
     let finalUrl = url.trim();
     if (url.includes('drive.google.com')) {
-      const match = url.match(/id=([a-zA-Z0-9_-]{28,})/ ) || url.match(/file\/d\/([a-zA-Z0-9_-]{28,})/);
+      const match = url.match(/id=([a-zA-Z0-9_-]{15,})/ ) || url.match(/file\/d\/([a-zA-Z0-9_-]{15,})/);
       if (match) {
         finalUrl = `https://lh3.googleusercontent.com/d/${match[1]}=w400-h400`;
       }

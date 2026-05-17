@@ -4,7 +4,7 @@
 
 const CONFIG = {
   // ── Google Apps Script URL (Copy URL ที่ได้จากการ Deploy Web App มาวางที่นี่) ───
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbwA80EhUo66xfXODNatM9ZPFfPN-bzjpS2D6dULnYSd-v9YCx5YRUz07b7Afyz97DFnqA/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzD6AfHCVJJXYAmNz8zCRwwOvDxVZlu2ptqXYvixMkLhqIpDWbt-QEZ44tYG2UZhqtK/exec',
 
   // ── Demo Mode: true = ใช้ข้อมูล Demo (ไม่ต้อง GAS) ───────
   // ตั้งเป็น false และใส่ GAS_URL จริง เมื่อ Deploy แล้ว

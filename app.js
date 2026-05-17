@@ -7,7 +7,24 @@ const APP = {
   async init() {
     AUTH.init();
     if (AUTH.isLoggedIn()) {
+      // โชว์ข้อมูลจาก Cache ทันทีเพื่อให้โหลดหน้าเว็บได้เร็วที่สุด
       await this.onLoginSuccess(AUTH.getUser(), false);
+      
+      // ดึงข้อมูลจริงล่าสุดจากชีทเพื่ออัปเดตรูปภาพโปรไฟล์ / ชื่อเล่นแบบเรียลไทม์
+      try {
+        const res = await API.getProfile();
+        if (res && res.user) {
+          AUTH.setSession(AUTH.getToken(), res.user);
+          document.getElementById('nav-username').textContent = res.user.displayName || res.user.username;
+          const navAvatar = document.getElementById('nav-avatar');
+          if (navAvatar) {
+            navAvatar.style.background = 'none';
+            navAvatar.innerHTML = UI.avatar(res.user.avatar, res.user.displayName || res.user.username, 36);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to silently sync profile:', e);
+      }
     }
   },
 

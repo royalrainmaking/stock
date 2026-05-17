@@ -46,6 +46,9 @@ const API = {
   changePassword(oldPw, newPw) {
     return this._post('changePassword', { oldPw, newPw });
   },
+  getProfile() {
+    return this._call('getProfile');
+  },
 
   // ── Users ─────────────────────────────
   getUsers() { return this._call('getUsers'); },

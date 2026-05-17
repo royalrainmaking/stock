@@ -9,6 +9,29 @@ PAGES['products'] = {
   async render() {
     const el = document.getElementById('page-products');
     el.innerHTML = `
+      <style>
+        tr.dragging {
+          opacity: 0.4;
+          background: var(--bg-hover) !important;
+          outline: 2px dashed var(--primary-light);
+          cursor: grabbing;
+        }
+        tr[draggable="true"] {
+          cursor: grab;
+        }
+        .drag-handle {
+          cursor: grab;
+          color: var(--text-muted);
+          transition: color var(--transition);
+          user-select: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .drag-handle:hover {
+          color: var(--primary);
+        }
+      </style>
       <div class="page-header">
         <div class="page-title-wrap">
           <div class="page-title-icon" style="background:linear-gradient(135deg,#D93025,#B71C1C)">
@@ -83,6 +106,7 @@ PAGES['products'] = {
       <div class="table-wrap">
         <table>
           <thead><tr>
+            <th style="width: 40px;"></th>
             <th>#</th>
             <th>รูป</th>
             <th>ข้อมูลสินค้า</th>
@@ -96,7 +120,15 @@ PAGES['products'] = {
           </tr></thead>
           <tbody>
             ${data.map(p => `
-              <tr style="transition:var(--transition)" onpointerenter="this.style.background='var(--bg-hover)'" onpointerleave="this.style.background='transparent'">
+              <tr draggable="true"
+                  data-id="${p.id}"
+                  ondragstart="PAGES.products.dragStart(event, '${p.id}')"
+                  ondragover="PAGES.products.dragOver(event, this)"
+                  ondragend="PAGES.products.dragEnd(event)"
+                  style="transition:var(--transition)" 
+                  onpointerenter="this.style.background='var(--bg-hover)'" 
+                  onpointerleave="this.style.background='transparent'">
+                <td><span class="drag-handle material-icons" style="font-size:18px">drag_indicator</span></td>
                 <td class="text-muted">${data.indexOf(p) + 1}</td>
                 <td>${UI.image(p.imageUrl, 'product-img')}</td>
                 <td>
@@ -117,8 +149,6 @@ PAGES['products'] = {
                 <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(p.shopWholesale)}</td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
-                    <button class="btn btn-secondary btn-icon" onclick="PAGES.products.move('${p.id}', 'up')" title="ย้ายขึ้น" ${data.indexOf(p) === 0 ? 'disabled' : ''}><span class="material-icons" style="font-size:16px">arrow_upward</span></button>
-                    <button class="btn btn-secondary btn-icon" onclick="PAGES.products.move('${p.id}', 'down')" title="ย้ายลง" ${data.indexOf(p) === data.length - 1 ? 'disabled' : ''}><span class="material-icons" style="font-size:16px">arrow_downward</span></button>
                     <button class="btn btn-secondary btn-icon" onclick="PAGES.products.openEdit('${p.id}')" title="แก้ไข"><span class="material-icons" style="font-size:16px">edit</span></button>
                     <button class="btn btn-danger btn-icon" onclick="PAGES.products.doDelete('${p.id}')" title="ลบ"><span class="material-icons" style="font-size:16px">delete</span></button>
                   </div>
@@ -217,23 +247,55 @@ PAGES['products'] = {
     } finally { UI.loading(false); }
   },
 
-  move(id, direction) {
-    const idx = this._products.findIndex(p => p.id === id);
-    if (idx < 0) return;
-
-    let targetIdx = -1;
-    if (direction === 'up' && idx > 0) {
-      targetIdx = idx - 1;
-    } else if (direction === 'down' && idx < this._products.length - 1) {
-      targetIdx = idx + 1;
+  dragStart(e, id) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    
+    const tr = e.target.closest('tr');
+    if (tr) {
+      tr.classList.add('dragging');
     }
+  },
 
-    if (targetIdx !== -1) {
-      const temp = this._products[idx];
-      this._products[idx] = this._products[targetIdx];
-      this._products[targetIdx] = temp;
+  dragOver(e, tr) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const draggedRow = document.querySelector('tr.dragging');
+    if (!draggedRow || tr === draggedRow) return;
+    
+    const tbody = tr.parentNode;
+    const rect = tr.getBoundingClientRect();
+    const next = (e.clientY - rect.top) / (rect.bottom - rect.top) > 0.5;
+    tbody.insertBefore(draggedRow, next ? tr.nextSibling : tr);
+  },
 
+  dragEnd(e) {
+    const tr = document.querySelector('tr.dragging');
+    if (tr) {
+      tr.classList.remove('dragging');
+    }
+    
+    const tbody = document.querySelector('#products-table tbody');
+    if (tbody) {
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const newOrderIds = rows.map(r => r.dataset.id);
+      
+      const reorderedProducts = [];
+      newOrderIds.forEach(id => {
+        const prod = this._products.find(p => p.id === id);
+        if (prod) reorderedProducts.push(prod);
+      });
+      
+      this._products.forEach(p => {
+        if (!reorderedProducts.find(rp => rp.id === p.id)) {
+          reorderedProducts.push(p);
+        }
+      });
+      
+      this._products = reorderedProducts;
       this.renderTable();
+      
       const btn = document.getElementById('save-order-btn');
       if (btn) btn.classList.remove('hidden');
     }

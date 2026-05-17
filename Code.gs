@@ -85,6 +85,7 @@ function handleRequest(e) {
 
       // Auth
       case 'changePassword': result = doChangePassword(user, body.oldPw, body.newPw); break;
+      case 'getProfile':     result = getProfile(user); break;
 
       // Users
       case 'getUsers': result = getUsers(user); break;
@@ -389,6 +390,29 @@ function doChangePassword(user, oldPw, newPw) {
   sheet.getRange(rowNum, getColIndex(sheet, 'passwordHash'), 1, 1).setValue(hashPassword(newPw));
   writeLog(user, 'changePassword', 'เปลี่ยนรหัสผ่าน');
   return { success: true };
+}
+
+function getProfile(user) {
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const wh = warehouses.find(w => w.employeeId === user.id);
+  return {
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName || '',
+      fullName: user.fullName || '',
+      phone: user.phone || '',
+      email: user.email || '',
+      address: user.address || '',
+      avatar: user.avatar || '',
+      role: user.role,
+      active: _isTrue(user.active),
+      isEmployee: _isTrue(user.isEmployee),
+      deposit: Number(user.deposit) || 0,
+      whActive: wh ? _isTrue(wh.active) : null,
+      whName: wh ? wh.name : null
+    }
+  };
 }
 
 function getColIndex(sheet, colName) {
