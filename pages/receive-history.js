@@ -84,15 +84,17 @@ PAGES['receive-history'] = {
 
   async load() {
     try {
-      const [prodRes, whRes, userRes] = await Promise.all([
+      const [prodRes, whRes, userRes, supRes] = await Promise.all([
         API.getProducts(),
         API.getWarehouses(),
-        API.getUsers()
+        API.getUsers(),
+        API.getSuppliers ? API.getSuppliers() : Promise.resolve({ suppliers: [] })
       ]);
       
       this._products = prodRes.products || [];
       this._warehouses = whRes.warehouses || [];
       this._users = userRes.users || [];
+      this._suppliers = supRes.suppliers || [];
       
       const whSelect = document.getElementById('rh-warehouse');
       if (whSelect) {
@@ -212,7 +214,7 @@ PAGES['receive-history'] = {
                   </td>
                   <td class="td-right">
                      <div class="fw-bold" style="color:var(--primary)">${UI.currency(totalQty, 0)}</div>
-                     <div class="text-muted" style="font-size:0.7rem">${items.length} SKU</div>
+                     <div class="text-muted" style="font-size:0.7rem">${items.length} ชนิด</div>
                   </td>
                   <td class="td-right">
                     <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 0)}</div>
@@ -302,7 +304,9 @@ PAGES['receive-history'] = {
                   </td>
                   <td>
                     <div class="td-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
-                    <div class="text-muted" style="font-size:0.7rem">${p.code || ''}</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;margin-top:2px;">
+                      <span style="color:var(--primary);font-weight:bold">${p.category || '-'}</span> | รหัส: ${p.code || '-'}
+                    </div>
                   </td>
                   <td class="td-right"><b>${UI.currency(it.qty, 0)}</b> ${p.unit || ''}</td>
                   <td class="td-center">
@@ -317,7 +321,252 @@ PAGES['receive-history'] = {
     `;
 
     openModal('รายละเอียดการรับสินค้า', html, `
+      ${AUTH.isAdmin() ? `<button class="btn btn-warning" onclick="PAGES['receive-history'].openEdit('${record.docNo || record.id}')"><span class="material-icons">edit</span> แก้ไขข้อมูล</button>` : ''}
       <button class="btn btn-secondary" onclick="closeModal()">ปิด</button>
-    `, '650px');
+    `, '1200px');
+  },
+
+  openEdit(id) {
+    const record = this._history.find(h => String(h.docNo) === String(id) || String(h.id) === String(id));
+    if (!record) return;
+    this._editingRecord = JSON.parse(JSON.stringify(record));
+    this._renderEditModal();
+  },
+
+  _renderEditModal() {
+    const record = this._editingRecord;
+    const wh = this._warehouses.find(w => w.id === record.toWarehouseId) || {};
+    
+    // Header Inputs
+    let html = `
+      <div style="background:var(--bg-app); padding:16px; border-radius:8px; margin-bottom:16px;">
+        <div class="grid-2 mb-16">
+          <div class="form-group">
+            <label>วันที่รับสินค้า</label>
+            <input type="text" value="${UI.dateTimeStr(record.createdAt)}" disabled class="input" style="background:#f1f3f4" />
+            <input type="hidden" id="rh-edit-createdAt" value="${record.createdAt}" />
+            <input type="hidden" id="rh-edit-originalKey" value="${record.docNo || (record.createdAt + '_' + record.username)}" />
+            <input type="hidden" id="rh-edit-warehouseId" value="${record.toWarehouseId}" />
+          </div>
+          <div class="form-group">
+            <label>คลังสินค้า</label>
+            <input type="text" value="${wh.name || record.toWarehouseId}" disabled class="input" style="background:#f1f3f4" />
+          </div>
+        </div>
+        <div class="grid-3 mb-16">
+          <div class="form-group">
+            <label>ใบรับสินค้าเลขที่</label>
+            <input type="text" id="rh-edit-docNo" value="${record.docNo || ''}" class="input" />
+          </div>
+          <div class="form-group">
+            <label>ใบสั่งซื้อเลขที่ [P/O No.]</label>
+            <input type="text" id="rh-edit-poNo" value="${record.poNo || ''}" class="input" />
+          </div>
+          <div class="form-group">
+            <label>ใบกำกับภาษีเลขที่</label>
+            <input type="text" id="rh-edit-taxInvoiceNo" value="${record.taxInvoiceNo || ''}" class="input" />
+          </div>
+        </div>
+        <div class="grid-2 mb-16">
+          <div class="form-group">
+            <label>ผู้จำหน่าย (Supplier)</label>
+            <select id="rh-edit-supplier" class="input">
+              <option value="">-- ไม่ระบุ --</option>
+              ${this._suppliers.map(s => `<option value="${s.id}" ${record.supplierId === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>หมายเหตุ</label>
+            <input type="text" id="rh-edit-note" value="${record.note || ''}" class="input" />
+          </div>
+        </div>
+      </div>
+      
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0;font-size:1.1rem;color:var(--primary)">รายการสินค้า</h3>
+        <button class="btn btn-primary btn-sm" onclick="PAGES['receive-history'].openEditProductPicker()">
+          <span class="material-icons">add</span> เพิ่มสินค้า
+        </button>
+      </div>
+
+      <div class="table-wrap" style="flex:1;min-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+        <table class="table table-sm" style="margin:0">
+          <thead style="position:sticky;top:0;z-index:10;background:var(--bg-card)">
+            <tr>
+              <th width="40">รูป</th>
+              <th>สินค้า</th>
+              <th width="120" class="td-right">จำนวน</th>
+              <th width="140" class="td-center">วันหมดอายุ</th>
+              <th width="60" class="td-center">ลบ</th>
+            </tr>
+          </thead>
+          <tbody id="rh-edit-items-tbody">
+            ${this._renderEditItems()}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    openModal('แก้ไขประวัติการรับสินค้า (Edit Receive)', html, `
+      <button class="btn btn-secondary" onclick="PAGES['receive-history'].viewDetail('${record.docNo || record.id}')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="PAGES['receive-history'].saveEdit()">บันทึกการเปลี่ยนแปลง</button>
+    `, '1200px');
+  },
+
+  _renderEditItems() {
+    const items = this._editingRecord.items || [];
+    if (!items.length) {
+      return `<tr><td colspan="5" class="td-center text-muted" style="padding:24px">ไม่มีรายการสินค้า</td></tr>`;
+    }
+    return items.map((it, idx) => {
+      const p = this._products.find(x => x.id === it.productId) || {};
+      return `
+        <tr>
+          <td>
+            ${p.imageUrl ? `<img src="${p.imageUrl}" style="width:34px;height:34px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid #eee" />` : '<div class="product-img-placeholder" style="width:34px;height:34px;font-size:16px"><span class="material-icons" style="font-size:16px">inventory_2</span></div>'}
+          </td>
+          <td>
+            <div class="td-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);font-weight:normal;margin-top:2px;">
+              <span style="color:var(--primary);font-weight:bold">${p.category || '-'}</span> | รหัส: ${p.code || '-'}
+            </div>
+          </td>
+          <td class="td-right">
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
+              <input type="number" min="0" value="${it.qty}" style="width:70px;height:30px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'qty', this.value)" />
+              <span>${p.unit || ''}</span>
+            </div>
+          </td>
+          <td class="td-center">
+            <input type="date" value="${it.expiryDate ? UI.dateStr(it.expiryDate, 'YYYY-MM-DD') : ''}" style="width:125px;height:30px;padding:4px;font-size:0.8rem;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'expiryDate', this.value)" />
+          </td>
+          <td class="td-center">
+            <button class="btn btn-danger btn-icon" style="width:26px;height:26px;padding:0;min-width:auto" onclick="PAGES['receive-history'].removeEditItem(${idx})"><span class="material-icons" style="font-size:14px">close</span></button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  },
+
+  updateEditItem(idx, field, val) {
+    if (this._editingRecord.items[idx]) {
+      this._editingRecord.items[idx][field] = val;
+    }
+  },
+
+  removeEditItem(idx) {
+    this._editingRecord.items.splice(idx, 1);
+    document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+  },
+
+  openEditProductPicker() {
+    const html = `
+      <div class="mb-16">
+        <div class="search-bar">
+          <span class="search-icon"><span class="material-icons">search</span></span>
+          <input type="text" id="rh-picker-search" placeholder="พิมพ์ชื่อ, รหัส เพื่อค้นหาสินค้า..." oninput="PAGES['receive-history'].filterEditPicker(this.value)" />
+        </div>
+      </div>
+      <div class="product-picker-grid" id="rh-picker-grid" style="position:relative">
+        ${this._products.map(p => `
+          <div class="picker-item" onclick="PAGES['receive-history'].addEditItem('${p.id}')">
+            ${UI.image(p.imageUrl, 'p-img')}
+            <div class="p-info">
+              <div class="p-code">${p.code}</div>
+              <div class="p-name">${p.name}</div>
+              <div class="p-cat">${p.category || '-'}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    const div = document.createElement('div');
+    div.id = 'rh-edit-picker-overlay';
+    div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+    div.innerHTML = `
+      <div style="background:var(--bg-card);border-radius:12px;width:900px;max-width:95%;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">เลือกสินค้าเพิ่ม</h3>
+          <button class="btn btn-icon" onclick="document.getElementById('rh-edit-picker-overlay').remove()"><span class="material-icons">close</span></button>
+        </div>
+        <div style="padding:20px;overflow-y:auto;flex:1">
+          ${html}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(div);
+    setTimeout(() => document.getElementById('rh-picker-search')?.focus(), 100);
+  },
+
+  filterEditPicker(q) {
+    q = q.toLowerCase();
+    const grid = document.getElementById('rh-picker-grid');
+    grid.innerHTML = this._products.filter(p =>
+      String(p.name || '').toLowerCase().includes(q) ||
+      String(p.code || '').toLowerCase().includes(q) ||
+      String(p.category || '').toLowerCase().includes(q)
+    ).map(p => `
+      <div class="picker-item" onclick="PAGES['receive-history'].addEditItem('${p.id}')">
+        ${UI.image(p.imageUrl, 'p-img')}
+        <div class="p-info">
+          <div class="p-code">${p.code}</div>
+          <div class="p-name">${p.name}</div>
+          <div class="p-cat">${p.category || '-'}</div>
+        </div>
+      </div>
+    `).join('');
+  },
+
+  addEditItem(productId) {
+    const p = this._products.find(x => x.id === productId);
+    if (!p) return;
+    this._editingRecord.items.push({
+      productId: p.id,
+      qty: 1,
+      unit: p.unit || 'หน่วย',
+      expiryDate: ''
+    });
+    document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+    document.getElementById('rh-edit-picker-overlay').remove();
+  },
+
+  async saveEdit() {
+    const originalKey = document.getElementById('rh-edit-originalKey').value;
+    const docNo = document.getElementById('rh-edit-docNo').value.trim();
+    const poNo = document.getElementById('rh-edit-poNo').value.trim();
+    const taxInvoiceNo = document.getElementById('rh-edit-taxInvoiceNo').value.trim();
+    const note = document.getElementById('rh-edit-note').value.trim();
+    const supplierId = document.getElementById('rh-edit-supplier').value;
+    const createdAt = document.getElementById('rh-edit-createdAt').value;
+    const warehouseId = document.getElementById('rh-edit-warehouseId').value;
+    
+    let supplierName = '';
+    if (supplierId) {
+      const sup = this._suppliers.find(s => s.id === supplierId);
+      supplierName = sup ? sup.name : '';
+    }
+
+    const items = this._editingRecord.items.filter(it => Number(it.qty) > 0);
+    if (items.length === 0) {
+      return UI.toast('ไม่สามารถบันทึกบิลที่ไม่มีสินค้าได้ (หากต้องการลบ ให้ใช้การปรับสต๊อก)', 'warning');
+    }
+
+    const newRecord = {
+      docNo, poNo, taxInvoiceNo, note, supplierId, supplier: supplierName,
+      createdAt, toWarehouseId: warehouseId, items
+    };
+
+    UI.loading(true);
+    try {
+      await API.updateReceiveHistory({ originalKey, newRecord });
+      UI.toast('บันทึกการแก้ไขเรียบร้อยแล้ว', 'success');
+      closeModal();
+      this.fetchAndRender(); // refresh table
+    } catch(e) {
+      UI.toast(e.message, 'error');
+    } finally {
+      UI.loading(false);
+    }
   }
 };

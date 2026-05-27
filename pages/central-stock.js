@@ -308,7 +308,7 @@ PAGES['central-stock'] = {
         <div class="stat-sub">หน่วยทั้งหมด</div>
       </div>
       <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">label</span></div>
-        <div class="stat-label">จำนวน SKU</div>
+        <div class="stat-label">จำนวนชนิดสินค้า</div>
         <div class="stat-value" style="color:var(--accent)">${skus}</div>
         <div class="stat-sub">รายการสินค้า</div>
       </div>
@@ -401,7 +401,7 @@ PAGES['central-stock'] = {
             </div>
             <div>
               <div style="font-weight:800;font-size:1.2rem;color:var(--text-primary);line-height:1.2">${group.name}</div>
-              <div style="font-size:0.9rem;color:var(--text-muted)">${productList.length} SKU · ${UI.currency(productList.reduce((a, p) => a + p.totalQty, 0), 0)} หน่วยรวม</div>
+              <div style="font-size:0.9rem;color:var(--text-muted)">${productList.length} ชนิด · ${UI.currency(productList.reduce((a, p) => a + p.totalQty, 0), 0)} หน่วยรวม</div>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">

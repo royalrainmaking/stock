@@ -51,22 +51,18 @@ PAGES['cancel-consign'] = {
         <div class="card step-card">
           <div class="step-badge">2</div>
           <div class="card-title"><span class="material-icons" style="color:#1A73E8">lock_clock</span>ข้อมูลการทำรายการ</div>
-          <div class="form-group"><label>วันที่ทำรายการ</label>
-            <div id="re-datetime-display" style="
-              display:flex;align-items:center;gap:10px;
-              background:var(--bg-card2);
-              border:1.5px solid var(--border);
-              border-radius:12px;
-              padding:10px 16px;
-              font-size:1.05rem;
-              font-weight:600;
-              color:var(--text-main);
-              cursor:not-allowed;
-              user-select:none;
-              pointer-events:none;
-            ">
-              <span class="material-icons" style="font-size:18px;color:var(--primary)">lock_clock</span>
-              <span id="re-datetime-text" style="letter-spacing:0.02em"></span>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>วันที่ทำรายการ</label>
+              ${AUTH.isAdmin() 
+                ? `<input type="date" id="re-date" value="${new Date().toISOString().split('T')[0]}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="re-date-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">lock_clock</span> <span id="re-date-text"></span></div>`
+              }
+            </div>
+            <div class="form-group"><label>เวลา</label>
+              ${AUTH.isAdmin()
+                ? `<input type="time" id="re-time" value="${new Date().toTimeString().substring(0,5)}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="re-time-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)"><span id="re-time-text"></span> น.</div>`
+              }
             </div>
           </div>
           <div style="background:var(--bg-base); border:1px dashed var(--border); border-radius:12px; padding:12px; display:flex; gap:10px; align-items:flex-start">
@@ -123,6 +119,10 @@ PAGES['cancel-consign'] = {
     const min = String(now.getMinutes()).padStart(2, '0');
     const el = document.getElementById('re-datetime-text');
     if (el) el.textContent = `${dd}/${mm}/${yyyy}   ${hh}:${min}`;
+    const dateText = document.getElementById('re-date-text');
+    const timeText = document.getElementById('re-time-text');
+    if (dateText) dateText.textContent = `${dd}/${mm}/${yyyy}`;
+    if (timeText) timeText.textContent = `${hh}:${min}`;
   },
 
   async loadData() {
@@ -431,8 +431,15 @@ PAGES['cancel-consign'] = {
 
     try {
       UI.loading(true);
+      const adminDate = document.getElementById('re-date')?.value;
+      const adminTime = document.getElementById('re-time')?.value;
+      const submitDate = (adminDate && adminTime) 
+        ? new Date(`${adminDate}T${adminTime}:00`).toISOString() 
+        : new Date().toISOString();
+
       await API.cancelConsign({
         warehouseId: this._selectedEmpWh,
+        date: submitDate,
         items: this._items.map(it => ({ productId: it.productId, expiryDate: it.expiryDate, qty: it.qty }))
       });
       UI.toast('ระบบเปลี่ยนสถานะเป็นพร้อมคิดเงินเรียบร้อยแล้ว ✅', 'success');

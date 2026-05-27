@@ -23,7 +23,7 @@ PAGES['billing'] = {
         <div class="page-actions">
           <div class="form-group" style="margin:0;flex-direction:row;align-items:center;gap:8px">
             <label style="white-space:nowrap;color:var(--text-secondary)">วันที่:</label>
-            <input type="date" id="bill-date" value="${this._date}" style="min-width:150px" onchange="PAGES.billing.setDate(this.value)" />
+            <input type="date" id="bill-date" value="${this._date}" style="min-width:150px" onchange="PAGES.billing.setDate(this.value)" ${!AUTH.isAdmin() ? 'disabled' : ''} />
           </div>
           <button class="btn btn-secondary btn-sm" onclick="PAGES.billing.load()"><span class="material-icons">refresh</span> รีเฟรช</button>
         </div>

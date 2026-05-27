@@ -27,6 +27,8 @@ const SN = {
   ORDERS: 'Orders',
   SHOPS: 'Shops',
   SHOP_STOCK: 'ShopStock',
+  SUPPLIERS: 'Suppliers',
+  COMPANY_INFO: 'CompanyInfo',
 };
 
 // ── UTILS ───────────────────────────────────────────────────
@@ -120,6 +122,7 @@ function handleRequest(e) {
       case 'adjustCentralStockBatch': result = adjustCentralStockBatch(user, body); break;
       case 'getReceiveHistory': result = getReceiveHistory(user, body || e.parameter); break;
       case 'getReceiveHistoryDetail': result = getReceiveHistoryDetail(user, body || e.parameter); break;
+      case 'updateReceiveHistory': result = updateReceiveHistory(user, body); break;
       case 'getMovementHistory': result = getMovementHistory(user, body || e.parameter); break;
 
       // Billing
@@ -148,6 +151,16 @@ function handleRequest(e) {
       case 'moveToShop': result = moveToShop(user, body); break;
       case 'swapShopStock': result = swapShopStock(user, body); break;
       case 'returnFromShop': result = returnFromShop(user, body); break;
+
+      // Suppliers
+      case 'getSuppliers': result = getSuppliers(); break;
+      case 'createSupplier': result = createSupplier(user, body); break;
+      case 'updateSupplier': result = updateSupplier(user, body); break;
+      case 'deleteSupplier': result = deleteSupplier(user, body.id); break;
+
+      // Company Info
+      case 'getCompanyInfo': result = getCompanyInfo(); break;
+      case 'saveCompanyInfo': result = saveCompanyInfo(user, body); break;
 
       // Setup (First time only)
       case 'setup': result = setupSheets(); break;
@@ -193,12 +206,14 @@ function getHeaders(name) {
     [SN.WAREHOUSES]: ['id','name','type','location','employeeId','active','createdAt','avatar'],
     [SN.CENTRAL_STOCK]: ['productId','warehouseId','expiryDate','qty','unit','lastUpdated'],
     [SN.EMPLOYEE_STOCK]: ['productId','warehouseId','expiryDate','qty','consigned','unit','lastUpdated'],
-    [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate'],
+    [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate','poNo','taxInvoiceNo','supplierId'],
     [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','userId','createdAt', 'items'],
     [SN.LOGS]: ['id','ts','userId','username','action','detail','ip'],
     [SN.ORDERS]: ['id','date','requestedBy','userId','fromWhId','toWhId','status','note','items','createdAt'],
     [SN.SHOPS]: ['id','name','address','lat','lng','ownerName','phone','salesPersonId','active','createdAt','imageUrl'],
     [SN.SHOP_STOCK]: ['shopId','productId','expiryDate','qty','unit','lastUpdated'],
+    [SN.SUPPLIERS]: ['id', 'name', 'address', 'phone', 'fax', 'taxId', 'createdAt'],
+    [SN.COMPANY_INFO]: ['id', 'name', 'address', 'phone', 'fax', 'taxId'],
   };
   return headers[name] || [];
 }
@@ -936,7 +951,8 @@ function receiveGoods(user, data) {
     appendRow(getSheet(SN.TRANSACTIONS), {
       id: generateId('TR'), type: 'receive', fromWarehouseId: 'SUPPLIER', toWarehouseId: data.warehouseId,
       productId: item.productId, qty: Number(item.qty), unit: item.unit, docNo: data.docNo,
-      note: data.note, userId: user.id, username: user.username, createdAt: ts, supplier: data.supplier,
+      poNo: data.poNo || '', taxInvoiceNo: data.taxInvoiceNo || '',
+      note: data.note, userId: user.id, username: user.username, createdAt: ts, supplierId: data.supplierId,
       expiryDate: item.expiryDate || ''
     });
   });
@@ -1550,9 +1566,12 @@ function getReceiveHistory(user, params) {
       grouped[key] = {
         id: t.id, 
         docNo: t.docNo, 
+        poNo: t.poNo || t.pono || '',
+        taxInvoiceNo: t.taxInvoiceNo || t.taxinvoiceno || '',
         createdAt: t.createdAt,
         toWarehouseId: t.toWarehouseId || t.towarehouseid, 
         username: t.username,
+        supplierId: t.supplierId || t.supplierid || '',
         supplier: t.supplier, 
         note: t.note, 
         items: []
@@ -1575,6 +1594,92 @@ function getReceiveHistoryDetail(user, params) {
   const all = getReceiveHistory(user, {}).history;
   const record = all.find(h => (String(h.docNo) === String(id) || String(h.id) === String(id)));
   return { record };
+}
+
+function updateReceiveHistory(user, data) {
+  requireRole(user, 'admin'); 
+  const { originalKey, newRecord } = data; 
+  
+  if (!originalKey || !newRecord || !newRecord.items) {
+    throw new Error('ข้อมูลไม่ครบถ้วน');
+  }
+
+  const tSheet = getSheet(SN.TRANSACTIONS);
+  const tData = tSheet.getDataRange().getValues();
+  if (tData.length < 2) throw new Error('ไม่พบประวัติ');
+  
+  const tHeaders = tData[0].map(h => String(h).trim());
+  const typeIdx = tHeaders.indexOf('type');
+  const docNoIdx = tHeaders.indexOf('docNo');
+  const createdAtIdx = tHeaders.indexOf('createdAt');
+  const usernameIdx = tHeaders.indexOf('username');
+  const productIdIdx = tHeaders.indexOf('productId');
+  const qtyIdx = tHeaders.indexOf('qty');
+  const unitIdx = tHeaders.indexOf('unit');
+  const expiryDateIdx = tHeaders.indexOf('expiryDate');
+  const warehouseIdx = tHeaders.indexOf('toWarehouseId');
+
+  const rowsToDelete = [];
+  const itemsToRevert = [];
+
+  for (let i = tData.length - 1; i >= 1; i--) {
+    const row = tData[i];
+    if (row[typeIdx] === 'receive') {
+      const key1 = row[docNoIdx];
+      const key2 = row[createdAtIdx] + '_' + row[usernameIdx];
+      if (key1 === originalKey || key2 === originalKey || originalKey === row[tHeaders.indexOf('id')]) {
+        rowsToDelete.push(i + 1); 
+        itemsToRevert.push({
+          warehouseId: row[warehouseIdx],
+          productId: row[productIdIdx] || row[tHeaders.indexOf('productid')],
+          qty: Number(row[qtyIdx]),
+          unit: row[unitIdx],
+          expiryDate: row[expiryDateIdx] || row[tHeaders.indexOf('expirydate')]
+        });
+      }
+    }
+  }
+
+  if (rowsToDelete.length === 0) {
+    throw new Error('ไม่พบข้อมูลประวัติเดิมเพื่อแก้ไข');
+  }
+
+  itemsToRevert.forEach(item => {
+    updateCentralStock(item.warehouseId, item.productId, -item.qty, item.unit, item.expiryDate);
+  });
+
+  rowsToDelete.forEach(rowNum => {
+    tSheet.deleteRow(rowNum);
+  });
+
+  const ts = newRecord.createdAt || new Date().toISOString(); 
+  const warehouseId = newRecord.toWarehouseId;
+
+  newRecord.items.forEach(item => {
+    updateCentralStock(warehouseId, item.productId, Number(item.qty), item.unit, item.expiryDate);
+    appendRow(tSheet, {
+      id: generateId('TR'), 
+      type: 'receive', 
+      fromWarehouseId: 'SUPPLIER', 
+      toWarehouseId: warehouseId,
+      productId: item.productId, 
+      qty: Number(item.qty), 
+      unit: item.unit, 
+      docNo: newRecord.docNo,
+      poNo: newRecord.poNo || '', 
+      taxInvoiceNo: newRecord.taxInvoiceNo || '',
+      note: newRecord.note || '', 
+      userId: user.id, 
+      username: user.username, 
+      createdAt: ts, 
+      supplierId: newRecord.supplierId || newRecord.supplier || '', 
+      supplier: newRecord.supplier || '', 
+      expiryDate: item.expiryDate || ''
+    });
+  });
+
+  writeLog(user, 'updateReceive', `แก้ไขประวัติรับเข้า [${originalKey}] -> [${newRecord.docNo || 'N/A'}]`);
+  return { success: true };
 }
 
 function getMovementHistory(user, params) {
@@ -2039,4 +2144,46 @@ function _fmtDate(d) {
   } catch(e) {
     return s.split(' ')[0];
   }
+}
+
+function getSuppliers() {
+  const suppliers = sheetData(getSheet(SN.SUPPLIERS));
+  return { suppliers };
+}
+function createSupplier(user, data) {
+  requireRole(user, 'admin');
+  const supplier = { id: generateId('S'), ...data, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.SUPPLIERS), supplier);
+  return { success: true, supplier };
+}
+function updateSupplier(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SUPPLIERS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้จำหน่าย');
+  updateRow(sheet, rowNum, data);
+  return { success: true };
+}
+function deleteSupplier(user, id) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SUPPLIERS);
+  const rowNum = findRow(sheet, 'id', id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้จำหน่าย');
+  sheet.deleteRow(rowNum);
+  return { success: true };
+}
+function getCompanyInfo() {
+  const data = sheetData(getSheet(SN.COMPANY_INFO));
+  return { companyInfo: data[0] || {} };
+}
+function saveCompanyInfo(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.COMPANY_INFO);
+  const rows = sheet.getLastRow();
+  if (rows > 1) {
+    sheet.getRange(2, 1, rows - 1, sheet.getLastColumn()).clearContent();
+  }
+  const info = { id: 'C1', ...data };
+  appendRow(sheet, info);
+  return { success: true, companyInfo: info };
 }

@@ -6,6 +6,7 @@ PAGES['receive-goods'] = {
   _products: [],
   _warehouses: [],
   _items: [],
+  _suppliers: [],
 
   async render() {
     const el = document.getElementById('page-receive-goods');
@@ -44,14 +45,16 @@ PAGES['receive-goods'] = {
           </div>
           <div class="form-row">
             <div class="form-group"><label>วันที่รับสินค้า</label>
-              <div style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)">
-                ${new Date().toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'})}
-              </div>
+              ${AUTH.isAdmin() 
+                ? `<input type="date" id="rg-date" value="${new Date().toISOString().split('T')[0]}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)">${new Date().toLocaleDateString('th-TH', {year:'numeric', month:'long', day:'numeric'})}</div>`
+              }
             </div>
             <div class="form-group"><label>เวลาที่รับ</label>
-              <div style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)">
-                ${new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'})} น.
-              </div>
+              ${AUTH.isAdmin()
+                ? `<input type="time" id="rg-time" value="${new Date().toTimeString().substring(0,5)}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)">${new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'})} น.</div>`
+              }
             </div>
           </div>
         </div>
@@ -60,12 +63,27 @@ PAGES['receive-goods'] = {
         <div class="card step-card">
           <div class="step-badge">2</div>
           <div class="card-title"><span class="material-icons" style="color:#9C27B0">description</span>รายละเอียดเอกสาร</div>
-          <div class="form-group"><label>เลขที่เอกสาร / บิลรับของ *</label>
+          
+          <div class="form-row">
+            <div class="form-group"><label>ใบสั่งซื้อเลขที่ (P/O No.)</label>
+              <input type="text" id="rg-pono" placeholder="..." style="height:45px; border-radius:12px; padding:0 16px" />
+            </div>
+            <div class="form-group"><label>ใบกำกับภาษีเลขที่ (Tax Invoice No.)</label>
+              <input type="text" id="rg-taxinvoice" placeholder="..." style="height:45px; border-radius:12px; padding:0 16px" />
+            </div>
+          </div>
+
+          <div class="form-group"><label>เลขที่เอกสาร / บิลรับของ (ภายใน) *</label>
             <input type="text" id="rg-docno" placeholder="เช่น RC2604001" style="height:45px; border-radius:12px; padding:0 16px" />
           </div>
+
           <div class="form-group"><label>ผู้จำหน่าย (Supplier)</label>
-            <input type="text" id="rg-supplier" placeholder="ระบุชื่อบริษัทหรือผู้ค้า..." style="height:45px; border-radius:12px; padding:0 16px" />
+            <select id="rg-supplier" style="height:45px; border-radius:12px; padding:0 16px; width:100%; border:1px solid var(--border)" onchange="PAGES['receive-goods'].onSupplierChange(this.value)">
+              <option value="">-- เลือกผู้จำหน่าย --</option>
+            </select>
           </div>
+          <div id="rg-supplier-info" class="hidden" style="background:var(--bg-card2); padding:12px; border-radius:8px; font-size:0.8rem; color:var(--text-secondary); margin-bottom:16px;"></div>
+
           <div class="form-group"><label>หมายเหตุ</label>
             <input type="text" id="rg-note" placeholder="รายละเอียดอื่นๆ เพิ่มเติม..." style="height:45px; border-radius:12px; padding:0 16px" />
           </div>
@@ -105,13 +123,42 @@ PAGES['receive-goods'] = {
 
   async loadData() {
     try {
-      const [pr] = await Promise.all([API.getProducts()]);
+      const [pr, supps] = await Promise.all([API.getProducts(), API.getSuppliers()]);
       this._products = pr.products || [];
+      this._suppliers = supps.suppliers || [];
       await this.loadWarehouses();
+      this.renderSuppliers();
       this._items = [];
     } catch (e) {
       UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
     }
+  },
+
+  renderSuppliers() {
+    const sel = document.getElementById('rg-supplier');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- เลือกผู้จำหน่าย --</option>' + 
+      this._suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  },
+
+  onSupplierChange(id) {
+    const infoEl = document.getElementById('rg-supplier-info');
+    if (!id) {
+      infoEl.classList.add('hidden');
+      return;
+    }
+    const s = this._suppliers.find(x => x.id === id);
+    if (!s) return;
+    infoEl.classList.remove('hidden');
+    infoEl.innerHTML = `
+      <div style="font-weight:bold; color:var(--text-primary); margin-bottom:4px">${s.name}</div>
+      ${s.address ? `<div>${s.address}</div>` : ''}
+      <div style="margin-top:4px">
+        ${s.phone ? `<span><span class="material-icons" style="font-size:12px;vertical-align:middle">phone</span> ${s.phone}</span>` : ''}
+        ${s.fax ? `<span style="margin-left:12px"><span class="material-icons" style="font-size:12px;vertical-align:middle">print</span> ${s.fax}</span>` : ''}
+      </div>
+      ${s.taxId ? `<div style="margin-top:4px; font-weight:bold">Tax ID: ${s.taxId}</div>` : ''}
+    `;
   },
 
   async loadWarehouses() {
@@ -279,14 +326,19 @@ PAGES['receive-goods'] = {
 
   addItemDirect(productId, trays, remUnits, qty, costVat, expiryDate) {
     const product = this._products.find(p => p.id === productId);
-    // If same product AND same expiry, group them. Otherwise create new row
     const existing = this._items.find(i => i.productId === productId && i.expiryDate === expiryDate);
     if (existing) {
       existing.trays += trays;
       existing.remUnits += remUnits;
       existing.qty += qty;
     } else {
-      this._items.push({ productId, trays, remUnits, qty, unit: product?.unit || 'หน่วย', costVat, product, expiryDate });
+      this._items.push({ 
+        productId, trays, remUnits, qty, 
+        unit: product?.unit || 'หน่วย', 
+        costVat: product?.costVat || 0,
+        costNoVat: product?.costNoVat || 0, 
+        product, expiryDate 
+      });
     }
     this.renderItems();
   },
@@ -295,9 +347,9 @@ PAGES['receive-goods'] = {
     q = q.toLowerCase();
     const grid = document.getElementById('rg-picker-grid');
     grid.innerHTML = this._products.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.code.toLowerCase().includes(q) ||
-      (p.category || '').toLowerCase().includes(q)
+      String(p.name || '').toLowerCase().includes(q) ||
+      String(p.code || '').toLowerCase().includes(q) ||
+      String(p.category || '').toLowerCase().includes(q)
     ).map(p => `
       <div class="picker-item" onclick="PAGES['receive-goods'].showQtyInput('${p.id}', event)">
         ${UI.image(p.imageUrl, 'p-img')}
@@ -335,7 +387,9 @@ PAGES['receive-goods'] = {
       return (idxA !== -1 ? idxA : 9999) - (idxB !== -1 ? idxB : 9999);
     });
 
-    const total = this._items.reduce((a, i) => a + i.qty * i.costVat, 0);
+    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * (i.costNoVat || 0)), 0);
+    const totalVat = totalNoVat * (CONFIG.VAT_RATE || 0.07);
+    const grandTotal = totalNoVat + totalVat;
 
     let rowsHTML = '';
 
@@ -343,7 +397,12 @@ PAGES['receive-goods'] = {
       rowsHTML += `
         <tr style="transition:var(--transition)" onpointerenter="this.style.background='var(--bg-hover)'" onpointerleave="this.style.background='transparent'">
           <td class="td-center" style="color:var(--text-muted);font-size:0.8rem">${i + 1}</td>
-          <td class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">${item.product?.name || item.product?.id || item.productId}</td>
+          <td class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">
+            <div>${item.product?.name || item.product?.id || item.productId}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal;margin-top:2px;">
+              <span style="color:var(--primary);font-weight:bold">${item.product?.category || '-'}</span> | รหัส: ${item.product?.code || '-'}
+            </div>
+          </td>
           <td class="td-right">
             <input type="number" min="0" value="${item.trays}" style="width:55px;height:32px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-goods'].updateItemField(${i}, 'trays', this.value)" />
           </td>
@@ -355,8 +414,10 @@ PAGES['receive-goods'] = {
           </td>
           <td class="td-right" style="font-size:0.75rem;color:var(--text-secondary)">${item.unit}</td>
           <td class="td-right fw-bold" style="color:var(--primary);background:var(--bg-card2);font-size:1rem" id="rg-qty-${i}">${UI.currency(item.qty, 0)}</td>
-          <td class="td-right" style="color:var(--text-secondary);font-size:0.85rem">฿${UI.currency(item.costVat)}</td>
-          <td class="td-right fw-bold" id="rg-tot-${i}" style="font-size:0.95rem">฿${UI.currency(item.qty * item.costVat)}</td>
+          <td class="td-right">
+            <input type="number" min="0" step="0.01" value="${item.costNoVat || 0}" style="width:80px;height:32px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-goods'].updateItemField(${i}, 'costNoVat', this.value)" />
+          </td>
+          <td class="td-right fw-bold" id="rg-tot-${i}" style="font-size:0.95rem">฿${UI.currency(item.qty * (item.costNoVat || 0))}</td>
           <td class="td-center">
             <button class="btn btn-danger btn-icon" style="width:28px;height:28px;padding:0;min-width:auto" onclick="PAGES['receive-goods'].removeItem(${i})"><span class="material-icons" style="font-size:16px">close</span></button>
           </td>
@@ -375,15 +436,25 @@ PAGES['receive-goods'] = {
             <th class="td-center" style="width:145px">วันหมดอายุ</th>
             <th style="width:50px"></th>
             <th class="td-right" style="width:110px;background:var(--bg-card2)">รวมทั้งหมด</th>
-            <th class="td-right" style="width:90px">ราคาทุน</th>
+            <th class="td-right" style="width:110px">ราคาทุน(ไม่รวมVat)</th>
             <th class="td-right" style="width:110px">รวมเงิน</th>
             <th class="td-center" style="width:50px">คัดออก</th>
           </tr></thead>
           <tbody>${rowsHTML}</tbody>
           <tfoot>
             <tr style="background:var(--bg-card2)">
-              <td colspan="7" class="td-right fw-bold" style="padding:16px">มูลค่ารวมทั้งบิล</td>
-              <td class="td-right fw-bold text-success" id="rg-grand-total" style="font-size:1.1rem;padding:16px">฿${UI.currency(total)}</td>
+              <td colspan="7" class="td-right fw-bold" style="padding:8px 16px">รวมราคาสินค้า (ไม่รวม VAT)</td>
+              <td class="td-right fw-bold" id="rg-total-novat" style="font-size:1rem;padding:8px 16px;color:var(--text-secondary)">฿${UI.currency(totalNoVat)}</td>
+              <td></td>
+            </tr>
+            <tr style="background:var(--bg-card2)">
+              <td colspan="7" class="td-right fw-bold" style="padding:8px 16px">ภาษีมูลค่าเพิ่ม (VAT 7%)</td>
+              <td class="td-right fw-bold" id="rg-total-vat" style="font-size:1rem;padding:8px 16px;color:var(--text-secondary)">฿${UI.currency(totalVat)}</td>
+              <td></td>
+            </tr>
+            <tr style="background:var(--bg-card2)">
+              <td colspan="7" class="td-right fw-bold" style="padding:16px">มูลค่ารวมทั้งบิล (Grand Total)</td>
+              <td class="td-right fw-bold text-success" id="rg-grand-total" style="font-size:1.1rem;padding:16px">฿${UI.currency(grandTotal)}</td>
               <td></td>
             </tr>
           </tfoot>
@@ -398,7 +469,10 @@ PAGES['receive-goods'] = {
     
     if (field === 'trays') item.trays = Math.max(0, parseInt(val) || 0);
     if (field === 'remUnits') item.remUnits = Math.max(0, parseInt(val) || 0);
-    if (field === 'costVat') item.costVat = Math.max(0, parseFloat(val) || 0);
+    if (field === 'costNoVat') {
+      item.costNoVat = Math.max(0, parseFloat(val) || 0);
+      item.costVat = item.costNoVat * (1 + (CONFIG.VAT_RATE || 0.07));
+    }
     if (field === 'expiryDate') item.expiryDate = val;
 
     const upt = item.product?.unitsPerTray || 0;
@@ -409,11 +483,18 @@ PAGES['receive-goods'] = {
     if (qtyEl) qtyEl.textContent = UI.currency(item.qty, 0) + ' ' + item.unit;
     
     const totEl = document.getElementById(`rg-tot-${idx}`);
-    if (totEl) totEl.textContent = '฿' + UI.currency(item.qty * item.costVat);
+    if (totEl) totEl.textContent = '฿' + UI.currency(item.qty * (item.costNoVat || 0));
 
-    const total = this._items.reduce((a, i) => a + i.qty * i.costVat, 0);
+    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * (i.costNoVat || 0)), 0);
+    const totalVat = totalNoVat * (CONFIG.VAT_RATE || 0.07);
+    const grandTotal = totalNoVat + totalVat;
+
+    const tNovatEl = document.getElementById('rg-total-novat');
+    if (tNovatEl) tNovatEl.textContent = '฿' + UI.currency(totalNoVat);
+    const tVatEl = document.getElementById('rg-total-vat');
+    if (tVatEl) tVatEl.textContent = '฿' + UI.currency(totalVat);
     const grandEl = document.getElementById('rg-grand-total');
-    if (grandEl) grandEl.textContent = '฿' + UI.currency(total);
+    if (grandEl) grandEl.textContent = '฿' + UI.currency(grandTotal);
   },
 
   async submit() {
@@ -422,11 +503,19 @@ PAGES['receive-goods'] = {
     if (!this._items.length) return UI.toast('กรุณาเพิ่มรายการสินค้า', 'warning');
     try {
       UI.loading(true);
+      const adminDate = document.getElementById('rg-date')?.value;
+      const adminTime = document.getElementById('rg-time')?.value;
+      const submitDate = (adminDate && adminTime) 
+        ? new Date(`${adminDate}T${adminTime}:00`).toISOString() 
+        : new Date().toISOString();
+
       await API.receiveGoods({
         warehouseId,
-        date: new Date().toISOString(),
-        supplier: document.getElementById('rg-supplier')?.value,
+        date: submitDate,
+        supplierId: document.getElementById('rg-supplier')?.value,
         docNo: document.getElementById('rg-docno')?.value,
+        poNo: document.getElementById('rg-pono')?.value,
+        taxInvoiceNo: document.getElementById('rg-taxinvoice')?.value,
         note: document.getElementById('rg-note')?.value,
         items: this._items.map(i => ({ 
           productId: i.productId, qty: i.qty, unit: i.unit, 
@@ -437,8 +526,11 @@ PAGES['receive-goods'] = {
       this._items = [];
       this.renderItems();
       document.getElementById('rg-docno').value = '';
+      document.getElementById('rg-pono').value = '';
+      document.getElementById('rg-taxinvoice').value = '';
       document.getElementById('rg-note').value = '';
       document.getElementById('rg-supplier').value = '';
+      document.getElementById('rg-supplier-info').classList.add('hidden');
       this.render(); // Re-render to update the display time if needed
     } catch (e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');

@@ -106,9 +106,15 @@ PAGES['picking'] = {
                     <div class="item-name">${p.name || item.productId}</div>
                     <div class="item-code">${p.code || ''}</div>
                   </div>
-                  <div class="item-qty">
-                    <input type="number" class="qty-input-inline" data-task="${task.id}" data-pid="${item.productId}" value="${item.qty}" min="0" />
-                    <span class="qty-unit">${item.unit || 'หน่วย'}</span>
+                  <div class="item-qty" style="display:flex; flex-direction:column; align-items:flex-end; gap:4px">
+                    <div style="font-size:0.75rem; color:var(--text-muted);">
+                      ขอเบิก: <span style="font-weight:700; color:var(--text-primary)">${item.qty}</span> ${item.unit || ''}
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px">
+                      <div style="font-size:0.75rem; color:var(--text-secondary); font-weight:600">จัดจริง:</div>
+                      <input type="number" class="qty-input-inline" data-task="${task.id}" data-pid="${item.productId}" value="${item.qty}" min="0" style="font-weight:bold; color:var(--primary); font-size:1rem; border:2px solid var(--primary-light); background:#F0F4FF;" />
+                      <span class="qty-unit" style="font-weight:600">${item.unit || 'หน่วย'}</span>
+                    </div>
                   </div>
                 </div>
               `;

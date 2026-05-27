@@ -49,22 +49,18 @@ PAGES['consign'] = {
         <div class="card step-card">
           <div class="step-badge">2</div>
           <div class="card-title"><span class="material-icons" style="color:#1A73E8">edit_note</span>ข้อมูลการฝาก</div>
-          <div class="form-group"><label>วันที่ฝากคืน</label>
-            <div id="co-datetime-display" style="
-              display:flex;align-items:center;gap:10px;
-              background:var(--bg-card2);
-              border:1.5px solid var(--border);
-              border-radius:12px;
-              padding:10px 16px;
-              font-size:1.05rem;
-              font-weight:600;
-              color:var(--text-main);
-              cursor:not-allowed;
-              user-select:none;
-              pointer-events:none;
-            ">
-              <span class="material-icons" style="font-size:18px;color:var(--primary)">lock_clock</span>
-              <span id="co-datetime-text" style="letter-spacing:0.02em"></span>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>วันที่ทำรายการ</label>
+              ${AUTH.isAdmin() 
+                ? `<input type="date" id="co-date" value="${new Date().toISOString().split('T')[0]}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="co-date-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">lock_clock</span> <span id="co-date-text"></span></div>`
+              }
+            </div>
+            <div class="form-group"><label>เวลา</label>
+              ${AUTH.isAdmin()
+                ? `<input type="time" id="co-time" value="${new Date().toTimeString().substring(0,5)}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="co-time-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)"><span id="co-time-text"></span> น.</div>`
+              }
             </div>
           </div>
           <div class="form-group"><label>หมายเหตุ</label>
@@ -117,6 +113,10 @@ PAGES['consign'] = {
     const min = String(now.getMinutes()).padStart(2, '0');
     const el = document.getElementById('co-datetime-text');
     if (el) el.textContent = `${dd}/${mm}/${yyyy}   ${hh}:${min}`;
+    const dateText = document.getElementById('co-date-text');
+    const timeText = document.getElementById('co-time-text');
+    if (dateText) dateText.textContent = `${dd}/${mm}/${yyyy}`;
+    if (timeText) timeText.textContent = `${hh}:${min}`;
   },
 
   async loadWarehouses() {
@@ -429,14 +429,22 @@ PAGES['consign'] = {
     if (!this._items.length) return UI.toast('กรุณาเพิ่มรายการ', 'warning');
     try {
       UI.loading(true);
-      // ใช้เวลาจริง ณ ขณะที่กดบันทึก – ไม่อ่านจาก DOM
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
+      let submitDate;
+      const adminDate = document.getElementById('co-date')?.value;
+      const adminTime = document.getElementById('co-time')?.value;
+      if (adminDate && adminTime) {
+        submitDate = new Date(`${adminDate}T${adminTime}:00`).toISOString();
+      } else {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        submitDate = `${yyyy}-${mm}-${dd}`;
+      }
+
       await API.consignFromEmployee({
         fromWarehouseId: this._selectedWh,
-        date: `${yyyy}-${mm}-${dd}`,
+        date: submitDate,
         note: document.getElementById('co-note')?.value,
         items: this._items.map(i => ({ productId: i.productId, expiryDate: i.expiryDate, qty: i.qty })),
       });

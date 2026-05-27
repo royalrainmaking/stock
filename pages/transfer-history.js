@@ -194,7 +194,7 @@ PAGES['transfer-history'] = {
                     </div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--primary)">${items.length} SKU</div>
+                    <div class="fw-bold" style="color:var(--primary)">${items.length} ชนิด</div>
                   </td>
                   <td class="td-right">
                     <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 0)}</div>

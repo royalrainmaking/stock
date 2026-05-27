@@ -76,7 +76,12 @@ const API = {
   getAllEmployeeStocks(date) { return this._call('getAllEmployeeStocks', { date }); },
   getMovementHistory(params) { return this._call('getMovementHistory', params); },
 
-  receiveGoods(data) { return this._post('receiveGoods', data); },
+  receiveGoods(data) {
+    return this._post('receiveGoods', data);
+  },
+  updateReceiveHistory(data) {
+    return this._post('updateReceiveHistory', data);
+  },
   requestTransfer(data) { return this._post('requestTransfer', data); },
   getPickingTasks() { return this._call('getPickingTasks'); },
   confirmPicking(id, items) { return this._post('confirmPicking', { id, items }); },
@@ -111,6 +116,16 @@ const API = {
   moveToShop(data) { return this._post('moveToShop', data); },
   swapShopStock(data) { return this._post('swapShopStock', data); },
   returnFromShop(data) { return this._post('returnFromShop', data); },
+
+  // ── Suppliers ──────────────────────────
+  getSuppliers() { return this._call('getSuppliers'); },
+  createSupplier(data) { return this._post('createSupplier', data); },
+  updateSupplier(data) { return this._post('updateSupplier', data); },
+  deleteSupplier(id) { return this._post('deleteSupplier', { id }); },
+
+  // ── Company Info ───────────────────────
+  getCompanyInfo() { return this._call('getCompanyInfo'); },
+  saveCompanyInfo(data) { return this._post('saveCompanyInfo', data); },
 };
 
 // ── Demo/local mode when GAS not configured ──────────────────
@@ -154,6 +169,16 @@ const DEMO_DATA = {
   transactions: [],
   billing: [],
   logs: [],
+  suppliers: [
+    { id: 'S001', name: 'บริษัท ซัพพลายเออร์ เอ จำกัด', address: '123 ถนนสุขุมวิท กทม.', phone: '02-111-2222', fax: '02-111-2223', taxId: '0105555555555' }
+  ],
+  companyInfo: {
+    name: 'บริษัท สต๊อกแฟรงกี้ จำกัด',
+    address: '99/9 ถนนพัฒนาการ กรุงเทพฯ 10250',
+    phone: '02-999-9999',
+    fax: '02-999-9998',
+    taxId: '0105556667778'
+  },
 };
 
 // Local demo API when DEMO_MODE is enabled or GAS_URL is placeholder
@@ -340,6 +365,7 @@ if (IS_DEMO) {
     }
     return Promise.resolve({ success: true, billingId: 'B' + Date.now(), totalAmt: data.totalAmt || 0 });
   };
+  API.updateReceiveHistory = (data) => Promise.resolve({ success: true });
   API.createUser = (data) => {
     const user = { id: 'U' + Date.now(), ...data, active: true };
     DEMO_DATA.users.push(user);
@@ -407,6 +433,27 @@ if (IS_DEMO) {
   API.orderRequest = (data) => Promise.resolve({ success: true });
   API.getOrders = () => Promise.resolve({ orders: [] });
   API.generateTaxInvoice = (bid) => Promise.resolve({ invoiceNumber: 'INV-' + Date.now(), items: [] });
+  
+  API.getSuppliers = () => Promise.resolve({ suppliers: DEMO_DATA.suppliers });
+  API.createSupplier = (data) => {
+    const supplier = { id: 'S' + Date.now(), ...data };
+    DEMO_DATA.suppliers.push(supplier);
+    return Promise.resolve({ success: true, supplier });
+  };
+  API.updateSupplier = (data) => {
+    const idx = DEMO_DATA.suppliers.findIndex(s => s.id === data.id);
+    if (idx >= 0) DEMO_DATA.suppliers[idx] = { ...DEMO_DATA.suppliers[idx], ...data };
+    return Promise.resolve({ success: true });
+  };
+  API.deleteSupplier = (id) => {
+    DEMO_DATA.suppliers = DEMO_DATA.suppliers.filter(s => s.id !== id);
+    return Promise.resolve({ success: true });
+  };
+  API.getCompanyInfo = () => Promise.resolve({ companyInfo: DEMO_DATA.companyInfo });
+  API.saveCompanyInfo = (data) => {
+    DEMO_DATA.companyInfo = { ...DEMO_DATA.companyInfo, ...data };
+    return Promise.resolve({ success: true, companyInfo: DEMO_DATA.companyInfo });
+  };
 }
 
 // Helpers

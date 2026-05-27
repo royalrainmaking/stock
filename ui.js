@@ -425,6 +425,8 @@ function getSidebarMenu(role) {
         { page: 'warehouses', icon: 'store', label: 'จัดการคลัง', roles: ['admin'] },
         { page: 'users', icon: 'group', label: 'จัดการผู้ใช้', roles: ['admin'] },
         { page: 'logs', icon: 'history', label: 'บันทึกระบบ', roles: ['admin'] },
+        { page: 'suppliers', icon: 'local_shipping', label: 'จัดการผู้จำหน่าย', roles: ['admin'] },
+        { page: 'company-info', icon: 'business', label: 'ข้อมูลบริษัท', roles: ['admin'] },
       ]
     },
     {

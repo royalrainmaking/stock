@@ -47,22 +47,18 @@ PAGES.movement = {
             </div>
             <input type="hidden" id="mv-from-val" value="" />
           </div>
-          <div class="form-group"><label>วันที่ทำรายการ</label>
-            <div id="mv-datetime-display" style="
-              display:flex;align-items:center;gap:10px;
-              background:var(--bg-card2);
-              border:1.5px solid var(--border);
-              border-radius:12px;
-              padding:10px 16px;
-              font-size:1.05rem;
-              font-weight:600;
-              color:var(--text-main);
-              cursor:not-allowed;
-              user-select:none;
-              pointer-events:none;
-            ">
-              <span class="material-icons" style="font-size:18px;color:var(--primary)">lock_clock</span>
-              <span id="mv-datetime-text" style="letter-spacing:0.02em"></span>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>วันที่ทำรายการ</label>
+              ${AUTH.isAdmin() 
+                ? `<input type="date" id="mv-date" value="${new Date().toISOString().split('T')[0]}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="mv-date-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">lock_clock</span> <span id="mv-date-text"></span></div>`
+              }
+            </div>
+            <div class="form-group"><label>เวลา</label>
+              ${AUTH.isAdmin()
+                ? `<input type="time" id="mv-time" value="${new Date().toTimeString().substring(0,5)}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="mv-time-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)"><span id="mv-time-text"></span> น.</div>`
+              }
             </div>
           </div>
           <div id="mv-source-info" class="mt-16 hidden">
@@ -176,6 +172,10 @@ PAGES.movement = {
     const min = String(now.getMinutes()).padStart(2, '0');
     const el = document.getElementById('mv-datetime-text');
     if (el) el.textContent = `${dd}/${mm}/${yyyy}   ${hh}:${min}`;
+    const dateText = document.getElementById('mv-date-text');
+    const timeText = document.getElementById('mv-time-text');
+    if (dateText) dateText.textContent = `${dd}/${mm}/${yyyy}`;
+    if (timeText) timeText.textContent = `${hh}:${min}`;
   },
 
   async loadWarehouses() {
@@ -531,9 +531,16 @@ PAGES.movement = {
     if (!this._items.length) return UI.toast('กรุณาเพิ่มรายการสินค้า', 'warning');
     try {
       UI.loading(true);
+      const adminDate = document.getElementById('mv-date')?.value;
+      const adminTime = document.getElementById('mv-time')?.value;
+      const submitDate = (adminDate && adminTime) 
+        ? new Date(`${adminDate}T${adminTime}:00`).toISOString() 
+        : new Date().toISOString();
+
       await API.moveStock({
         fromWhId: this._fromWh,
         toWhId: this._toWh,
+        date: submitDate,
         note: document.getElementById('mv-note')?.value,
         items: this._items.map(i => ({ productId: i.productId, expiryDate: i.expiryDate, qty: i.qty, unit: i.unit })),
       });

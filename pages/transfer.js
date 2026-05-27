@@ -46,22 +46,18 @@ PAGES['transfer'] = {
             </div>
             <input type="hidden" id="tr-from" value="" onchange="PAGES.transfer.onFromWarehouseChange()" />
           </div>
-          <div class="form-group"><label>วันที่เบิกสินค้า</label>
-            <div id="tr-datetime-display" style="
-              display:flex;align-items:center;gap:10px;
-              background:var(--bg-card2);
-              border:1.5px solid var(--border);
-              border-radius:12px;
-              padding:10px 16px;
-              font-size:1.05rem;
-              font-weight:600;
-              color:var(--text-main);
-              cursor:not-allowed;
-              user-select:none;
-              pointer-events:none;
-            ">
-              <span class="material-icons" style="font-size:18px;color:var(--primary)">lock_clock</span>
-              <span id="tr-datetime-text" style="letter-spacing:0.02em"></span>
+          <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>วันที่เบิกสินค้า</label>
+              ${AUTH.isAdmin() 
+                ? `<input type="date" id="tr-date" value="${new Date().toISOString().split('T')[0]}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="tr-date-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--text-secondary)"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">lock_clock</span> <span id="tr-date-text"></span></div>`
+              }
+            </div>
+            <div class="form-group"><label>เวลาที่เบิก</label>
+              ${AUTH.isAdmin()
+                ? `<input type="time" id="tr-time" value="${new Date().toTimeString().substring(0,5)}" style="height:45px; width:100%; border-radius:12px; padding:0 16px; border:1px solid var(--border)" />`
+                : `<div id="tr-time-display" style="padding:10px 14px; background:var(--bg-card2); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:0.95rem; font-weight:700; color:var(--primary)"><span id="tr-time-text"></span> น.</div>`
+              }
             </div>
           </div>
         </div>
@@ -133,6 +129,10 @@ PAGES['transfer'] = {
     const min = String(now.getMinutes()).padStart(2, '0');
     const textEl = document.getElementById('tr-datetime-text');
     if (textEl) textEl.textContent = `${dd}/${mm}/${yyyy}   ${hh}:${min}`;
+    const dateText = document.getElementById('tr-date-text');
+    const timeText = document.getElementById('tr-time-text');
+    if (dateText) dateText.textContent = `${dd}/${mm}/${yyyy}`;
+    if (timeText) timeText.textContent = `${hh}:${min}`;
   },
 
   async loadData() {
@@ -515,15 +515,22 @@ PAGES['transfer'] = {
     if (!this._items.length) return UI.toast('กรุณาเพิ่มสินค้าก่อนบันทึก', 'warning');
     if (fromId === toId) return UI.toast('คลังต้นทางและปลายทางห้ามเป็นคลังเดียวกัน', 'warning');
 
-    // ใช้เวลาจริง ณ ขณะที่กดบันทึก – ไม่อ่านจาก DOM เพื่อกันการแก้ไข
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    const date = `${yyyy}-${mm}-${dd}`;
-    const time = `${hh}:${min}`;
+    let date, time;
+    const adminDate = document.getElementById('tr-date')?.value;
+    const adminTime = document.getElementById('tr-time')?.value;
+    if (adminDate && adminTime) {
+      date = adminDate;
+      time = adminTime;
+    } else {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      date = `${yyyy}-${mm}-${dd}`;
+      time = `${hh}:${min}`;
+    }
 
     try {
       UI.loading(true);
