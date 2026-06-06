@@ -154,7 +154,9 @@ PAGES['receive-history'] = {
       h.items.forEach(it => {
         const p = this._products.find(x => x.id === it.productId) || {};
         totalUnits += Number(it.qty) || 0;
-        totalValue += (Number(it.qty) || 0) * (p.costVat || 0);
+        const cNoVat = it.costNoVat || p.costNoVat || 0;
+        const disc = it.discount || 0;
+        totalValue += (Number(it.qty) || 0) * Math.max(0, cNoVat - disc) * (1 + (CONFIG.VAT_RATE || 0.07));
       });
     });
     
@@ -184,7 +186,9 @@ PAGES['receive-history'] = {
               const items = h.items || [];
               const totalVal = items.reduce((sum, item) => {
                  const p = this._products.find(x => x.id === item.productId) || {};
-                 return sum + (Number(item.qty) * (p.costVat || 0));
+                 const cNoVat = item.costNoVat || p.costNoVat || 0;
+                 const disc = item.discount || 0;
+                 return sum + (Number(item.qty) * Math.max(0, cNoVat - disc) * (1 + (CONFIG.VAT_RATE || 0.07)));
               }, 0);
               const totalQty = items.reduce((a, b) => a + Number(b.qty), 0);
 
@@ -493,12 +497,12 @@ PAGES['receive-history'] = {
           <td class="td-right">
             <input type="number" min="0" step="0.01" value="${discount}" style="width:70px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'discount', this.value)" />
           </td>
-          <td class="td-right fw-bold" style="font-size:0.95rem">฿${UI.currency(totalItem, 2)}</td>
+          <td class="td-right fw-bold" id="rh-edit-tot-${idx}" style="font-size:0.95rem">฿${UI.currency(totalItem, 2)}</td>
           <td class="td-center">
             <input type="date" value="${it.expiryDate ? String(it.expiryDate).split('T')[0] : ''}" style="width:125px;height:30px;padding:4px;font-size:0.8rem;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'expiryDate', this.value)" />
           </td>
           <td class="td-center">
-            <button class="btn btn-danger btn-icon" style="width:26px;height:26px;padding:0;min-width:auto" onclick="PAGES['receive-history'].removeEditItem(${idx})"><span class="material-icons" style="font-size:14px">close</span></button>
+            <button type="button" class="btn btn-danger btn-icon" style="width:26px;height:26px;padding:0;min-width:auto" onclick="PAGES['receive-history'].removeEditItem(${idx})"><span class="material-icons" style="font-size:14px">close</span></button>
           </td>
         </tr>
       `;
@@ -506,11 +510,20 @@ PAGES['receive-history'] = {
   },
 
   updateEditItem(idx, field, val) {
-    if (this._editingRecord.items[idx]) {
-      this._editingRecord.items[idx][field] = (field === 'costNoVat' || field === 'discount') ? Number(val) : val;
-    }
+    const item = this._editingRecord.items[idx];
+    if (!item) return;
+
+    item[field] = (field === 'costNoVat' || field === 'discount' || field === 'qty') ? Number(val) : val;
+
     if (field === 'qty' || field === 'costNoVat' || field === 'discount') {
-      document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+      const p = this._products.find(x => x.id === item.productId) || {};
+      const costNoVat = item.costNoVat || p.costNoVat || 0;
+      const discount = item.discount || 0;
+      const totalItem = (item.qty || 0) * Math.max(0, costNoVat - discount);
+      
+      const totEl = document.getElementById(`rh-edit-tot-${idx}`);
+      if (totEl) totEl.textContent = '฿' + UI.currency(totalItem, 2);
+      
       const summaryEl = document.getElementById('rh-edit-summary');
       if (summaryEl) summaryEl.innerHTML = this._renderEditSummary();
     }

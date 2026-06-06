@@ -22,7 +22,7 @@ PAGES['receive-goods'] = {
           </div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-secondary btn-sm" onclick="showPage('receive-history')">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="showPage('receive-history')">
             <span class="material-icons">history</span> ดูประวัติการรับสินค้า
           </button>
         </div>
@@ -91,7 +91,7 @@ PAGES['receive-goods'] = {
         <div class="step-badge">3</div>
         <div class="card-title"><span class="material-icons" style="color:#00897B">inventory</span>เลือกรายการสินค้าที่จะรับเข้า</div>
         <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังที่จะรับสินค้า (ด้านบน) ก่อนกดเลือกสินค้า</p>
-        <button id="rg-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES['receive-goods'].openProductPicker()" disabled>
+        <button type="button" id="rg-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES['receive-goods'].openProductPicker()" disabled>
           <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังรับสินค้าก่อน
         </button>
       </div>
@@ -101,7 +101,7 @@ PAGES['receive-goods'] = {
         <div class="step-badge">4</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div class="card-title" style="margin:0">4. รายการที่รอรับเข้า</div>
-          <button class="btn btn-primary" onclick="PAGES['receive-goods'].submit()" id="rg-submit-btn">
+          <button type="button" class="btn btn-primary" onclick="PAGES['receive-goods'].submit()" id="rg-submit-btn">
             <span class="material-icons">save</span> ยืนยันการบันทึกรับสินค้า
           </button>
         </div>
@@ -418,7 +418,7 @@ PAGES['receive-goods'] = {
           </td>
           <td class="td-right fw-bold" id="rg-tot-${i}" style="font-size:0.95rem">฿${UI.currency(item.qty * Math.max(0, (item.costNoVat || 0) - (item.discount || 0)), 2)}</td>
           <td class="td-center">
-            <button class="btn btn-danger btn-icon" style="width:28px;height:28px;padding:0;min-width:auto" onclick="PAGES['receive-goods'].removeItem(${i})"><span class="material-icons" style="font-size:16px">close</span></button>
+            <button type="button" class="btn btn-danger btn-icon" style="width:28px;height:28px;padding:0;min-width:auto" onclick="PAGES['receive-goods'].removeItem(${i})"><span class="material-icons" style="font-size:16px">close</span></button>
           </td>
         </tr>
       `;
