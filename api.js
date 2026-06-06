@@ -82,6 +82,7 @@ const API = {
   updateReceiveHistory(data) {
     return this._post('updateReceiveHistory', data);
   },
+  scanBill(data) { return this._post('scanBill', data); },
   requestTransfer(data) { return this._post('requestTransfer', data); },
   getPickingTasks() { return this._call('getPickingTasks'); },
   confirmPicking(id, items) { return this._post('confirmPicking', { id, items }); },

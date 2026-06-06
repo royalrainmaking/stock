@@ -90,10 +90,17 @@ PAGES['receive-goods'] = {
       <div class="card mt-16 step-card">
         <div class="step-badge">3</div>
         <div class="card-title"><span class="material-icons" style="color:#00897B">inventory</span>เลือกรายการสินค้าที่จะรับเข้า</div>
-        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังที่จะรับสินค้า (ด้านบน) ก่อนกดเลือกสินค้า</p>
-        <button type="button" id="rg-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES['receive-goods'].openProductPicker()" disabled>
-          <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังรับสินค้าก่อน
-        </button>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px">กรุณาเลือกคลังที่จะรับสินค้า (ด้านบน) ก่อนกดเลือกสินค้า หรือสแกนบิล</p>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px">
+          <button type="button" id="rg-picker-btn" class="btn btn-primary btn-full btn-picker-disabled" style="height:60px; font-size:1.1rem; border-radius:16px; box-shadow:var(--shadow-lg)" onclick="PAGES['receive-goods'].openProductPicker()" disabled>
+            <span class="material-icons" style="font-size:24px; margin-right:8px">lock</span> กรุณาเลือกคลังรับสินค้าก่อน
+          </button>
+          <button type="button" id="rg-ocr-btn" class="btn btn-secondary" style="height:60px; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:0 20px" onclick="document.getElementById('rg-ocr-input').click()" disabled>
+            <span class="material-icons" style="font-size:24px; color:var(--primary)">document_scanner</span>
+            <span style="font-size:0.75rem">สแกนบิล (AI)</span>
+          </button>
+          <input type="file" id="rg-ocr-input" class="hidden" accept="image/*" onchange="PAGES['receive-goods'].handleOCRUpload(event)" />
+        </div>
       </div>
 
       <!-- 4. Summary List -->
@@ -211,6 +218,8 @@ PAGES['receive-goods'] = {
       pickerBtn.classList.remove('btn-picker-disabled');
       pickerBtn.innerHTML = '<span class="material-icons" style="font-size:24px; margin-right:8px">add_circle_outline</span> กดเพื่อเลือกสินค้า';
     }
+    const ocrBtn = document.getElementById('rg-ocr-btn');
+    if (ocrBtn) ocrBtn.disabled = false;
 
     closeModal();
   },
@@ -371,6 +380,141 @@ PAGES['receive-goods'] = {
   addItem() { /* Obsolete */ },
 
   /* addItem was replaced by popAdd + addItemDirect */
+
+  async handleOCRUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Reset input so the same file can be selected again
+    event.target.value = '';
+    
+    if (!file.type.startsWith('image/')) {
+      return UI.toast('กรุณาเลือกไฟล์รูปภาพเท่านั้น', 'error');
+    }
+    
+    try {
+      if (typeof Tesseract === 'undefined') {
+        throw new Error('ระบบ AI (Tesseract.js) ยังโหลดไม่เสร็จ กรุณารอสักครู่หรือรีเฟรชหน้าเว็บ');
+      }
+
+      UI.loading(true);
+      UI.toast('กำลังสแกนข้อความด้วย AI ภายในเครื่อง... (อาจใช้เวลา 10-30 วินาทีในครั้งแรก)', 'info', 10000);
+      
+      const { data: { text } } = await Tesseract.recognize(
+        file,
+        'tha+eng',
+        { logger: m => console.log(m) }
+      );
+      
+      if (!text || text.trim() === '') {
+        throw new Error('ไม่พบข้อความในรูปภาพ');
+      }
+      this.processOCRText(text);
+
+    } catch (e) {
+      UI.toast('เกิดข้อผิดพลาดในการสแกนรูป: ' + e.message, 'error');
+    } finally {
+      UI.loading(false);
+    }
+  },
+
+  processOCRText(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const matchedItems = [];
+    
+    for (const line of lines) {
+      // Find matching products
+      const possibleMatches = this._products.filter(p => {
+        const codeMatch = p.code && line.toLowerCase().includes(String(p.code).toLowerCase());
+        const nameMatch = p.name && line.toLowerCase().includes(String(p.name).toLowerCase().substring(0, 10)); // Match first 10 chars of name
+        return codeMatch || nameMatch;
+      });
+      
+      if (possibleMatches.length > 0) {
+        const p = possibleMatches[0];
+        let textLine = line.toLowerCase();
+        
+        // Remove product name and code to avoid matching numbers inside them (like "100ml")
+        if (p.name) textLine = textLine.replace(p.name.toLowerCase(), '');
+        if (p.code) textLine = textLine.replace(String(p.code).toLowerCase(), '');
+        
+        // Remove commas to prevent splitting numbers like 6,000 into 6 and 000
+        textLine = textLine.replace(/,/g, '');
+        
+        // Match numbers including decimals
+        const nums = textLine.match(/\d+(?:\.\d+)?/g);
+        let guessedQty = 1;
+        
+        if (nums && nums.length > 0) {
+          // Quantities are usually integers. Find all positive integers <= 1,000,000
+          const integers = nums.map(Number).filter(n => Number.isInteger(n) && n > 0 && n <= 1000000);
+          
+          if (integers.length > 0) {
+            // Typically, the first number after the product name is the Quantity
+            guessedQty = integers[0];
+          } else {
+            // Fallback
+            guessedQty = Math.round(Number(nums[0]));
+          }
+        }
+        
+        matchedItems.push({
+          product: p,
+          rawLine: line,
+          guessedQty: guessedQty > 0 ? guessedQty : 1
+        });
+      }
+    }
+    
+    if (matchedItems.length === 0) {
+      return UI.toast('ไม่พบรายการสินค้าที่ตรงกับในระบบ โปรดตรวจสอบความชัดเจนของรูป', 'warning');
+    }
+    
+    this.showOCRReviewModal(matchedItems);
+  },
+
+  showOCRReviewModal(matchedItems) {
+    let html = `
+      <div style="margin-bottom:16px; font-size:0.9rem; color:var(--text-secondary)">
+        ระบบพบรายการสินค้า <b>${matchedItems.length}</b> รายการจากบิล กรุณาตรวจสอบจำนวนก่อนนำเข้า
+      </div>
+      <div style="max-height:60vh; overflow-y:auto; padding-right:8px; display:flex; flex-direction:column; gap:12px">
+        ${matchedItems.map((item, idx) => `
+          <div class="card" style="padding:12px; border:1px solid var(--border)">
+            <div style="display:flex; align-items:flex-start; gap:12px">
+              ${UI.image(item.product.imageUrl, '', 'width:40px;height:40px;border-radius:4px;object-fit:cover')}
+              <div style="flex:1">
+                <div style="font-weight:bold; color:var(--primary)">${item.product.name} (${item.product.code})</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px">จากข้อความ: "${item.rawLine}"</div>
+                <div style="display:flex; align-items:center; gap:8px">
+                  <label style="font-size:0.8rem">จำนวนที่รับเข้า (${item.product.unit}):</label>
+                  <input type="number" id="ocr-qty-${idx}" value="${item.guessedQty}" min="1" style="width:80px; height:32px; padding:4px; text-align:center; border:1px solid var(--border); border-radius:4px" />
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    
+    window._ocrConfirm = () => {
+      matchedItems.forEach((item, idx) => {
+        const qtyEl = document.getElementById(`ocr-qty-${idx}`);
+        const qty = qtyEl ? parseInt(qtyEl.value) || 0 : 0;
+        if (qty > 0) {
+          const p = item.product;
+          this.addItemDirect(p.code, 0, qty, qty, p.costVat || 0, '');
+        }
+      });
+      closeModal();
+      UI.toast(`นำเข้า ${matchedItems.length} รายการสำเร็จ`, 'success');
+    };
+    
+    openModal('ตรวจสอบรายการจากบิล (OCR)', html, `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="window._ocrConfirm()">ยืนยันนำเข้ารายการ</button>
+    `, '600px');
+  },
 
 
   removeItem(idx) {

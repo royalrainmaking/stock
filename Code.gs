@@ -130,6 +130,7 @@ function handleRequest(e) {
       case 'getReceiveHistoryDetail': result = getReceiveHistoryDetail(user, body || e.parameter); break;
       case 'updateReceiveHistory': result = updateReceiveHistory(user, body); break;
       case 'getMovementHistory': result = getMovementHistory(user, body || e.parameter); break;
+      case 'scanBill': result = scanBill(user, body); break;
 
       // Billing
       case 'getBillingList': result = getBillingList(e.parameter.date); break;
@@ -956,7 +957,9 @@ function receiveGoods(user, data) {
   data.items.forEach(item => {
     updateCentralStock(data.warehouseId, item.productId, Number(item.qty), item.unit, item.expiryDate);
     appendRow(getSheet(SN.TRANSACTIONS), {
-      id: generateId('TR'), type: 'receive', fromWarehouseId: 'SUPPLIER', toWarehouseId: data.warehouseId,
+      id: generateId('TR'), type: 'receive', 
+      fromWarehouseId: data.supplier || data.supplierId || 'SUPPLIER', 
+      toWarehouseId: data.warehouseId,
       productId: item.productId, qty: Number(item.qty), unit: item.unit, docNo: data.docNo,
       poNo: data.poNo || '', taxInvoiceNo: data.taxInvoiceNo || '',
       note: data.note, userId: user.id, username: user.username, createdAt: ts, supplierId: data.supplierId,
@@ -2275,4 +2278,43 @@ function saveCompanyInfo(user, data) {
   const info = { id: 'C1', ...data };
   appendRow(sheet, info);
   return { success: true, companyInfo: info };
+}
+
+// ── OCR Scan Bill ──────────────────────────────────────────────────────────
+function scanBill(user, data) {
+  requireRole(user, 'admin', 'stock');
+  if (!data.base64) throw new Error('ไม่พบข้อมูลรูปภาพ');
+
+  try {
+    let b64 = data.base64;
+    let mimeType = data.mimeType || 'image/jpeg';
+    if (b64.indexOf('base64,') > -1) {
+      const parts = b64.split('base64,');
+      mimeType = parts[0].replace('data:', '').replace(';', '');
+      b64 = parts[1];
+    }
+    
+    const blob = Utilities.newBlob(Utilities.base64Decode(b64), mimeType, "ocr_temp_" + new Date().getTime());
+    
+    const resource = {
+      title: blob.getName(),
+      mimeType: blob.getContentType()
+    };
+    
+    const docFile = Drive.Files.insert(resource, blob, {ocr: true, ocrLanguage: 'th'});
+    const doc = DocumentApp.openById(docFile.id);
+    const text = doc.getBody().getText();
+    
+    try {
+      DriveApp.getFileById(docFile.id).setTrashed(true);
+    } catch(e) {}
+    
+    writeLog(user, 'scanBill', 'สแกนบิลรับสินค้าด้วย OCR');
+    return { success: true, text: text };
+  } catch (e) {
+    if (e.message.includes('Drive is not defined')) {
+      throw new Error('ไม่สามารถใช้ OCR ได้ กรุณาเปิดใช้งาน Drive API ในเมนู "บริการ (Services)" ของ Google Apps Script');
+    }
+    throw new Error('การสแกนบิลล้มเหลว: ' + e.message);
+  }
 }
