@@ -55,6 +55,7 @@ PAGES['receive-history'] = {
             <label>เลือกคลัง</label>
             <select id="rh-warehouse" onchange="PAGES['receive-history'].applyFilters()">
               <option value="">ทุกคลังสินค้า</option>
+              ${this._warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="flex:1;min-width:200px">
@@ -64,6 +65,7 @@ PAGES['receive-history'] = {
           <button type="submit" class="btn btn-primary" style="height:42px">
             <span class="material-icons">search</span> ค้นหา
           </button>
+          ${AUTH.isAdmin() ? `<button type="button" class="btn btn-secondary" style="height:42px" onclick="PAGES['receive-history'].migrateCosts()"><span class="material-icons">sync</span> ดึงราคาบิลเก่า</button>` : ''}
         </form>
       </div>
 
@@ -209,7 +211,16 @@ PAGES['receive-history'] = {
                     </div>
                   </td>
                   <td style="font-size:0.85rem">
-                    <div class="fw-bold">${h.supplier || 'ไม่ระบุ'}</div>
+                    <div class="fw-bold">
+                      ${(() => {
+                        if (h.supplier) return h.supplier;
+                        if (h.supplierId) {
+                          const sup = this._suppliers.find(s => s.id === h.supplierId);
+                          return sup ? sup.name : h.supplierId;
+                        }
+                        return 'ไม่ระบุ';
+                      })()}
+                    </div>
                     ${h.note ? `<div class="text-muted" style="font-size:0.75rem">${h.note}</div>` : ''}
                   </td>
                   <td class="td-right">
@@ -255,6 +266,20 @@ PAGES['receive-history'] = {
     }
   },
 
+  async migrateCosts() {
+    if (!confirm('ยืนยันการดึงราคาทุนปัจจุบันจากข้อมูลสินค้า เพื่ออัปเดตรายการประวัติการรับสินค้าเก่าที่ราคาเป็น 0 (ที่ยังไม่ได้ถูกบันทึกราคาไว้) หรือไม่?')) return;
+    try {
+      UI.loading(true);
+      const res = await API._call('migrateOldCosts');
+      UI.toast(`ดึงข้อมูลและอัปเดตราคาบิลเก่าสำเร็จ ${res.updated} รายการ ✅`, 'success');
+      this.fetchAndRender();
+    } catch(e) {
+      UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    } finally {
+      UI.loading(false);
+    }
+  },
+
   _renderDetail(record) {
     const items = record.items || [];
     const wh = this._warehouses.find(w => w.id === record.toWarehouseId) || {};
@@ -281,7 +306,14 @@ PAGES['receive-history'] = {
         </div>
       </div>
       <div style="padding:12px; background:var(--bg-app); border-radius:8px; margin-bottom:16px; font-size:0.85rem">
-         <strong>Supplier:</strong> ${record.supplier || '-'}<br/>
+         <strong>Supplier:</strong> ${(() => {
+           if (record.supplier) return record.supplier;
+           if (record.supplierId) {
+             const sup = this._suppliers.find(s => s.id === record.supplierId);
+             return sup ? sup.name : record.supplierId;
+           }
+           return '-';
+         })()}<br/>
          <strong>หมายเหตุ:</strong> ${record.note || '-'}
       </div>
       <div class="table-wrap" style="max-height:400px;overflow-y:auto">
@@ -300,7 +332,7 @@ PAGES['receive-history'] = {
           <tbody>
             ${items.map(it => {
               const p = this._products.find(x => x.id === it.productId) || {};
-              const costNoVat = it.costNoVat !== undefined ? it.costNoVat : (p.costNoVat || 0);
+              const costNoVat = it.costNoVat || p.costNoVat || 0;
               const discount = it.discount || 0;
               const totalItem = it.qty * Math.max(0, costNoVat - discount);
               return `
@@ -435,7 +467,7 @@ PAGES['receive-history'] = {
     }
     return items.map((it, idx) => {
       const p = this._products.find(x => x.id === it.productId) || {};
-      const costNoVat = it.costNoVat !== undefined ? it.costNoVat : (p.costNoVat || 0);
+      const costNoVat = it.costNoVat || p.costNoVat || 0;
       const discount = it.discount || 0;
       const totalItem = it.qty * Math.max(0, costNoVat - discount);
       return `
@@ -455,8 +487,8 @@ PAGES['receive-history'] = {
               <span>${p.unit || ''}</span>
             </div>
           </td>
-          <td class="td-right" style="font-size:0.95rem;color:var(--text-secondary)">
-            ${UI.currency(costNoVat, 2)}
+          <td class="td-right">
+            <input type="number" min="0" step="0.01" value="${costNoVat}" style="width:80px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'costNoVat', this.value)" />
           </td>
           <td class="td-right">
             <input type="number" min="0" step="0.01" value="${discount}" style="width:70px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'discount', this.value)" />
@@ -569,7 +601,7 @@ PAGES['receive-history'] = {
     const items = this._editingRecord?.items || [];
     const totalVal = items.reduce((sum, item) => {
       const p = this._products.find(x => x.id === item.productId) || {};
-      const costNoVat = item.costNoVat !== undefined ? item.costNoVat : (p.costNoVat || 0);
+      const costNoVat = item.costNoVat || p.costNoVat || 0;
       const discount = item.discount || 0;
       const netCostNoVat = Math.max(0, costNoVat - discount);
       const costVat = netCostNoVat * (1 + (CONFIG.VAT_RATE || 0.07));

@@ -510,10 +510,16 @@ PAGES['receive-goods'] = {
         ? new Date(`${adminDate}T${adminTime}:00`).toISOString() 
         : new Date().toISOString();
 
+      const suppSelect = document.getElementById('rg-supplier');
+      const supplierName = suppSelect && suppSelect.selectedIndex > 0 
+        ? suppSelect.options[suppSelect.selectedIndex].text 
+        : '';
+
       await API.receiveGoods({
         warehouseId,
         date: submitDate,
-        supplierId: document.getElementById('rg-supplier')?.value,
+        supplierId: suppSelect?.value || '',
+        supplier: supplierName,
         docNo: document.getElementById('rg-docno')?.value,
         poNo: document.getElementById('rg-pono')?.value,
         taxInvoiceNo: document.getElementById('rg-taxinvoice')?.value,
