@@ -85,6 +85,11 @@ const UI = {
         finalUrl = `https://lh3.googleusercontent.com/d/${match[1]}=w400-h400`;
       }
     }
+    
+    if (finalUrl.startsWith('http')) {
+      window.__APP_SESSION_ID = window.__APP_SESSION_ID || Date.now();
+      finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'cb=' + window.__APP_SESSION_ID;
+    }
 
     const placeholderVarName = (type === 'warehouse' || type === 'store' || type === 'shop') ? 'window.DEFAULT_WH_SVG' : 'window.DEFAULT_USER_SVG';
     return `<img src="${finalUrl}" class="${className}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.onerror=null; this.src=${placeholderVarName}" />`;
@@ -101,6 +106,11 @@ const UI = {
       if (match) {
         finalUrl = `https://lh3.googleusercontent.com/d/${match[1]}=w400-h400`;
       }
+    }
+    
+    if (finalUrl.startsWith('http')) {
+      window.__APP_SESSION_ID = window.__APP_SESSION_ID || Date.now();
+      finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'cb=' + window.__APP_SESSION_ID;
     }
 
     return `<img src="${finalUrl}" class="${className}" style="${style}" onerror="this.onerror=null; this.src=window.DEFAULT_PRODUCT_SVG" />`;

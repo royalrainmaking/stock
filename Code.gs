@@ -1571,9 +1571,11 @@ function getReceiveHistory(user, params) {
   
   const grouped = {};
   filtered.forEach(t => {
-    // ใช้ docNo หรือ (poNo + เวลา + ชื่อผู้ใช้) เป็น Key ในการรวมกลุ่มรายการที่มาด้วยกัน
+    // ใช้ docNo, poNo, เวลา, และชื่อผู้ใช้ เป็น Key ในการรวมกลุ่มรายการที่มาด้วยกัน เพื่อแยกรายการที่ PO ซ้ำแต่คนละเวลา
+    const doc = t.docno || t.docNo || '';
     const po = t.pono || t.poNo || '';
-    const key = String(t.docno || t.docNo || po || (_safeTime(t.createdAt) + '_' + t.username)).trim();
+    const timeKey = _safeTime(t.createdAt);
+    const key = String(doc + '_' + po + '_' + timeKey + '_' + t.username).trim();
     if (!grouped[key]) {
       grouped[key] = {
         id: t.id, 
@@ -1651,7 +1653,7 @@ function getReceiveHistoryDetail(user, params) {
   requireRole(user, 'admin', 'stock');
   const { id } = params;
   const all = getReceiveHistory(user, {}).history;
-  const record = all.find(h => (String(h.docNo) === String(id) || String(h.id) === String(id)));
+  const record = all.find(h => (String(h.groupKey) === String(id) || String(h.docNo) === String(id) || String(h.id) === String(id)));
   return { record };
 }
 
@@ -1682,38 +1684,29 @@ function updateReceiveHistory(user, data) {
   const itemsToRevert = [];
   const debugKeys = [];
   
-  const forceDocNo = newRecord.docNo ? String(newRecord.docNo).trim() : '';
-  const forcePoNo = newRecord.poNo ? String(newRecord.poNo).trim() : '';
+  const orig = String(originalKey).trim();
 
   for (let i = tData.length - 1; i >= 1; i--) {
     const row = tData[i];
     if (row[typeIdx] === 'receive') {
-      const key1 = row[docNoIdx] ? String(row[docNoIdx]).trim() : '';
-      const poNo = String(row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '').trim();
+      const doc = row[docNoIdx] ? String(row[docNoIdx]).trim() : '';
+      const po = String(row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '').trim();
+      
+      const safeT = _safeTime(row[createdAtIdx]);
+      const rawT = String(row[createdAtIdx]);
+      const userStr = String(row[usernameIdx]).trim();
+      
+      const newFormatKey = String(doc + '_' + po + '_' + safeT + '_' + userStr).trim();
+      const oldFormatKey = String(doc || po || (safeT + '_' + userStr)).trim();
+      const oldFallbackKey = rawT + '_' + userStr;
       
       let isMatch = false;
-      const orig = String(originalKey);
-      
-      if (forceDocNo && forceDocNo === key1) {
+      if (orig === newFormatKey || orig === oldFormatKey || orig === oldFallbackKey || orig === String(row[tHeaders.indexOf('id')])) {
         isMatch = true;
-      } else if (!forceDocNo && forcePoNo && forcePoNo === poNo) {
-        isMatch = true;
-      } else if (!forceDocNo && !forcePoNo) {
-        // Only fallback to originalKey if no PO and no DocNo exist
-        const safeT = _safeTime(row[createdAtIdx]);
-        const rawT = String(row[createdAtIdx]);
-        const userStr = String(row[usernameIdx]).trim();
-        
-        const groupKey = (safeT + '_' + userStr);
-        const oldKey1 = rawT + '_' + userStr;
-        
-        if (orig === groupKey || orig === oldKey1 || orig === String(row[tHeaders.indexOf('id')])) {
-          isMatch = true;
-        }
       }
       
       if (debugKeys.length < 5 && !isMatch) {
-         debugKeys.push(`[po:${poNo}, id:${row[tHeaders.indexOf('id')]}]`);
+         debugKeys.push(`[po:${po}, doc:${doc}, id:${row[tHeaders.indexOf('id')]}]`);
       }
       
       if (isMatch) {

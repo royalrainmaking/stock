@@ -100,7 +100,7 @@ PAGES['picking'] = {
               return `
                 <div class="picking-item-row">
                   <div class="item-img-mini">
-                    ${p.imageUrl ? `<img src="${p.imageUrl}" onerror="this.src='https://placehold.co/40x40?text=?'" />` : '<span class="material-icons">inventory_2</span>'}
+                    ${UI.image(p.imageUrl, '', 'width:40px;height:40px;object-fit:cover;border-radius:4px;')}
                   </div>
                   <div class="item-details">
                     <div class="item-name">${p.name || item.productId}</div>

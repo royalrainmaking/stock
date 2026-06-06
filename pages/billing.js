@@ -103,7 +103,7 @@ PAGES['billing'] = {
         };
       });
       this.renderList();
-    } catch(e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
 
   renderList() {
@@ -132,18 +132,18 @@ PAGES['billing'] = {
             <span class="material-icons" style="font-size:14px">inventory</span> สรุปสินค้าคงเหลือ (หักฝากวาง)
           </div>
           ${b._stock.map(s => {
-            const sold = s.qty - (s.consigned||0);
-            if (sold <= 0) return '';
-            return `
+      const sold = s.qty - (s.consigned || 0);
+      if (sold <= 0) return '';
+      return `
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed rgba(0,0,0,0.05)">
                 <div style="display:flex; align-items:center; gap:8px">
-                  <img src="${s.product?.imageUrl || ''}" style="width:24px; height:24px; border-radius:4px; object-fit:cover; border:1px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.05)" onerror="this.src='https://via.placeholder.com/24'"/>
+                  ${UI.image(s.product?.imageUrl, '', 'width:24px; height:24px; border-radius:4px; object-fit:cover; border:1px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.05)')}
                   <span style="font-weight:600; color:var(--text-primary)">${s.product?.name}</span>
                 </div>
                 <span style="font-weight:800; color:var(--primary)">${sold} <small style="font-weight:400; color:var(--text-muted)">${s.product?.unit || 'ขวด'}</small></span>
               </div>
             `;
-          }).join('')}
+    }).join('')}
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1); color:var(--primary)">
             <span>รวมขายสุทธิ</span>
             <span>${b._totalUnits} ชิ้น</span>
@@ -167,21 +167,21 @@ PAGES['billing'] = {
           </thead>
           <tbody>
             ${b._stock.map(s => {
-              const sold = s.qty - (s.consigned||0);
-              return `
+      const sold = s.qty - (s.consigned || 0);
+      return `
                 <tr>
-                  <td><img src="${s.product?.imageUrl || ''}" style="width:36px; height:36px; border-radius:4px; object-fit:cover" onerror="this.src='https://via.placeholder.com/40'"/></td>
+                  <td>${UI.image(s.product?.imageUrl, '', 'width:36px; height:36px; border-radius:4px; object-fit:cover')}</td>
                   <td>
                     <div class="fw-bold">${s.product?.name}</div>
                     <div class="text-muted" style="font-size:0.6rem">@ ฿${UI.currency(s.product?.sellWholesale)}</div>
                   </td>
                   <td class="td-right">${s.qty}</td>
-                  <td class="td-right text-warning">${s.consigned||0}</td>
+                  <td class="td-right text-warning">${s.consigned || 0}</td>
                   <td class="td-right text-primary fw-bold">${sold}</td>
-                  <td class="td-right fw-bold">฿${UI.currency(sold * (s.product?.sellWholesale||0))}</td>
+                  <td class="td-right fw-bold">฿${UI.currency(sold * (s.product?.sellWholesale || 0))}</td>
                 </tr>
               `;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       </div>
@@ -209,9 +209,9 @@ PAGES['billing'] = {
       }));
       const res = await API.doBilling({ warehouseId: b.warehouseId, employeeId: b.employee?.id, date: this._date, totalAmt: b._totalAmt, totalUnits: b._totalUnits, note, items });
       closeModal();
-      this.showReceipt({ billId: res.billId || 'B-'+Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: items.filter(it => it.sold > 0), note });
+      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: items.filter(it => it.sold > 0), note });
       await this.load();
-    } catch(e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
 
   showReceipt(data) {
@@ -252,7 +252,7 @@ PAGES['billing'] = {
             <div class="summary-line grand-total"><span>ยอดสุทธิ</span><span>฿${UI.currency(data.totalAmt)}</span></div>
           </div>
         </div>
-        <div class="receipt-footer-new">${data.note ? `<div class="receipt-note"><strong>หมายเหตุ:</strong> ${data.note}</div>` : ''}<div style="margin-top:10px">ขอบคุณที่ใช้บริการ StockFanggie</div></div>
+        <div class="receipt-footer-new">${data.note ? `<div class="receipt-note"><strong>หมายเหตุ:</strong> ${data.note}</div>` : ''}<div style="margin-top:10px">ขอบคุณที่ใช้บริการ ห้างหุ้นส่วนจำกัด เจริญรุ่งเรือง รับทรัพย์ (สำนักงานใหญ่)</div></div>
         <div class="no-print" style="padding:20px; display:flex; flex-wrap:wrap; gap:8px">
           <button class="btn btn-primary" style="flex:1; min-width:120px; font-size:0.8rem; padding:8px" onclick="window.print()">
             <span class="material-icons" style="font-size:16px">print</span> พิมพ์
@@ -269,7 +269,7 @@ PAGES['billing'] = {
   async saveReceiptImage() {
     const el = document.getElementById('receipt-print-area');
     if (!el) return;
-    
+
     try {
       UI.loading(true);
       // Hide buttons temporarily for clean image
@@ -288,7 +288,7 @@ PAGES['billing'] = {
       link.download = `Receipt-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
-      
+
       UI.toast('บันทึกรูปภาพสำเร็จ', 'success');
     } catch (e) {
       UI.toast('บันทึกรูปภาพไม่สำเร็จ: ' + e.message, 'error');

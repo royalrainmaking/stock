@@ -224,7 +224,7 @@ PAGES['shop-stock'] = {
       return `
         <div class="ss-product-group">
           <div class="ss-product-header">
-            <img src="${p.imageUrl || ''}" class="ss-item-img" style="width:24px;height:24px" onerror="this.src='https://via.placeholder.com/30'" />
+            ${UI.image(p.imageUrl, 'ss-item-img', 'width:24px;height:24px')}
             <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
           </div>
           <div class="ss-batch-list">
@@ -268,7 +268,7 @@ PAGES['shop-stock'] = {
       return `
         <div class="ss-product-group">
           <div class="ss-product-header">
-            <img src="${p.imageUrl || ''}" class="ss-item-img" style="width:24px;height:24px" onerror="this.src='https://via.placeholder.com/30'" />
+            ${UI.image(p.imageUrl, 'ss-item-img', 'width:24px;height:24px')}
             <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
           </div>
           <div class="ss-batch-list">

@@ -259,7 +259,7 @@ PAGES['transfer-history'] = {
                   <td>
                     <div style="display:flex;align-items:center;gap:12px">
                       <div class="item-img-mini" style="width:36px;height:36px;flex-shrink:0">
-                        ${p.imageUrl ? `<img src="${p.imageUrl}" onerror="this.src='https://placehold.co/40x40?text=?'" />` : '<span class="material-icons" style="font-size:18px;color:var(--text-muted)">inventory_2</span>'}
+                        ${UI.image(p.imageUrl, '', 'width:40px;height:40px;object-fit:cover;border-radius:4px;')}
                       </div>
                       <div>
                         <div class="fw-bold" style="font-size:0.85rem">${p.name || it.productId}</div>

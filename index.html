@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>StockFanggie – ระบบคลังสินค้า</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23D93025'/><path d='M30 42h40v28H30zM50 22L22 42h56z' fill='none' stroke='%23ffffff' stroke-width='8'/><circle cx='50' cy='56' r='6' fill='%23ffffff'/></svg>">
+  <title>บีทาเก้น (Betagen) ระบบคลังสินค้า</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23D93025'/><path d='M30 42h40v28H30zM50 22L22 42h56z' fill='none' stroke='%23ffffff' stroke-width='8'/><circle cx='50' cy='56' r='6' fill='%23ffffff'/></svg>">
   <meta name="description" content="ระบบคลังสินค้าออนไลน์ – สินค้าไม่หาย คิดเงินครบ ตรวจสอบย้อนหลังได้" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <!-- Leaflet Map -->
@@ -17,6 +21,7 @@
   <!-- HTML to Image -->
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 </head>
+
 <body>
   <div id="app">
     <!-- Login Screen -->
@@ -31,7 +36,7 @@
           <div class="logo-icon">
             <span class="material-icons">inventory_2</span>
           </div>
-          <h1 class="logo-title">StockFanggie</h1>
+          <h1 class="logo-title">บีทาเก้น (Betagen)</h1>
           <p class="logo-sub">ระบบจัดการคลังสินค้า</p>
         </div>
         <form id="login-form" class="login-form">
@@ -42,7 +47,8 @@
           <div class="form-group">
             <label for="login-password">รหัสผ่าน</label>
             <div class="password-wrap">
-              <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password" required />
+              <input type="password" id="login-password" placeholder="กรอกรหัสผ่าน" autocomplete="current-password"
+                required />
               <button type="button" class="pwd-toggle" onclick="togglePassword('login-password', this)">
                 <span class="material-icons">visibility</span>
               </button>
@@ -53,7 +59,8 @@
             <span class="material-icons">login</span>
             <span class="btn-text">เข้าสู่ระบบ</span>
             <span class="btn-spinner hidden">
-              <span class="material-icons" style="animation:spin 0.8s linear infinite;display:inline-block">autorenew</span>
+              <span class="material-icons"
+                style="animation:spin 0.8s linear infinite;display:inline-block">autorenew</span>
             </span>
           </button>
         </form>
@@ -75,7 +82,7 @@
             <div class="nav-logo">
               <span class="material-icons">inventory_2</span>
             </div>
-            <span class="nav-title">StockFanggie</span>
+            <span class="nav-title">บีทาเก้น (Betagen)</span>
           </div>
         </div>
         <div class="nav-right">
@@ -195,4 +202,5 @@
   <script src="pages/shop-map.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

@@ -366,13 +366,13 @@ PAGES['receive-history'] = {
     `;
 
     openModal('รายละเอียดการรับสินค้า', html, `
-      ${AUTH.isAdmin() ? `<button class="btn btn-warning" onclick="PAGES['receive-history'].openEdit('${record.docNo || record.id}')"><span class="material-icons">edit</span> แก้ไขข้อมูล</button>` : ''}
+      ${AUTH.isAdmin() ? `<button class="btn btn-warning" onclick="PAGES['receive-history'].openEdit('${record.groupKey || record.docNo || record.id}')"><span class="material-icons">edit</span> แก้ไขข้อมูล</button>` : ''}
       <button class="btn btn-secondary" onclick="closeModal()">ปิด</button>
     `, '1200px');
   },
 
   openEdit(id) {
-    const record = this._history.find(h => String(h.docNo) === String(id) || String(h.id) === String(id));
+    const record = this._history.find(h => String(h.groupKey) === String(id) || String(h.docNo) === String(id) || String(h.id) === String(id));
     if (!record) return;
     this._editingRecord = JSON.parse(JSON.stringify(record));
     this._renderEditModal();
@@ -390,7 +390,7 @@ PAGES['receive-history'] = {
             <label>วันที่รับสินค้า</label>
             <input type="text" value="${UI.dateTimeStr(record.createdAt)}" disabled class="input" style="background:#f1f3f4" />
             <input type="hidden" id="rh-edit-createdAt" value="${record.createdAt}" />
-            <input type="hidden" id="rh-edit-originalKey" value="${record.docNo || (record.createdAt + '_' + record.username)}" />
+            <input type="hidden" id="rh-edit-originalKey" value="${record.groupKey || record.docNo || (record.createdAt + '_' + record.username)}" />
             <input type="hidden" id="rh-edit-warehouseId" value="${record.toWarehouseId}" />
           </div>
           <div class="form-group">
@@ -459,7 +459,7 @@ PAGES['receive-history'] = {
     `;
 
     openModal('แก้ไขประวัติการรับสินค้า (Edit Receive)', html, `
-      <button class="btn btn-secondary" onclick="PAGES['receive-history'].viewDetail('${record.docNo || record.id}')">ยกเลิก</button>
+      <button class="btn btn-secondary" onclick="PAGES['receive-history'].viewDetail('${record.groupKey || record.docNo || record.id}')">ยกเลิก</button>
       <button class="btn btn-primary" onclick="PAGES['receive-history'].saveEdit()">บันทึกการเปลี่ยนแปลง</button>
     `, '1200px');
   },
