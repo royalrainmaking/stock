@@ -41,6 +41,12 @@ function _fmtDate(val) {
   } catch(e) { return '9999-12-31'; }
 }
 
+function _safeTime(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? String(val) : String(d.getTime());
+}
+
 // ── CORS & Entry Point ───────────────────────────────────────
 function doGet(e) {
   return handleRequest(e);
@@ -1567,7 +1573,7 @@ function getReceiveHistory(user, params) {
   filtered.forEach(t => {
     // ใช้ docNo หรือ (poNo + เวลา + ชื่อผู้ใช้) เป็น Key ในการรวมกลุ่มรายการที่มาด้วยกัน
     const po = t.pono || t.poNo || '';
-    const key = t.docno || t.docNo || (po + '_' + t.createdAt + '_' + t.username);
+    const key = String(t.docno || t.docNo || po || (_safeTime(t.createdAt) + '_' + t.username)).trim();
     if (!grouped[key]) {
       grouped[key] = {
         id: t.id, 
@@ -1674,14 +1680,43 @@ function updateReceiveHistory(user, data) {
 
   const rowsToDelete = [];
   const itemsToRevert = [];
+  const debugKeys = [];
+  
+  const forceDocNo = newRecord.docNo ? String(newRecord.docNo).trim() : '';
+  const forcePoNo = newRecord.poNo ? String(newRecord.poNo).trim() : '';
 
   for (let i = tData.length - 1; i >= 1; i--) {
     const row = tData[i];
     if (row[typeIdx] === 'receive') {
-      const key1 = row[docNoIdx] ? String(row[docNoIdx]) : '';
-      const poNo = row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '';
-      const groupKey = key1 || (String(poNo) + '_' + String(row[createdAtIdx]) + '_' + String(row[usernameIdx]));
-      if (String(groupKey) === String(originalKey) || String(originalKey) === String(row[tHeaders.indexOf('id')])) {
+      const key1 = row[docNoIdx] ? String(row[docNoIdx]).trim() : '';
+      const poNo = String(row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '').trim();
+      
+      let isMatch = false;
+      const orig = String(originalKey);
+      
+      if (forceDocNo && forceDocNo === key1) {
+        isMatch = true;
+      } else if (!forceDocNo && forcePoNo && forcePoNo === poNo) {
+        isMatch = true;
+      } else if (!forceDocNo && !forcePoNo) {
+        // Only fallback to originalKey if no PO and no DocNo exist
+        const safeT = _safeTime(row[createdAtIdx]);
+        const rawT = String(row[createdAtIdx]);
+        const userStr = String(row[usernameIdx]).trim();
+        
+        const groupKey = (safeT + '_' + userStr);
+        const oldKey1 = rawT + '_' + userStr;
+        
+        if (orig === groupKey || orig === oldKey1 || orig === String(row[tHeaders.indexOf('id')])) {
+          isMatch = true;
+        }
+      }
+      
+      if (debugKeys.length < 5 && !isMatch) {
+         debugKeys.push(`[po:${poNo}, id:${row[tHeaders.indexOf('id')]}]`);
+      }
+      
+      if (isMatch) {
         rowsToDelete.push(i + 1); 
         itemsToRevert.push({
           warehouseId: row[warehouseIdx],
@@ -1698,7 +1733,8 @@ function updateReceiveHistory(user, data) {
   }
 
   if (rowsToDelete.length === 0) {
-    throw new Error('ไม่พบข้อมูลประวัติเดิมเพื่อแก้ไข');
+    const searchVal = forceDocNo ? `DocNo=${forceDocNo}` : (forcePoNo ? `PO=${forcePoNo}` : `Key=${originalKey}`);
+    throw new Error(`ไม่พบข้อมูลประวัติเดิมเพื่อแก้ไข | ค้นหาจาก: [${searchVal}] | ตัวอย่างใน Sheet: ${debugKeys.join(', ')}`);
   }
 
   itemsToRevert.forEach(item => {
