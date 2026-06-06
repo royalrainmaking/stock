@@ -1678,10 +1678,10 @@ function updateReceiveHistory(user, data) {
   for (let i = tData.length - 1; i >= 1; i--) {
     const row = tData[i];
     if (row[typeIdx] === 'receive') {
-      const key1 = row[docNoIdx];
+      const key1 = row[docNoIdx] ? String(row[docNoIdx]) : '';
       const poNo = row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '';
-      const groupKey = key1 || (poNo + '_' + row[createdAtIdx] + '_' + row[usernameIdx]);
-      if (groupKey === originalKey || originalKey === row[tHeaders.indexOf('id')]) {
+      const groupKey = key1 || (String(poNo) + '_' + String(row[createdAtIdx]) + '_' + String(row[usernameIdx]));
+      if (String(groupKey) === String(originalKey) || String(originalKey) === String(row[tHeaders.indexOf('id')])) {
         rowsToDelete.push(i + 1); 
         itemsToRevert.push({
           warehouseId: row[warehouseIdx],
