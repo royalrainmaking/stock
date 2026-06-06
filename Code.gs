@@ -2280,10 +2280,23 @@ function saveCompanyInfo(user, data) {
   return { success: true, companyInfo: info };
 }
 
+// ── Authorization Helper ───────────────────────────────────────────────────
+function askForPermissions() {
+  // ฟังก์ชันนี้มีไว้เพื่อให้ผู้ใช้กด "เรียกใช้" (Run) จากหน้าต่าง Google Apps Script
+  // เพื่อให้ระบบแสดงหน้าต่าง "Review Permissions" สำหรับการใช้ UrlFetchApp
+  try {
+    UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+    Logger.log('✅ ให้สิทธิ์สำเร็จ! ตอนนี้ระบบสามารถสแกนบิลด้วย Gemini ได้แล้ว');
+  } catch (e) {
+    Logger.log('❌ เกิดข้อผิดพลาด: ' + e.message);
+  }
+}
+
 // ── OCR Scan Bill ──────────────────────────────────────────────────────────
 function scanBill(user, data) {
   requireRole(user, 'admin', 'stock');
   if (!data.base64) throw new Error('ไม่พบข้อมูลรูปภาพ');
+  if (!data.apiKey) throw new Error('ไม่พบ API Key');
 
   try {
     let b64 = data.base64;
@@ -2294,27 +2307,42 @@ function scanBill(user, data) {
       b64 = parts[1];
     }
     
-    const blob = Utilities.newBlob(Utilities.base64Decode(b64), mimeType, "ocr_temp_" + new Date().getTime());
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent`;
     
-    const resource = {
-      title: blob.getName(),
-      mimeType: blob.getContentType()
+    const payload = {
+      contents: [{
+        parts: [
+          { text: data.prompt },
+          { inline_data: { mime_type: mimeType, data: b64 } }
+        ]
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
     };
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'x-goog-api-key': data.apiKey
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
     
-    const docFile = Drive.Files.insert(resource, blob, {ocr: true, ocrLanguage: 'th'});
-    const doc = DocumentApp.openById(docFile.id);
-    const text = doc.getBody().getText();
-    
-    try {
-      DriveApp.getFileById(docFile.id).setTrashed(true);
-    } catch(e) {}
-    
-    writeLog(user, 'scanBill', 'สแกนบิลรับสินค้าด้วย OCR');
-    return { success: true, text: text };
-  } catch (e) {
-    if (e.message.includes('Drive is not defined')) {
-      throw new Error('ไม่สามารถใช้ OCR ได้ กรุณาเปิดใช้งาน Drive API ในเมนู "บริการ (Services)" ของ Google Apps Script');
+    if (responseCode !== 200) {
+      throw new Error(`API Error (${responseCode}): ${responseText}`);
     }
+    
+    const json = JSON.parse(responseText);
+    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    writeLog(user, 'scanBill', 'สแกนบิลรับสินค้าด้วย Gemini AI');
+    return { success: true, text: rawText };
+  } catch (e) {
     throw new Error('การสแกนบิลล้มเหลว: ' + e.message);
   }
 }

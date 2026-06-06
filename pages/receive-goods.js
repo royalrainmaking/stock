@@ -379,100 +379,137 @@ PAGES['receive-goods'] = {
   calcQty() { /* Obsolete */ },
   addItem() { /* Obsolete */ },
 
-  /* addItem was replaced by popAdd + addItemDirect */
-
   async handleOCRUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
-    // Reset input so the same file can be selected again
     event.target.value = '';
     
     if (!file.type.startsWith('image/')) {
       return UI.toast('กรุณาเลือกไฟล์รูปภาพเท่านั้น', 'error');
     }
     
+    const apiKey = CONFIG.GEMINI_API_KEY;
+    if (!apiKey) {
+      return UI.toast('กรุณาตั้งค่า GEMINI_API_KEY ในไฟล์ config.js ก่อน', 'error', 6000);
+    }
+    
     try {
-      if (typeof Tesseract === 'undefined') {
-        throw new Error('ระบบ AI (Tesseract.js) ยังโหลดไม่เสร็จ กรุณารอสักครู่หรือรีเฟรชหน้าเว็บ');
-      }
-
       UI.loading(true);
-      UI.toast('กำลังสแกนข้อความด้วย AI ภายในเครื่อง... (อาจใช้เวลา 10-30 วินาทีในครั้งแรก)', 'info', 10000);
+      UI.toast('กำลังส่งรูปให้ Gemini AI วิเคราะห์... (อาจใช้เวลา 10-15 วินาที)', 'info', 8000);
       
-      const { data: { text } } = await Tesseract.recognize(
-        file,
-        'tha+eng',
-        { logger: m => console.log(m) }
+      // Compress image to reduce tokens sent
+      const compressedBase64 = await new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1024;
+          let w = img.width, h = img.height;
+          if (w > h && w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+          else if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7).split('base64,')[1]);
+        };
+        img.src = URL.createObjectURL(file);
+      });
+
+      // Build compact product list (code|name format to save tokens)
+      const productCSV = this._products
+        .map(p => `${p.code}|${p.name}|${p.unit || 'ชิ้น'}`)
+        .join('\n');
+
+      const prompt = `Read this bill image and match products to the catalog below. Reply ONLY with a JSON array, no other text.
+
+Catalog (code|name|unit):
+${productCSV}
+
+JSON format required:
+[{"productCode":"code","qty":number,"rawText":"original line from bill"}]
+
+Rules:
+- Try to match the product code or name with the catalog.
+- If you can't match it, leave productCode as "" but STILL include the rawText.
+- qty = quantity ordered (integer, not price)
+- If the image is completely blank or unreadable, reply: []`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: 'image/jpeg', data: compressedBase64 } }
+              ]
+            }],
+            generationConfig: { 
+              temperature: 0, 
+              maxOutputTokens: 8192,
+              responseMimeType: "application/json"
+            }
+          })
+        }
       );
       
-      if (!text || text.trim() === '') {
-        throw new Error('ไม่พบข้อความในรูปภาพ');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || 'Gemini API เกิดข้อผิดพลาด');
       }
-      this.processOCRText(text);
-
+      
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.log('Raw AI Response:', rawText);
+      
+      // Clean up markdown code blocks if any
+      let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      let items = [];
+      try {
+        const parsed = JSON.parse(cleanText);
+        items = Array.isArray(parsed) ? parsed : [parsed]; // If AI returns a single object, wrap it in array
+      } catch (e) {
+        // Fallback: try to find an array using regex
+        const match = cleanText.match(/\[[\s\S]*\]/);
+        if (match) {
+          items = JSON.parse(match[0]);
+        } else {
+          console.error('Failed to parse JSON. AI replied:', rawText);
+          throw new Error('AI อ่านข้อมูลได้แต่จัดรูปแบบผิดพลาด (ข้อความดิบ: ' + rawText.substring(0, 100) + '...)');
+        }
+      }
+      
+      if (!items.length) {
+        alert('AI ตอบกลับมาเป็นอาร์เรย์ว่าง (ไม่พบสินค้าที่ตรงกัน)\n\nนี่คือข้อความดิบที่ AI อ่านได้:\n' + rawText);
+        throw new Error('ไม่พบรายการสินค้าที่ตรงกับในระบบ โปรดตรวจสอบรูปภาพหรือรายการสินค้า');
+      }
+      
+      // Match Gemini results to our product objects
+      const matchedItems = [];
+      for (const item of items) {
+        const product = this._products.find(p => String(p.code) === String(item.productCode));
+        if (product) {
+          matchedItems.push({
+            product,
+            rawLine: item.rawText || '',
+            guessedQty: Math.max(1, parseInt(item.qty) || 1)
+          });
+        }
+      }
+      
+      if (!matchedItems.length) {
+        throw new Error('ไม่สามารถจับคู่รหัสสินค้าจากบิลกับระบบได้ อาจมีรหัสสินค้าไม่ตรงกัน');
+      }
+      
+      this.showOCRReviewModal(matchedItems);
+      
     } catch (e) {
-      UI.toast('เกิดข้อผิดพลาดในการสแกนรูป: ' + e.message, 'error');
+      UI.toast('สแกนบิลล้มเหลว: ' + e.message, 'error', 6000);
     } finally {
       UI.loading(false);
     }
   },
-
-  processOCRText(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const matchedItems = [];
-    
-    for (const line of lines) {
-      // Find matching products
-      const possibleMatches = this._products.filter(p => {
-        const codeMatch = p.code && line.toLowerCase().includes(String(p.code).toLowerCase());
-        const nameMatch = p.name && line.toLowerCase().includes(String(p.name).toLowerCase().substring(0, 10)); // Match first 10 chars of name
-        return codeMatch || nameMatch;
-      });
-      
-      if (possibleMatches.length > 0) {
-        const p = possibleMatches[0];
-        let textLine = line.toLowerCase();
-        
-        // Remove product name and code to avoid matching numbers inside them (like "100ml")
-        if (p.name) textLine = textLine.replace(p.name.toLowerCase(), '');
-        if (p.code) textLine = textLine.replace(String(p.code).toLowerCase(), '');
-        
-        // Remove commas to prevent splitting numbers like 6,000 into 6 and 000
-        textLine = textLine.replace(/,/g, '');
-        
-        // Match numbers including decimals
-        const nums = textLine.match(/\d+(?:\.\d+)?/g);
-        let guessedQty = 1;
-        
-        if (nums && nums.length > 0) {
-          // Quantities are usually integers. Find all positive integers <= 1,000,000
-          const integers = nums.map(Number).filter(n => Number.isInteger(n) && n > 0 && n <= 1000000);
-          
-          if (integers.length > 0) {
-            // Typically, the first number after the product name is the Quantity
-            guessedQty = integers[0];
-          } else {
-            // Fallback
-            guessedQty = Math.round(Number(nums[0]));
-          }
-        }
-        
-        matchedItems.push({
-          product: p,
-          rawLine: line,
-          guessedQty: guessedQty > 0 ? guessedQty : 1
-        });
-      }
-    }
-    
-    if (matchedItems.length === 0) {
-      return UI.toast('ไม่พบรายการสินค้าที่ตรงกับในระบบ โปรดตรวจสอบความชัดเจนของรูป', 'warning');
-    }
-    
-    this.showOCRReviewModal(matchedItems);
-  },
-
   showOCRReviewModal(matchedItems) {
     let html = `
       <div style="margin-bottom:16px; font-size:0.9rem; color:var(--text-secondary)">

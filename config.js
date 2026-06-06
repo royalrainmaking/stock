@@ -4,7 +4,11 @@
 
 const CONFIG = {
   // ── Google Apps Script URL (Copy URL ที่ได้จากการ Deploy Web App มาวางที่นี่) ───
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbyKshISPpJr94gwWCtp_3liPHe2ZmVFldxxouTiYmDygewQEFSACL0P17bp_WsOYjFdww/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbxQHT9koUtI1ZwPrP2F6Bbrq7i7ytqmU83VnwF1frWtoB0q8RJDRNLfpbRDL9-Q1-PstA/exec',
+
+  // ── Gemini API Key (สำหรับสแกนบิล OCR อัจฉริยะ) ─────────
+  // ขอฟรีได้ที่: https://aistudio.google.com/app/apikey
+  GEMINI_API_KEY: 'AQ.Ab8RN6IDklGqMtHdWmow4S3mNuMu0y2rD33O83uKecSZQ4D0FA',
 
   // ── Demo Mode: true = ใช้ข้อมูล Demo (ไม่ต้อง GAS) ───────
   // ตั้งเป็น false และใส่ GAS_URL จริง เมื่อ Deploy แล้ว
