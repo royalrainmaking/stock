@@ -492,7 +492,7 @@ PAGES['receive-history'] = {
             </div>
           </td>
           <td class="td-right">
-            <input type="number" min="0" step="0.01" value="${costNoVat}" style="width:80px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'costNoVat', this.value)" />
+            <input type="number" min="0" step="0.01" value="${costNoVat}" disabled style="width:80px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px;background:#f5f5f5;cursor:not-allowed" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'costNoVat', this.value)" />
           </td>
           <td class="td-right">
             <input type="number" min="0" step="0.01" value="${discount}" style="width:70px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'discount', this.value)" />

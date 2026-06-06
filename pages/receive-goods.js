@@ -260,6 +260,11 @@ PAGES['receive-goods'] = {
             <input type="date" id="rg-pop-expiry" style="font-size:1rem;height:45px;padding:0 12px;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" />
           </div>
           
+          <div class="form-group" style="margin-bottom:16px">
+            <label style="font-size:0.8rem;color:var(--text-secondary)">💸 ส่วนลด (ต่อหน่วย)</label>
+            <input type="number" id="rg-pop-discount" min="0" step="0.01" placeholder="0.00" style="font-size:1.2rem;height:45px;text-align:center;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" />
+          </div>
+          
           <div style="background:var(--bg-card2);padding:10px;border-radius:var(--radius-sm);text-align:center;margin-bottom:20px">
             <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">รวมรับเข้าทั้งสิ้น</div>
             <div style="font-size:1.4rem;font-weight:800;color:var(--primary)"><span id="rg-pop-total">0</span> <span id="rg-pop-unit-text" style="font-size:0.9rem;font-weight:400">หน่วย</span></div>
@@ -290,6 +295,7 @@ PAGES['receive-goods'] = {
     document.getElementById('rg-pop-trays').value = '';
     document.getElementById('rg-pop-units').value = '';
     document.getElementById('rg-pop-expiry').value = '';
+    document.getElementById('rg-pop-discount').value = '';
     document.getElementById('rg-pop-total').textContent = 0;
     document.getElementById('rg-qty-popup').classList.remove('hidden');
     setTimeout(() => document.getElementById('rg-pop-trays').focus(), 100);
@@ -309,30 +315,33 @@ PAGES['receive-goods'] = {
     const t = parseInt(document.getElementById('rg-pop-trays').value) || 0;
     const u = parseInt(document.getElementById('rg-pop-units').value) || 0;
     const expiry = document.getElementById('rg-pop-expiry').value;
+    const discount = parseFloat(document.getElementById('rg-pop-discount').value) || 0;
     const p = this._products.find(x => String(x.code) === String(code));
     const upt = p?.unitsPerTray || 0;
     const total = (t * upt) + u;
 
     if (total <= 0) return UI.toast('กรุณากรอกจำนวน', 'warning');
     
-    this.addItemDirect(code, t, u, total, p.costVat || 0, expiry);
+    this.addItemDirect(code, t, u, total, p.costVat || 0, expiry, discount);
     document.getElementById('rg-qty-popup').classList.add('hidden');
     UI.toast('เพิ่มรายการเรียบร้อย: ' + p.name, 'success');
   },
 
-  addItemDirect(code, trays, remUnits, qty, costVat, expiryDate) {
+  addItemDirect(code, trays, remUnits, qty, costVat, expiryDate, discount = 0) {
     const product = this._products.find(p => String(p.code) === String(code));
     const existing = this._items.find(i => String(i.product?.code) === String(code) && i.expiryDate === expiryDate);
     if (existing) {
       existing.trays += trays;
       existing.remUnits += remUnits;
       existing.qty += qty;
+      if (discount > 0) existing.discount = discount;
     } else {
       this._items.push({ 
         productId: product.id, trays, remUnits, qty, 
         unit: product?.unit || 'หน่วย', 
         costVat: product?.costVat || 0,
         costNoVat: product?.costNoVat || 0, 
+        discount: discount,
         product, expiryDate 
       });
     }
