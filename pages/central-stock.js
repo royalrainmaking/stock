@@ -314,7 +314,7 @@ PAGES['central-stock'] = {
       </div>
       <div class="stat-card orange"><div class="stat-bg-icon"><span class="material-icons">payments</span></div>
         <div class="stat-label">มูลค่าคงคลัง</div>
-        <div class="stat-value" style="color:var(--warning);font-size:1.4rem">฿${UI.currency(val, 0)}</div>
+        <div class="stat-value" style="color:var(--warning);font-size:1.4rem">฿${UI.currency(val, 2)}</div>
         <div class="stat-sub">ราคาทุน (VAT)</div>
       </div>
       <div class="stat-card pink"><div class="stat-bg-icon"><span class="material-icons">warning</span></div>

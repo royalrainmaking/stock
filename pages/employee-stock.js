@@ -260,8 +260,8 @@ PAGES['employee-stock'] = {
               </div>
             </div>
             <div style="display:flex;gap:10px;align-items:center">
-               <div class="badge badge-blue" style="padding:6px 14px;font-size:0.95rem">ยอดส่งเงิน: ฿${UI.currency(totalWholesale, 0)}</div>
-               <div class="badge badge-pink" style="padding:6px 14px;font-size:0.95rem">ค่าคอมฯ: ฿${UI.currency(totalCommission, 0)}</div>
+               <div class="badge badge-blue" style="padding:6px 14px;font-size:0.95rem">ยอดส่งเงิน: ฿${UI.currency(totalWholesale, 2)}</div>
+               <div class="badge badge-pink" style="padding:6px 14px;font-size:0.95rem">ค่าคอมฯ: ฿${UI.currency(totalCommission, 2)}</div>
             </div>
           </div>
           
@@ -329,11 +329,11 @@ PAGES['employee-stock'] = {
         <div style="font-size:0.75rem;padding-top:4px;border-top:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between">
             <span style="color:var(--text-muted)">ราคาส่ง:</span>
-            <span style="font-weight:700">฿${UI.currency(sold * wholesalePrice, 0)}</span>
+            <span style="font-weight:700">฿${UI.currency(sold * wholesalePrice, 2)}</span>
           </div>
           <div style="display:flex;justify-content:space-between">
             <span style="color:var(--text-muted)">ค่าคอมฯ:</span>
-            <span style="font-weight:700;color:#BE185D">฿${UI.currency(sold * commissionPrice, 0)}</span>
+            <span style="font-weight:700;color:#BE185D">฿${UI.currency(sold * commissionPrice, 2)}</span>
           </div>
         </div>
 
@@ -385,16 +385,16 @@ PAGES['employee-stock'] = {
                 <td class="td-right td-bold">${UI.currency(qty, 0)}</td>
                 <td class="td-right text-warning">${UI.currency(con, 0)}</td>
                 <td class="td-right td-bold text-success">${UI.currency(sold, 0)}</td>
-                <td class="td-right td-bold text-primary">฿${UI.currency(whAmt, 0)}</td>
-                <td class="td-right td-bold" style="color:#BE185D">฿${UI.currency(commAmt, 0)}</td>
+                <td class="td-right td-bold text-primary">฿${UI.currency(whAmt, 2)}</td>
+                <td class="td-right td-bold" style="color:#BE185D">฿${UI.currency(commAmt, 2)}</td>
               </tr>`;
             }).join('')}
           </tbody>
           <tfoot>
             <tr style="background:var(--bg-card2); font-weight:bold">
               <td colspan="7" class="td-right">ยอดรวมทั้งหมดของพนักงาน</td>
-              <td class="td-right text-primary">฿${UI.currency(totalWholesale, 0)}</td>
-              <td class="td-right" style="color:#BE185D">฿${UI.currency(totalCommission, 0)}</td>
+              <td class="td-right text-primary">฿${UI.currency(totalWholesale, 2)}</td>
+              <td class="td-right" style="color:#BE185D">฿${UI.currency(totalCommission, 2)}</td>
             </tr>
           </tfoot>
         </table>

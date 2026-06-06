@@ -123,7 +123,7 @@ PAGES['transfer-history'] = {
 
     document.getElementById('th-sum-count').textContent = totalCount;
     document.getElementById('th-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('th-sum-value').textContent = `฿${UI.currency(totalValue, 0)}`;
+    document.getElementById('th-sum-value').textContent = `฿${UI.currency(totalValue, 2)}`;
 
     this.renderList(filtered);
   },
@@ -197,7 +197,7 @@ PAGES['transfer-history'] = {
                     <div class="fw-bold" style="color:var(--primary)">${items.length} ชนิด</div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 0)}</div>
+                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 2)}</div>
                   </td>
                   <td class="td-center">${statusBadge}</td>
                   <td class="td-center">

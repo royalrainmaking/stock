@@ -115,7 +115,7 @@ PAGES['movement-history'] = {
 
     document.getElementById('mh-sum-count').textContent = totalCount;
     document.getElementById('mh-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('mh-sum-value').textContent = `฿${UI.currency(totalValue, 0)}`;
+    document.getElementById('mh-sum-value').textContent = `฿${UI.currency(totalValue, 2)}`;
 
     this.renderList(filtered);
   },
@@ -180,7 +180,7 @@ PAGES['movement-history'] = {
                     <div style="font-size:0.7rem;color:var(--text-muted)">Items</div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 0)}</div>
+                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 2)}</div>
                   </td>
                   <td style="font-size:0.85rem">
                     <div style="display:flex;align-items:center;gap:8px">

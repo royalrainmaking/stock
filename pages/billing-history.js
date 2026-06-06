@@ -96,7 +96,7 @@ PAGES['billing-history'] = {
 
     document.getElementById('bh-sum-count').textContent = totalCount;
     document.getElementById('bh-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('bh-sum-value').textContent = `฿${UI.currency(totalAmt, 0)}`;
+    document.getElementById('bh-sum-value').textContent = `฿${UI.currency(totalAmt, 2)}`;
 
     this.renderList(filtered);
   },

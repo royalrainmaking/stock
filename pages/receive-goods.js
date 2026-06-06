@@ -73,10 +73,6 @@ PAGES['receive-goods'] = {
             </div>
           </div>
 
-          <div class="form-group"><label>เลขที่เอกสาร / บิลรับของ (ภายใน) *</label>
-            <input type="text" id="rg-docno" placeholder="เช่น RC2604001" style="height:45px; border-radius:12px; padding:0 16px" />
-          </div>
-
           <div class="form-group"><label>ผู้จำหน่าย (Supplier)</label>
             <select id="rg-supplier" style="height:45px; border-radius:12px; padding:0 16px; width:100%; border:1px solid var(--border)" onchange="PAGES['receive-goods'].onSupplierChange(this.value)">
               <option value="">-- เลือกผู้จำหน่าย --</option>
@@ -229,7 +225,7 @@ PAGES['receive-goods'] = {
       </div>
       <div class="product-picker-grid" id="rg-picker-grid" style="position:relative">
         ${this._products.map(p => `
-          <div class="picker-item" onclick="PAGES['receive-goods'].showQtyInput('${p.id}', event)">
+          <div class="picker-item" onclick="PAGES['receive-goods'].showQtyInput('${p.code}', event)">
             ${UI.image(p.imageUrl, 'p-img')}
             <div class="p-info">
               <div class="p-code">${p.code}</div>
@@ -283,10 +279,10 @@ PAGES['receive-goods'] = {
     setTimeout(() => document.getElementById('rg-picker-search').focus(), 100);
   },
 
-  showQtyInput(id, event) {
-    const p = this._products.find(x => x.id === id);
+  showQtyInput(code, event) {
+    const p = this._products.find(x => String(x.code) === String(code));
     if (!p) return;
-    document.getElementById('rg-pop-pid').value = p.id;
+    document.getElementById('rg-pop-pid').value = p.code;
     document.getElementById('rg-pop-title').textContent = p.name;
     document.getElementById('rg-pop-tray-label').textContent = `บรรจุ 1 ถาด = ${p.unitsPerTray || 0} ${p.unit}`;
     document.getElementById('rg-pop-unit-label').textContent = `จำนวน (เศษ/${p.unit || 'หน่วย'})`;
@@ -300,8 +296,8 @@ PAGES['receive-goods'] = {
   },
 
   popCalc() {
-    const pid = document.getElementById('rg-pop-pid').value;
-    const p = this._products.find(x => x.id === pid);
+    const code = document.getElementById('rg-pop-pid').value;
+    const p = this._products.find(x => String(x.code) === String(code));
     const upt = p?.unitsPerTray || 0;
     const t = parseInt(document.getElementById('rg-pop-trays').value) || 0;
     const u = parseInt(document.getElementById('rg-pop-units').value) || 0;
@@ -309,31 +305,31 @@ PAGES['receive-goods'] = {
   },
 
   popAdd() {
-    const pid = document.getElementById('rg-pop-pid').value;
+    const code = document.getElementById('rg-pop-pid').value;
     const t = parseInt(document.getElementById('rg-pop-trays').value) || 0;
     const u = parseInt(document.getElementById('rg-pop-units').value) || 0;
     const expiry = document.getElementById('rg-pop-expiry').value;
-    const p = this._products.find(x => x.id === pid);
+    const p = this._products.find(x => String(x.code) === String(code));
     const upt = p?.unitsPerTray || 0;
     const total = (t * upt) + u;
 
     if (total <= 0) return UI.toast('กรุณากรอกจำนวน', 'warning');
     
-    this.addItemDirect(pid, t, u, total, p.costVat || 0, expiry);
+    this.addItemDirect(code, t, u, total, p.costVat || 0, expiry);
     document.getElementById('rg-qty-popup').classList.add('hidden');
     UI.toast('เพิ่มรายการเรียบร้อย: ' + p.name, 'success');
   },
 
-  addItemDirect(productId, trays, remUnits, qty, costVat, expiryDate) {
-    const product = this._products.find(p => p.id === productId);
-    const existing = this._items.find(i => i.productId === productId && i.expiryDate === expiryDate);
+  addItemDirect(code, trays, remUnits, qty, costVat, expiryDate) {
+    const product = this._products.find(p => String(p.code) === String(code));
+    const existing = this._items.find(i => String(i.product?.code) === String(code) && i.expiryDate === expiryDate);
     if (existing) {
       existing.trays += trays;
       existing.remUnits += remUnits;
       existing.qty += qty;
     } else {
       this._items.push({ 
-        productId, trays, remUnits, qty, 
+        productId: product.id, trays, remUnits, qty, 
         unit: product?.unit || 'หน่วย', 
         costVat: product?.costVat || 0,
         costNoVat: product?.costNoVat || 0, 
@@ -351,7 +347,7 @@ PAGES['receive-goods'] = {
       String(p.code || '').toLowerCase().includes(q) ||
       String(p.category || '').toLowerCase().includes(q)
     ).map(p => `
-      <div class="picker-item" onclick="PAGES['receive-goods'].showQtyInput('${p.id}', event)">
+      <div class="picker-item" onclick="PAGES['receive-goods'].showQtyInput('${p.code}', event)">
         ${UI.image(p.imageUrl, 'p-img')}
         <div class="p-info">
           <div class="p-code">${p.code}</div>
@@ -387,7 +383,7 @@ PAGES['receive-goods'] = {
       return (idxA !== -1 ? idxA : 9999) - (idxB !== -1 ? idxB : 9999);
     });
 
-    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * (i.costNoVat || 0)), 0);
+    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * Math.max(0, (i.costNoVat || 0) - (i.discount || 0))), 0);
     const totalVat = totalNoVat * (CONFIG.VAT_RATE || 0.07);
     const grandTotal = totalNoVat + totalVat;
 
@@ -414,10 +410,13 @@ PAGES['receive-goods'] = {
           </td>
           <td class="td-right" style="font-size:0.75rem;color:var(--text-secondary)">${item.unit}</td>
           <td class="td-right fw-bold" style="color:var(--primary);background:var(--bg-card2);font-size:1rem" id="rg-qty-${i}">${UI.currency(item.qty, 0)}</td>
-          <td class="td-right">
-            <input type="number" min="0" step="0.01" value="${item.costNoVat || 0}" style="width:80px;height:32px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-goods'].updateItemField(${i}, 'costNoVat', this.value)" />
+          <td class="td-right" style="font-size:0.95rem;color:var(--text-secondary)">
+            ${UI.currency(item.costNoVat || 0, 2)}
           </td>
-          <td class="td-right fw-bold" id="rg-tot-${i}" style="font-size:0.95rem">฿${UI.currency(item.qty * (item.costNoVat || 0))}</td>
+          <td class="td-right">
+            <input type="number" min="0" step="0.01" value="${item.discount || 0}" style="width:70px;height:32px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-goods'].updateItemField(${i}, 'discount', this.value)" />
+          </td>
+          <td class="td-right fw-bold" id="rg-tot-${i}" style="font-size:0.95rem">฿${UI.currency(item.qty * Math.max(0, (item.costNoVat || 0) - (item.discount || 0)), 2)}</td>
           <td class="td-center">
             <button class="btn btn-danger btn-icon" style="width:28px;height:28px;padding:0;min-width:auto" onclick="PAGES['receive-goods'].removeItem(${i})"><span class="material-icons" style="font-size:16px">close</span></button>
           </td>
@@ -437,23 +436,24 @@ PAGES['receive-goods'] = {
             <th style="width:50px"></th>
             <th class="td-right" style="width:110px;background:var(--bg-card2)">รวมทั้งหมด</th>
             <th class="td-right" style="width:110px">ราคาทุน(ไม่รวมVat)</th>
+            <th class="td-right" style="width:100px">ส่วนลด(ต่อหน่วย)</th>
             <th class="td-right" style="width:110px">รวมเงิน</th>
             <th class="td-center" style="width:50px">คัดออก</th>
           </tr></thead>
           <tbody>${rowsHTML}</tbody>
           <tfoot>
             <tr style="background:var(--bg-card2)">
-              <td colspan="7" class="td-right fw-bold" style="padding:8px 16px">รวมราคาสินค้า (ไม่รวม VAT)</td>
+              <td colspan="8" class="td-right fw-bold" style="padding:8px 16px">รวมราคาสินค้า (ไม่รวม VAT)</td>
               <td class="td-right fw-bold" id="rg-total-novat" style="font-size:1rem;padding:8px 16px;color:var(--text-secondary)">฿${UI.currency(totalNoVat)}</td>
               <td></td>
             </tr>
             <tr style="background:var(--bg-card2)">
-              <td colspan="7" class="td-right fw-bold" style="padding:8px 16px">ภาษีมูลค่าเพิ่ม (VAT 7%)</td>
+              <td colspan="8" class="td-right fw-bold" style="padding:8px 16px">ภาษีมูลค่าเพิ่ม (VAT 7%)</td>
               <td class="td-right fw-bold" id="rg-total-vat" style="font-size:1rem;padding:8px 16px;color:var(--text-secondary)">฿${UI.currency(totalVat)}</td>
               <td></td>
             </tr>
             <tr style="background:var(--bg-card2)">
-              <td colspan="7" class="td-right fw-bold" style="padding:16px">มูลค่ารวมทั้งบิล (Grand Total)</td>
+              <td colspan="8" class="td-right fw-bold" style="padding:16px">มูลค่ารวมทั้งบิล (Grand Total)</td>
               <td class="td-right fw-bold text-success" id="rg-grand-total" style="font-size:1.1rem;padding:16px">฿${UI.currency(grandTotal)}</td>
               <td></td>
             </tr>
@@ -473,6 +473,7 @@ PAGES['receive-goods'] = {
       item.costNoVat = Math.max(0, parseFloat(val) || 0);
       item.costVat = item.costNoVat * (1 + (CONFIG.VAT_RATE || 0.07));
     }
+    if (field === 'discount') item.discount = Math.max(0, parseFloat(val) || 0);
     if (field === 'expiryDate') item.expiryDate = val;
 
     const upt = item.product?.unitsPerTray || 0;
@@ -483,9 +484,9 @@ PAGES['receive-goods'] = {
     if (qtyEl) qtyEl.textContent = UI.currency(item.qty, 0) + ' ' + item.unit;
     
     const totEl = document.getElementById(`rg-tot-${idx}`);
-    if (totEl) totEl.textContent = '฿' + UI.currency(item.qty * (item.costNoVat || 0));
+    if (totEl) totEl.textContent = '฿' + UI.currency(item.qty * Math.max(0, (item.costNoVat || 0) - (item.discount || 0)), 2);
 
-    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * (i.costNoVat || 0)), 0);
+    const totalNoVat = this._items.reduce((a, i) => a + (i.qty * Math.max(0, (i.costNoVat || 0) - (i.discount || 0))), 0);
     const totalVat = totalNoVat * (CONFIG.VAT_RATE || 0.07);
     const grandTotal = totalNoVat + totalVat;
 
@@ -519,13 +520,15 @@ PAGES['receive-goods'] = {
         note: document.getElementById('rg-note')?.value,
         items: this._items.map(i => ({ 
           productId: i.productId, qty: i.qty, unit: i.unit, 
-          costVat: i.costVat, expiryDate: i.expiryDate 
+          costNoVat: i.costNoVat || 0,
+          costVat: i.costVat || 0,
+          discount: i.discount || 0,
+          expiryDate: i.expiryDate 
         })),
       });
       UI.toast('บันทึกรับสินค้าเรียบร้อย ✅', 'success');
       this._items = [];
       this.renderItems();
-      document.getElementById('rg-docno').value = '';
       document.getElementById('rg-pono').value = '';
       document.getElementById('rg-taxinvoice').value = '';
       document.getElementById('rg-note').value = '';

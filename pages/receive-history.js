@@ -158,7 +158,7 @@ PAGES['receive-history'] = {
     
     document.getElementById('rh-sum-count').textContent = history.length;
     document.getElementById('rh-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('rh-sum-value').textContent = `฿${UI.currency(totalValue, 0)}`;
+    document.getElementById('rh-sum-value').textContent = `฿${UI.currency(totalValue, 2)}`;
 
     const el = document.getElementById('rh-content');
     el.innerHTML = `
@@ -193,7 +193,7 @@ PAGES['receive-history'] = {
                     <div style="color:var(--text-muted)">${dateStr.split(' ')[1]} น.</div>
                   </td>
                   <td>
-                    <div class="fw-bold" style="color:var(--primary)">${h.docNo || 'ไม่มีเลขอ้างอิง'}</div>
+                    <div class="fw-bold" style="color:var(--primary)">${h.docNo || h.poNo || 'ไม่มีเลขอ้างอิง'}</div>
                     <div style="display:flex;align-items:center;gap:8px">
                       ${(() => {
                         const u = this._users.find(ux => ux.username === h.username);
@@ -217,7 +217,7 @@ PAGES['receive-history'] = {
                      <div class="text-muted" style="font-size:0.7rem">${items.length} ชนิด</div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 0)}</div>
+                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 2)}</div>
                   </td>
                   <td class="td-center">
                     <button class="btn btn-secondary btn-xs" onclick="PAGES['receive-history'].viewDetail(${idx})">
@@ -262,8 +262,8 @@ PAGES['receive-history'] = {
     let html = `
       <div style="margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:0.9rem">
         <div>
-          <div class="text-muted">เลขที่เอกสาร:</div>
-          <div class="td-bold" style="font-size:1.1rem">${record.docNo || '-'}</div>
+          <div class="text-muted">เลขที่เอกสาร / PO:</div>
+          <div class="td-bold" style="font-size:1.1rem">${record.docNo || record.poNo || '-'}</div>
           <div class="text-muted mt-8">คลัง:</div>
           <div>${wh.name || record.toWarehouseId}</div>
         </div>
@@ -291,16 +291,22 @@ PAGES['receive-history'] = {
               <th width="40">รูป</th>
               <th>สินค้า</th>
               <th width="80" class="td-right">จำนวน</th>
-              <th width="100">วันหมดอายุ</th>
+              <th width="110" class="td-right">ทุน(ไม่รวมVat)</th>
+              <th width="90" class="td-right">ส่วนลด/ชิ้น</th>
+              <th width="110" class="td-right">รวมเงิน</th>
+              <th width="100" class="td-center">วันหมดอายุ</th>
             </tr>
           </thead>
           <tbody>
             ${items.map(it => {
               const p = this._products.find(x => x.id === it.productId) || {};
+              const costNoVat = it.costNoVat !== undefined ? it.costNoVat : (p.costNoVat || 0);
+              const discount = it.discount || 0;
+              const totalItem = it.qty * Math.max(0, costNoVat - discount);
               return `
                 <tr>
                   <td>
-                    ${p.imageUrl ? `<img src="${p.imageUrl}" style="width:34px;height:34px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid #eee" />` : '<div class="product-img-placeholder" style="width:34px;height:34px;font-size:16px"><span class="material-icons" style="font-size:16px">inventory_2</span></div>'}
+                    ${UI.image(p.imageUrl, '', 'width:34px;height:34px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid #eee')}
                   </td>
                   <td>
                     <div class="td-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
@@ -309,6 +315,9 @@ PAGES['receive-history'] = {
                     </div>
                   </td>
                   <td class="td-right"><b>${UI.currency(it.qty, 0)}</b> ${p.unit || ''}</td>
+                  <td class="td-right">${UI.currency(costNoVat, 2)}</td>
+                  <td class="td-right" style="color:var(--danger)">${discount > 0 ? '-' + UI.currency(discount, 2) : '-'}</td>
+                  <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(totalItem, 2)}</td>
                   <td class="td-center">
                     <span class="badge" style="background:#f1f3f4;color:#5f6368;font-size:0.7rem">${UI.dateStr(it.expiryDate) || '-'}</span>
                   </td>
@@ -396,6 +405,9 @@ PAGES['receive-history'] = {
               <th width="40">รูป</th>
               <th>สินค้า</th>
               <th width="120" class="td-right">จำนวน</th>
+              <th width="110" class="td-right">ราคาทุน(ไม่รวมVat)</th>
+              <th width="90" class="td-right">ส่วนลด/ชิ้น</th>
+              <th width="110" class="td-right">รวมเงิน</th>
               <th width="140" class="td-center">วันหมดอายุ</th>
               <th width="60" class="td-center">ลบ</th>
             </tr>
@@ -404,6 +416,9 @@ PAGES['receive-history'] = {
             ${this._renderEditItems()}
           </tbody>
         </table>
+      </div>
+      <div id="rh-edit-summary" style="margin-top:16px;text-align:right;font-size:1.1rem;font-weight:bold;color:var(--primary)">
+        ${this._renderEditSummary()}
       </div>
     `;
 
@@ -420,10 +435,13 @@ PAGES['receive-history'] = {
     }
     return items.map((it, idx) => {
       const p = this._products.find(x => x.id === it.productId) || {};
+      const costNoVat = it.costNoVat !== undefined ? it.costNoVat : (p.costNoVat || 0);
+      const discount = it.discount || 0;
+      const totalItem = it.qty * Math.max(0, costNoVat - discount);
       return `
         <tr>
           <td>
-            ${p.imageUrl ? `<img src="${p.imageUrl}" style="width:34px;height:34px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid #eee" />` : '<div class="product-img-placeholder" style="width:34px;height:34px;font-size:16px"><span class="material-icons" style="font-size:16px">inventory_2</span></div>'}
+            ${UI.image(p.imageUrl, '', 'width:34px;height:34px;border-radius:4px;object-fit:contain;background:#fff;border:1px solid #eee')}
           </td>
           <td>
             <div class="td-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
@@ -437,8 +455,15 @@ PAGES['receive-history'] = {
               <span>${p.unit || ''}</span>
             </div>
           </td>
+          <td class="td-right" style="font-size:0.95rem;color:var(--text-secondary)">
+            ${UI.currency(costNoVat, 2)}
+          </td>
+          <td class="td-right">
+            <input type="number" min="0" step="0.01" value="${discount}" style="width:70px;height:30px;padding:4px;text-align:right;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'discount', this.value)" />
+          </td>
+          <td class="td-right fw-bold" style="font-size:0.95rem">฿${UI.currency(totalItem, 2)}</td>
           <td class="td-center">
-            <input type="date" value="${it.expiryDate ? UI.dateStr(it.expiryDate, 'YYYY-MM-DD') : ''}" style="width:125px;height:30px;padding:4px;font-size:0.8rem;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'expiryDate', this.value)" />
+            <input type="date" value="${it.expiryDate ? String(it.expiryDate).split('T')[0] : ''}" style="width:125px;height:30px;padding:4px;font-size:0.8rem;border:1px solid var(--border);border-radius:4px" onchange="PAGES['receive-history'].updateEditItem(${idx}, 'expiryDate', this.value)" />
           </td>
           <td class="td-center">
             <button class="btn btn-danger btn-icon" style="width:26px;height:26px;padding:0;min-width:auto" onclick="PAGES['receive-history'].removeEditItem(${idx})"><span class="material-icons" style="font-size:14px">close</span></button>
@@ -450,13 +475,20 @@ PAGES['receive-history'] = {
 
   updateEditItem(idx, field, val) {
     if (this._editingRecord.items[idx]) {
-      this._editingRecord.items[idx][field] = val;
+      this._editingRecord.items[idx][field] = (field === 'costNoVat' || field === 'discount') ? Number(val) : val;
+    }
+    if (field === 'qty' || field === 'costNoVat' || field === 'discount') {
+      document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+      const summaryEl = document.getElementById('rh-edit-summary');
+      if (summaryEl) summaryEl.innerHTML = this._renderEditSummary();
     }
   },
 
   removeEditItem(idx) {
     this._editingRecord.items.splice(idx, 1);
     document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+    const summaryEl = document.getElementById('rh-edit-summary');
+    if (summaryEl) summaryEl.innerHTML = this._renderEditSummary();
   },
 
   openEditProductPicker() {
@@ -528,7 +560,22 @@ PAGES['receive-history'] = {
       expiryDate: ''
     });
     document.getElementById('rh-edit-items-tbody').innerHTML = this._renderEditItems();
+    const summaryEl = document.getElementById('rh-edit-summary');
+    if (summaryEl) summaryEl.innerHTML = this._renderEditSummary();
     document.getElementById('rh-edit-picker-overlay').remove();
+  },
+
+  _renderEditSummary() {
+    const items = this._editingRecord?.items || [];
+    const totalVal = items.reduce((sum, item) => {
+      const p = this._products.find(x => x.id === item.productId) || {};
+      const costNoVat = item.costNoVat !== undefined ? item.costNoVat : (p.costNoVat || 0);
+      const discount = item.discount || 0;
+      const netCostNoVat = Math.max(0, costNoVat - discount);
+      const costVat = netCostNoVat * (1 + (CONFIG.VAT_RATE || 0.07));
+      return sum + (Number(item.qty) * costVat);
+    }, 0);
+    return `ยอดเงินรวมแบบรวมภาษี: ฿${UI.currency(totalVal, 2)}`;
   },
 
   async saveEdit() {
@@ -547,7 +594,15 @@ PAGES['receive-history'] = {
       supplierName = sup ? sup.name : '';
     }
 
-    const items = this._editingRecord.items.filter(it => Number(it.qty) > 0);
+    const items = this._editingRecord.items.filter(it => Number(it.qty) > 0).map(it => {
+      // Ensure we calculate and pass the correct costVat if costNoVat or discount was edited
+      if (it.costNoVat !== undefined || it.discount !== undefined) {
+         const costNoVat = it.costNoVat !== undefined ? it.costNoVat : 0;
+         const discount = it.discount || 0;
+         it.costVat = Math.max(0, costNoVat - discount) * (1 + (CONFIG.VAT_RATE || 0.07));
+      }
+      return it;
+    });
     if (items.length === 0) {
       return UI.toast('ไม่สามารถบันทึกบิลที่ไม่มีสินค้าได้ (หากต้องการลบ ให้ใช้การปรับสต๊อก)', 'warning');
     }

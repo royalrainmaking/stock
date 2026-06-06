@@ -62,7 +62,7 @@ PAGES['dashboard'] = {
         <div class="stat-card purple">
           <div class="stat-bg-icon"><span class="material-icons">payments</span></div>
           <div class="stat-label">ยอดขายวันนี้</div>
-          <div class="stat-value text-primary-color">฿${UI.currency(data.totalSalesToday, 0)}</div>
+          <div class="stat-value text-primary-color">฿${UI.currency(data.totalSalesToday, 2)}</div>
           <div class="stat-sub">รวม ${UI.currency(data.totalUnitsToday, 0)} หน่วย</div>
         </div>
         
@@ -130,7 +130,7 @@ PAGES['dashboard'] = {
                     </div>
                   </td>
                   <td class="td-right">${UI.currency(p.units, 0)}</td>
-                  <td class="td-right text-success fw-bold">฿${UI.currency(p.revenue, 0)}</td>
+                  <td class="td-right text-success fw-bold">฿${UI.currency(p.revenue, 2)}</td>
                   <td style="min-width:120px">
                     <div class="progress"><div class="progress-bar" style="width:${pct}%"></div></div>
                     <small class="text-muted">${pct}%</small>

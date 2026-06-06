@@ -206,7 +206,7 @@ function getHeaders(name) {
     [SN.WAREHOUSES]: ['id','name','type','location','employeeId','active','createdAt','avatar'],
     [SN.CENTRAL_STOCK]: ['productId','warehouseId','expiryDate','qty','unit','lastUpdated'],
     [SN.EMPLOYEE_STOCK]: ['productId','warehouseId','expiryDate','qty','consigned','unit','lastUpdated'],
-    [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate','poNo','taxInvoiceNo','supplierId'],
+    [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate','poNo','taxInvoiceNo','supplierId','costNoVat','discount'],
     [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','userId','createdAt', 'items'],
     [SN.LOGS]: ['id','ts','userId','username','action','detail','ip'],
     [SN.ORDERS]: ['id','date','requestedBy','userId','fromWhId','toWhId','status','note','items','createdAt'],
@@ -953,7 +953,10 @@ function receiveGoods(user, data) {
       productId: item.productId, qty: Number(item.qty), unit: item.unit, docNo: data.docNo,
       poNo: data.poNo || '', taxInvoiceNo: data.taxInvoiceNo || '',
       note: data.note, userId: user.id, username: user.username, createdAt: ts, supplierId: data.supplierId,
-      expiryDate: item.expiryDate || ''
+      expiryDate: item.expiryDate || '',
+      costNoVat: Number(item.costNoVat) || 0,
+      costVat: Number(item.costVat) || 0,
+      discount: Number(item.discount) || 0
     });
   });
 
@@ -1581,7 +1584,10 @@ function getReceiveHistory(user, params) {
       productId: t.productId || t.productid, 
       qty: t.qty, 
       unit: t.unit, 
-      expiryDate: t.expiryDate || t.expirydate
+      expiryDate: t.expiryDate || t.expirydate,
+      costNoVat: Number(t.costnovat || t.costNoVat || 0),
+      costVat: Number(t.costvat || t.costVat || 0),
+      discount: Number(t.discount || 0)
     });
   });
   
@@ -1634,7 +1640,10 @@ function updateReceiveHistory(user, data) {
           productId: row[productIdIdx] || row[tHeaders.indexOf('productid')],
           qty: Number(row[qtyIdx]),
           unit: row[unitIdx],
-          expiryDate: row[expiryDateIdx] || row[tHeaders.indexOf('expirydate')]
+          expiryDate: row[expiryDateIdx] || row[tHeaders.indexOf('expirydate')],
+          costNoVat: Number(row[tHeaders.indexOf('costnovat')]) || 0,
+          costVat: Number(row[tHeaders.indexOf('costvat')]) || 0,
+          discount: Number(row[tHeaders.indexOf('discount')]) || 0
         });
       }
     }
@@ -1674,7 +1683,10 @@ function updateReceiveHistory(user, data) {
       createdAt: ts, 
       supplierId: newRecord.supplierId || newRecord.supplier || '', 
       supplier: newRecord.supplier || '', 
-      expiryDate: item.expiryDate || ''
+      expiryDate: item.expiryDate || '',
+      costNoVat: Number(item.costNoVat) || 0,
+      costVat: Number(item.costVat) || 0,
+      discount: Number(item.discount) || 0
     });
   });
 

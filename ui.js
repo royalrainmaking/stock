@@ -46,8 +46,8 @@ const UI = {
   dateStr(d) {
     if (!d) return '';
     const dt = new Date(d);
-    if (isNaN(dt.getTime())) return String(d);
-    return dt.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+    if (isNaN(dt.getTime())) return String(d).split('T')[0];
+    return dt.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
   },
   dateTimeStr(d) {
     const p = this.dateTimeParts(d);
@@ -57,9 +57,9 @@ const UI = {
   dateTimeParts(d) {
     if (!d) return { date: '', time: '' };
     const dt = new Date(d);
-    if (isNaN(dt.getTime())) return { date: String(d), time: '' };
+    if (isNaN(dt.getTime())) return { date: String(d).split('T')[0], time: '' };
     return {
-      date: dt.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }),
+      date: dt.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       time: dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false })
     };
   },

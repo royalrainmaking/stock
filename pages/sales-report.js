@@ -92,7 +92,7 @@ PAGES['sales-report'] = {
     document.getElementById('sr-summary').innerHTML = `
       <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div>
         <div class="stat-label">ยอดขายรวม</div>
-        <div class="stat-value text-primary-color">฿${UI.currency(totalRev, 0)}</div>
+        <div class="stat-value text-primary-color">฿${UI.currency(totalRev, 2)}</div>
       </div>
       <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div>
         <div class="stat-label">หน่วยรวม</div>
@@ -100,7 +100,7 @@ PAGES['sales-report'] = {
       </div>
       <div class="stat-card orange"><div class="stat-bg-icon"><span class="material-icons">today</span></div>
         <div class="stat-label">เฉลี่ย/วัน</div>
-        <div class="stat-value" style="color:var(--warning)">฿${UI.currency(avgPerDay, 0)}</div>
+        <div class="stat-value" style="color:var(--warning)">฿${UI.currency(avgPerDay, 2)}</div>
       </div>
       <div class="stat-card pink"><div class="stat-bg-icon"><span class="material-icons">bar_chart</span></div>
         <div class="stat-label">จำนวนวันที่มียอด</div>
