@@ -15,7 +15,7 @@ PAGES['employee-stock'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#1A73E8,#0D47A1)">
+          <div class="page-title-icon" style="background:#FFF8E1;color:var(--c-stock)">
             <span class="material-icons">person_pin</span>
           </div>
           <div>

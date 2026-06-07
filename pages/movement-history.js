@@ -13,8 +13,8 @@ PAGES['movement-history'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
-            <span class="material-icons">swap_horiz</span>
+          <div class="page-title-icon" style="background:#F3E5F5;color:var(--c-history)">
+            <span class="material-icons">timeline</span>
           </div>
           <div>
             <h2 class="page-title">ประวัติการย้ายคลังสินค้า</h2>

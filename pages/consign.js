@@ -13,7 +13,7 @@ PAGES['consign'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#E91E8C,#AD1457)">
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
             <span class="material-icons">assignment_return</span>
           </div>
           <div>

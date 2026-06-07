@@ -14,7 +14,7 @@ PAGES['shops'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#FF6D00,#E65100)">
+          <div class="page-title-icon" style="background:#FFF3E0;color:var(--c-shop)">
             <span class="material-icons">storefront</span>
           </div>
           <div>

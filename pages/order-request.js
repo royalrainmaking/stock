@@ -13,7 +13,7 @@ PAGES['order-request'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#004D40)">
+          <div class="page-title-icon" style="background:#FFF8E1;color:var(--c-stock)">
             <span class="material-icons">playlist_add_check</span>
           </div>
           <div>

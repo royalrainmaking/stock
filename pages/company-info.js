@@ -10,7 +10,7 @@ PAGES['company-info'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#3F51B5,#1A237E)">
+          <div class="page-title-icon" style="background:#FCE8E6;color:var(--c-admin)">
             <span class="material-icons">business</span>
           </div>
           <div>

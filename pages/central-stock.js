@@ -121,7 +121,7 @@ PAGES['central-stock'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#F9AB00,#E65100)">
+          <div class="page-title-icon" style="background:#FFF8E1;color:var(--c-stock)">
             <span class="material-icons">warehouse</span>
           </div>
           <div>

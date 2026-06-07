@@ -13,8 +13,8 @@ PAGES['receive-goods'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#1A73E8,#0D47A1)">
-            <span class="material-icons">add_shopping_cart</span>
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
+            <span class="material-icons">swap_horiz</span>
           </div>
           <div>
             <h2 class="page-title">รับสินค้าเข้าคลัง</h2>

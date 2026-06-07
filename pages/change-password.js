@@ -8,7 +8,7 @@ PAGES['change-password'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#37474F,#263238)">
+          <div class="page-title-icon" style="background:#ECEFF1;color:var(--c-account)">
             <span class="material-icons">lock_reset</span>
           </div>
           <div>

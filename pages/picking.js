@@ -12,7 +12,7 @@ PAGES['picking'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#1565C0,#0D47A1)">
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
             <span class="material-icons">fact_check</span>
           </div>
           <div>

@@ -11,7 +11,7 @@ PAGES['users'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#D93025,#B71C1C)">
+          <div class="page-title-icon" style="background:#FCE8E6;color:var(--c-admin)">
             <span class="material-icons">group</span>
           </div>
           <div>

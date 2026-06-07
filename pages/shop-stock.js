@@ -20,7 +20,7 @@ PAGES['shop-stock'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#795548,#5D4037)">
+          <div class="page-title-icon" style="background:#FFF3E0;color:var(--c-shop)">
             <span class="material-icons">inventory_2</span>
           </div>
           <div>

@@ -12,7 +12,7 @@ PAGES['transfer-history'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
+          <div class="page-title-icon" style="background:#F3E5F5;color:var(--c-history)">
             <span class="material-icons">manage_search</span>
           </div>
           <div>

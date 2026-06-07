@@ -15,7 +15,7 @@ PAGES['cancel-consign'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#F57C00,#E65100)">
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
             <span class="material-icons">undo</span>
           </div>
           <div>

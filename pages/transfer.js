@@ -15,7 +15,7 @@ PAGES['transfer'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00897B,#00695C)">
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
             <span class="material-icons">swap_horiz</span>
           </div>
           <div>

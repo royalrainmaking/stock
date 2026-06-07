@@ -10,7 +10,7 @@ PAGES['suppliers'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00796B,#004D40)">
+          <div class="page-title-icon" style="background:#FCE8E6;color:var(--c-admin)">
             <span class="material-icons">local_shipping</span>
           </div>
           <div>

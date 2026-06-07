@@ -16,8 +16,8 @@ PAGES.movement = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#00838F,#006064)">
-            <span class="material-icons">swap_horiz</span>
+          <div class="page-title-icon" style="background:#E6F4EA;color:var(--c-transaction)">
+            <span class="material-icons">sync_alt</span>
           </div>
           <div>
             <h2 class="page-title">ย้ายสินค้าระหว่างคลัง</h2>

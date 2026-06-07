@@ -13,7 +13,7 @@ PAGES['logs'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#546E7A,#263238)">
+          <div class="page-title-icon" style="background:#FCE8E6;color:var(--c-admin)">
             <span class="material-icons">history</span>
           </div>
           <div>

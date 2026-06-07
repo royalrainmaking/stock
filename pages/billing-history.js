@@ -19,7 +19,7 @@ PAGES['billing-history'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#E91E8C,#AD1457)">
+          <div class="page-title-icon" style="background:#FCE4EC;color:var(--c-finance)">
             <span class="material-icons">payments</span>
           </div>
           <div>

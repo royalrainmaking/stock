@@ -19,7 +19,7 @@ PAGES['sales-report'] = {
     el.innerHTML = `
       <div class="page-header">
         <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:linear-gradient(135deg,#7B1FA2,#4A148C)">
+          <div class="page-title-icon" style="background:#E8F0FE;color:var(--c-overview)">
             <span class="material-icons">bar_chart</span>
           </div>
           <div>

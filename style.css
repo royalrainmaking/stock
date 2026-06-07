@@ -242,7 +242,7 @@ button { cursor: pointer; font-family: var(--font); }
 .menu-btn {
   background: none; border: none; color: var(--text-secondary);
   font-size: 1.3rem; padding: 6px; border-radius: var(--radius-sm);
-  transition: background var(--transition); display: flex; align-items: center;
+  transition: background var(--transition); display: none; align-items: center;
 }
 .menu-btn:hover { background: var(--bg-hover); color: var(--primary); }
 .nav-brand { display: flex; align-items: center; gap: 10px; }
@@ -415,7 +415,7 @@ button { cursor: pointer; font-family: var(--font); }
   flex-shrink: 0;
   box-shadow: 0 4px 12px rgba(26,115,232,0.25);
 }
-.page-title-icon .material-icons { font-size: 24px; color: #fff; }
+.page-title-icon .material-icons { font-size: 24px; color: currentColor; }
 .page-title { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; }
 .page-subtitle { color: var(--text-secondary); font-size: 0.92rem; margin-top: 3px; }
 .page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -711,6 +711,7 @@ tbody tr:hover { background: var(--bg-hover); }
 
 /* ── Responsive ──────────────────────── */
 @media (max-width: 900px) {
+  .menu-btn { display: flex; }
   .sidebar {
     transform: translateX(calc(-1 * var(--sidebar-w)));
     box-shadow: none;
