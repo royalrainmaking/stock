@@ -257,7 +257,7 @@ PAGES['products'] = {
       <div class="form-group"><label>ชื่อสินค้า *</label><input id="pf-name" value="${p.name}" placeholder="ชื่อสินค้า" /></div>
         <div class="form-group"><label>หน่วยเรียกสินค้า</label>
           <select id="pf-unit">
-            ${['ขวด', 'ถ้วย', 'ชุด', 'กล่อง', 'ชิ้น', 'อัน', 'แพ็ค'].map(u => `<option ${p.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
+            ${['ขวด', 'ถ้วย', 'ชุด', 'กล่อง', 'ชิ้น', 'อัน', 'แพ็ค', 'หลอด', 'มัด', 'โหล', 'ถัง', 'ตัว'].map(u => `<option ${p.unit === u ? 'selected' : ''}>${u}</option>`).join('')}
           </select>
         </div>
       </div>

@@ -289,36 +289,18 @@ PAGES['receive-history'] = {
     const wh = this._warehouses.find(w => w.id === record.toWarehouseId) || {};
 
     let html = `
-      <div style="margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; font-size:0.9rem">
-        <div>
-          <div class="text-muted">เลขที่เอกสาร / PO:</div>
-          <div class="td-bold" style="font-size:1.1rem">${record.docNo || record.poNo || '-'}</div>
-          <div class="text-muted mt-8">คลัง:</div>
-          <div>${wh.name || record.toWarehouseId}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="text-muted">วันที่รับสินค้า:</div>
-          <div>${UI.dateTimeStr(record.createdAt)}</div>
-          <div class="text-muted mt-8">ผู้บันทึก:</div>
-          <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
-            ${(() => {
-              const u = this._users.find(ux => ux.username === record.username);
-              return UI.avatar(u?.avatar, record.username, 24);
-            })()}
-            <div>${record.username}</div>
-          </div>
-        </div>
-      </div>
-      <div style="padding:12px; background:var(--bg-app); border-radius:8px; margin-bottom:16px; font-size:0.85rem">
-         <strong>Supplier:</strong> ${(() => {
-           if (record.supplier) return record.supplier;
-           if (record.supplierId) {
-             const sup = this._suppliers.find(s => s.id === record.supplierId);
-             return sup ? sup.name : record.supplierId;
-           }
-           return '-';
-         })()}<br/>
-         <strong>หมายเหตุ:</strong> ${record.note || '-'}
+      <div style="display:flex; flex-wrap:wrap; gap:6px 20px; padding:10px 14px; background:var(--bg-app); border-radius:8px; margin-bottom:14px; font-size:0.82rem; border:1px solid var(--border-light)">
+        <div><span class="text-muted">PO/เลขที่:</span> <b style="color:var(--primary)">${record.docNo || record.poNo || '-'}</b></div>
+        <div><span class="text-muted">Tax Invoice:</span> <b>${record.taxInvoiceNo || '-'}</b></div>
+        <div><span class="text-muted">คลัง:</span> <b>${wh.name || record.toWarehouseId || '-'}</b></div>
+        <div><span class="text-muted">Supplier:</span> <b>${(() => {
+          if (record.supplier) return record.supplier;
+          if (record.supplierId) { const sup = this._suppliers?.find(s => s.id === record.supplierId); return sup ? sup.name : record.supplierId; }
+          return '-';
+        })()}</b></div>
+        <div><span class="text-muted">วันที่:</span> <b>${UI.dateTimeStr(record.createdAt)}</b></div>
+        <div><span class="text-muted">โดย:</span> <b>${record.username}</b></div>
+        ${record.note ? `<div style="width:100%"><span class="text-muted">หมายเหตุ:</span> ${record.note}</div>` : ''}
       </div>
       <div class="table-wrap" style="max-height:400px;overflow-y:auto">
         <table class="table table-sm">
@@ -398,11 +380,7 @@ PAGES['receive-history'] = {
             <input type="text" value="${wh.name || record.toWarehouseId}" disabled class="input" style="background:#f1f3f4" />
           </div>
         </div>
-        <div class="grid-3 mb-16">
-          <div class="form-group">
-            <label>ใบรับสินค้าเลขที่</label>
-            <input type="text" id="rh-edit-docNo" value="${record.docNo || ''}" class="input" />
-          </div>
+        <div class="grid-2 mb-16">
           <div class="form-group">
             <label>ใบสั่งซื้อเลขที่ [P/O No.]</label>
             <input type="text" id="rh-edit-poNo" value="${record.poNo || ''}" class="input" />
@@ -625,7 +603,6 @@ PAGES['receive-history'] = {
 
   async saveEdit() {
     const originalKey = document.getElementById('rh-edit-originalKey').value;
-    const docNo = document.getElementById('rh-edit-docNo').value.trim();
     const poNo = document.getElementById('rh-edit-poNo').value.trim();
     const taxInvoiceNo = document.getElementById('rh-edit-taxInvoiceNo').value.trim();
     const note = document.getElementById('rh-edit-note').value.trim();
@@ -653,7 +630,7 @@ PAGES['receive-history'] = {
     }
 
     const newRecord = {
-      docNo, poNo, taxInvoiceNo, note, supplierId, supplier: supplierName,
+      poNo, taxInvoiceNo, note, supplierId, supplier: supplierName,
       createdAt, toWarehouseId: warehouseId, items
     };
 
