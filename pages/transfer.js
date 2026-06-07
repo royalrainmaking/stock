@@ -137,10 +137,10 @@ PAGES['transfer'] = {
 
   async loadData() {
     try {
-      const [pr, whr] = await Promise.all([API.getProducts(), API.getWarehouses()]);
-      this._products = pr.products || [];
-      this._centralWarehouses = (whr.warehouses || []).filter(w => w.type === 'central');
-      this._employeeWarehouses = (whr.warehouses || []).filter(w => w.type === 'employee');
+      await MASTER_DATA.load();
+      this._products = MASTER_DATA.products;
+      this._centralWarehouses = MASTER_DATA.warehouses.filter(w => w.type === 'central');
+      this._employeeWarehouses = MASTER_DATA.warehouses.filter(w => w.type === 'employee');
       this._items = [];
 
       // Reset thumbs to defaults

@@ -14,6 +14,14 @@
 const SPREADSHEET_ID = '1H1GVv2yVPfdNh1Z2ZR5K7-hJ52gPXFZauPDpE7c-Pr4';
 const VAT_RATE = 0.07;
 
+// ── Spreadsheet object cache (per-request) ───────────────────
+// Opens Spreadsheet only once per GAS execution to avoid repeated I/O overhead.
+let _SS = null;
+function getSpreadsheet() {
+  if (!_SS) _SS = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return _SS;
+}
+
 // ── Gemini API Key ───────────────────────────────────────────────────
 const GEMINI_API_KEY = 'AQ.Ab8RN6IOHqIQ0AQan5-lG0OU74QOh_QoEujp969qq-geMYOvxQ';
 
@@ -134,6 +142,7 @@ function handleRequest(e) {
       case 'updateReceiveHistory': result = updateReceiveHistory(user, body); break;
       case 'getMovementHistory': result = getMovementHistory(user, body || e.parameter); break;
       case 'scanBill': result = scanBill(user, body); break;
+      case 'getMasterData': result = getMasterData(user); break;
 
       // Billing
       case 'getBillingList': result = getBillingList(e.parameter.date); break;
@@ -189,7 +198,7 @@ function handleRequest(e) {
 
 // ── Helpers ──────────────────────────────────────────────────
 function getSheet(name) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
@@ -2349,4 +2358,49 @@ function scanBill(user, data) {
   } catch (e) {
     throw new Error('การสแกนบิลล้มเหลว: ' + e.message);
   }
+}
+
+// ── Batch Master Data ────────────────────────────────────────
+// Loads Products, Warehouses, Suppliers, Users in ONE request.
+// Reduces 3-4 separate API calls into a single round trip.
+function getMasterData(user) {
+  const products = sheetData(getSheet(SN.PRODUCTS))
+    .filter(function(p) { return _isTrue(p.active) || p.active === ''; })
+    .map(function(p) { return {
+      id: p.id, code: p.code, name: p.name, category: p.category,
+      unit: p.unit, unitsPerCase: Number(p.unitsPerCase) || 0,
+      unitsPerTray: Number(p.unitsPerTray) || 0,
+      costNoVat: Number(p.costNoVat) || 0, costVat: Number(p.costVat) || 0,
+      agentProfit: Number(p.agentProfit) || 0, sellWholesale: Number(p.sellWholesale) || 0,
+      sellCommission: Number(p.sellCommission) || 0, shopWholesale: Number(p.shopWholesale) || 0,
+      imageUrl: p.imageUrl || '',
+    }; });
+
+  var allUsers = sheetData(getSheet(SN.USERS));
+
+  var warehouses = sheetData(getSheet(SN.WAREHOUSES))
+    .filter(function(w) { return _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE' || w.active === ''; })
+    .map(function(w) {
+      var u = allUsers.find(function(x) { return x.id === w.employeeId; }) || {};
+      return {
+        id: w.id, name: w.name, type: w.type, location: w.location, avatar: w.avatar || '',
+        employeeId: w.employeeId, active: _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE',
+        employeeAvatar: u.avatar || w.avatar || '', employeeName: u.displayName || u.username || w.name || ''
+      };
+    });
+
+  var suppliers = sheetData(getSheet(SN.SUPPLIERS)).map(function(s) { return {
+    id: s.id, name: s.name, address: s.address || '', phone: s.phone || '',
+    fax: s.fax || '', taxId: s.taxId || ''
+  }; });
+
+  var users = allUsers.map(function(u) { return {
+    id: u.id, username: u.username,
+    displayName: u.displayName || '', fullName: u.fullName || '',
+    phone: u.phone || '', avatar: u.avatar || '',
+    role: u.role, active: _isTrue(u.active),
+    isEmployee: _isTrue(u.isEmployee),
+  }; });
+
+  return { products: products, warehouses: warehouses, suppliers: suppliers, users: users };
 }

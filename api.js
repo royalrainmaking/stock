@@ -83,6 +83,7 @@ const API = {
     return this._post('updateReceiveHistory', data);
   },
   scanBill(data) { return this._post('scanBill', data); },
+  getMasterData() { return this._call('getMasterData'); },
   requestTransfer(data) { return this._post('requestTransfer', data); },
   getPickingTasks() { return this._call('getPickingTasks'); },
   confirmPicking(id, items) { return this._post('confirmPicking', { id, items }); },
@@ -127,6 +128,28 @@ const API = {
   // ── Company Info ───────────────────────
   getCompanyInfo() { return this._call('getCompanyInfo'); },
   saveCompanyInfo(data) { return this._post('saveCompanyInfo', data); },
+};
+
+// ── Master Data Store ────────────────────────────────────────
+// Fetches Products + Warehouses + Suppliers + Users in ONE request.
+// Pages read from this instead of making individual API calls.
+// Data is always fresh (no caching): call loadMasterData() each time a page needs it.
+const MASTER_DATA = {
+  products: [],
+  warehouses: [],
+  suppliers: [],
+  users: [],
+  _loaded: false,
+
+  async load() {
+    const res = await API.getMasterData();
+    this.products = res.products || [];
+    this.warehouses = res.warehouses || [];
+    this.suppliers = res.suppliers || [];
+    this.users = res.users || [];
+    this._loaded = true;
+    return res;
+  }
 };
 
 // ── Demo/local mode when GAS not configured ──────────────────

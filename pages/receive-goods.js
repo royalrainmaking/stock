@@ -126,12 +126,17 @@ PAGES['receive-goods'] = {
 
   async loadData() {
     try {
-      const [pr, supps] = await Promise.all([API.getProducts(), API.getSuppliers()]);
-      this._products = pr.products || [];
-      this._suppliers = supps.suppliers || [];
-      await this.loadWarehouses();
+      await MASTER_DATA.load();
+      this._products = MASTER_DATA.products;
+      this._suppliers = MASTER_DATA.suppliers;
+      this._warehouses = MASTER_DATA.warehouses.filter(w => w.type === 'central');
       this.renderSuppliers();
       this._items = [];
+
+      const whThumb = document.getElementById('rg-wh-thumb');
+      if (whThumb && !document.getElementById('rg-warehouse').value) {
+        whThumb.innerHTML = '<span class="material-icons">warehouse</span>';
+      }
     } catch (e) {
       UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
     }
