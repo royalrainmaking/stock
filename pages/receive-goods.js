@@ -388,9 +388,8 @@ PAGES['receive-goods'] = {
       return UI.toast('กรุณาเลือกไฟล์รูปภาพเท่านั้น', 'error');
     }
     
-    const apiKey = CONFIG.GEMINI_API_KEY;
-    if (!apiKey) {
-      return UI.toast('กรุณาตั้งค่า GEMINI_API_KEY ในไฟล์ config.js ก่อน', 'error', 6000);
+    if (IS_DEMO) {
+      return UI.toast('โหมด Demo ไม่รองรับการสแกนบิล', 'error');
     }
     
     try {
@@ -418,57 +417,54 @@ PAGES['receive-goods'] = {
         .map(p => `${p.code}|${p.name}|${p.unit || 'ชิ้น'}`)
         .join('\n');
 
-      const prompt = `Read this bill image and match products to the catalog below. Reply ONLY with a JSON array, no other text.
+      const prompt = `Read this bill image and match products to the catalog below. Reply ONLY with a JSON object, no other text.
 
 Catalog (code|name|unit):
 ${productCSV}
 
 JSON format required:
-[{"productCode":"code","qty":number,"rawText":"original line from bill"}]
+{
+  "poNo": "string (ใบสั่งซื้อเลขที่ ถ้ามี)",
+  "taxInvoiceNo": "string (ใบกำกับภาษีเลขที่ ถ้ามี)",
+  "supplierName": "string (ชื่อผู้จำหน่าย ถ้ามี)",
+  "receiveDate": "YYYY-MM-DD (วันที่ในบิล ถ้ามี)",
+  "items": [{"productCode":"code","qty":number,"rawText":"original line from bill"}]
+}
 
 Rules:
 - Try to match the product code or name with the catalog.
 - If you can't match it, leave productCode as "" but STILL include the rawText.
 - qty = quantity ordered (integer, not price)
-- If the image is completely blank or unreadable, reply: []`;
+- If the image is completely blank or unreadable, reply: {"items": []}`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: 'image/jpeg', data: compressedBase64 } }
-              ]
-            }],
-            generationConfig: { 
-              temperature: 0, 
-              maxOutputTokens: 8192,
-              responseMimeType: "application/json"
-            }
-          })
-        }
-      );
+      const response = await API.scanBill({
+        base64: compressedBase64,
+        prompt: prompt
+      });
       
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || 'Gemini API เกิดข้อผิดพลาด');
-      }
-      
-      const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      console.log('Raw AI Response:', rawText);
+      const rawText = response.text || '';
+      console.log('Raw AI Response (from backend):', rawText);
       
       // Clean up markdown code blocks if any
       let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
       
       let items = [];
+      let docInfo = {};
       try {
         const parsed = JSON.parse(cleanText);
-        items = Array.isArray(parsed) ? parsed : [parsed]; // If AI returns a single object, wrap it in array
+        if (parsed.items && Array.isArray(parsed.items)) {
+          items = parsed.items;
+          docInfo = {
+            poNo: parsed.poNo || '',
+            taxInvoiceNo: parsed.taxInvoiceNo || '',
+            supplierName: parsed.supplierName || '',
+            receiveDate: parsed.receiveDate || ''
+          };
+        } else if (Array.isArray(parsed)) {
+          items = parsed;
+        } else {
+          items = [parsed];
+        }
       } catch (e) {
         // Fallback: try to find an array using regex
         const match = cleanText.match(/\[[\s\S]*\]/);
@@ -481,7 +477,7 @@ Rules:
       }
       
       if (!items.length) {
-        alert('AI ตอบกลับมาเป็นอาร์เรย์ว่าง (ไม่พบสินค้าที่ตรงกัน)\n\nนี่คือข้อความดิบที่ AI อ่านได้:\n' + rawText);
+        alert('AI ไม่พบรายการสินค้า (หรือตอบกลับมาเป็นอาร์เรย์ว่าง)\n\nนี่คือข้อความดิบที่ AI อ่านได้:\n' + rawText);
         throw new Error('ไม่พบรายการสินค้าที่ตรงกับในระบบ โปรดตรวจสอบรูปภาพหรือรายการสินค้า');
       }
       
@@ -502,7 +498,7 @@ Rules:
         throw new Error('ไม่สามารถจับคู่รหัสสินค้าจากบิลกับระบบได้ อาจมีรหัสสินค้าไม่ตรงกัน');
       }
       
-      this.showOCRReviewModal(matchedItems);
+      this.showOCRReviewModal(matchedItems, docInfo);
       
     } catch (e) {
       UI.toast('สแกนบิลล้มเหลว: ' + e.message, 'error', 6000);
@@ -510,12 +506,28 @@ Rules:
       UI.loading(false);
     }
   },
-  showOCRReviewModal(matchedItems) {
+  showOCRReviewModal(matchedItems, docInfo = {}) {
+    let docHtml = '';
+    if (docInfo.poNo || docInfo.taxInvoiceNo || docInfo.supplierName || docInfo.receiveDate) {
+      docHtml = `
+        <div class="card" style="padding:12px; border:1px solid var(--border); margin-bottom:16px; background:var(--bg-card2)">
+          <div style="font-weight:bold; margin-bottom:8px; color:var(--primary)">ข้อมูลเอกสารที่สแกนพบ</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.85rem">
+            <div><b>ผู้จำหน่าย:</b> <input type="text" id="ocr-doc-supplier" value="${docInfo.supplierName || ''}" style="width:100%; height:32px; padding:4px 8px; border:1px solid var(--border); border-radius:4px" /></div>
+            <div><b>วันที่ในบิล:</b> <input type="date" id="ocr-doc-date" value="${docInfo.receiveDate || ''}" style="width:100%; height:32px; padding:4px 8px; border:1px solid var(--border); border-radius:4px" /></div>
+            <div><b>P/O No:</b> <input type="text" id="ocr-doc-po" value="${docInfo.poNo || ''}" style="width:100%; height:32px; padding:4px 8px; border:1px solid var(--border); border-radius:4px" /></div>
+            <div><b>Tax Invoice No:</b> <input type="text" id="ocr-doc-tax" value="${docInfo.taxInvoiceNo || ''}" style="width:100%; height:32px; padding:4px 8px; border:1px solid var(--border); border-radius:4px" /></div>
+          </div>
+        </div>
+      `;
+    }
+
     let html = `
+      ${docHtml}
       <div style="margin-bottom:16px; font-size:0.9rem; color:var(--text-secondary)">
         ระบบพบรายการสินค้า <b>${matchedItems.length}</b> รายการจากบิล กรุณาตรวจสอบจำนวนก่อนนำเข้า
       </div>
-      <div style="max-height:60vh; overflow-y:auto; padding-right:8px; display:flex; flex-direction:column; gap:12px">
+      <div style="max-height:50vh; overflow-y:auto; padding-right:8px; display:flex; flex-direction:column; gap:12px">
         ${matchedItems.map((item, idx) => `
           <div class="card" style="padding:12px; border:1px solid var(--border)">
             <div style="display:flex; align-items:flex-start; gap:12px">
@@ -535,6 +547,35 @@ Rules:
     `;
     
     window._ocrConfirm = () => {
+      // Read back document info
+      const mSup = document.getElementById('ocr-doc-supplier');
+      const mDate = document.getElementById('ocr-doc-date');
+      const mPo = document.getElementById('ocr-doc-po');
+      const mTax = document.getElementById('ocr-doc-tax');
+      
+      if (mPo && mPo.value) document.getElementById('rg-pono').value = mPo.value;
+      if (mTax && mTax.value) document.getElementById('rg-taxinvoice').value = mTax.value;
+      
+      if (mDate && mDate.value) {
+        const dEl = document.getElementById('rg-date');
+        if (dEl && dEl.tagName === 'INPUT') dEl.value = mDate.value;
+      }
+      
+      if (mSup && mSup.value) {
+        const supName = mSup.value.toLowerCase().trim();
+        const supSel = document.getElementById('rg-supplier');
+        if (supSel && supName) {
+          let found = Array.from(supSel.options).find(o => 
+            o.value !== '' && 
+            (o.text.toLowerCase().includes(supName) || supName.includes(o.text.toLowerCase()))
+          );
+          if (found) {
+            supSel.value = found.value;
+            this.onSupplierChange(found.value);
+          }
+        }
+      }
+
       matchedItems.forEach((item, idx) => {
         const qtyEl = document.getElementById(`ocr-qty-${idx}`);
         const qty = qtyEl ? parseInt(qtyEl.value) || 0 : 0;
@@ -550,7 +591,7 @@ Rules:
     openModal('ตรวจสอบรายการจากบิล (OCR)', html, `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
       <button class="btn btn-primary" onclick="window._ocrConfirm()">ยืนยันนำเข้ารายการ</button>
-    `, '600px');
+    `, '650px');
   },
 
 
