@@ -6,6 +6,7 @@ PAGES['picking'] = {
   _tasks: [],
   _products: [],
   _warehouses: [],
+  _setSelections: {}, // Maps `${taskId}_${itemIdx}` to array of picked products
 
   async render() {
     const el = document.getElementById('page-picking');
@@ -67,6 +68,68 @@ PAGES['picking'] = {
 
     el.innerHTML = this._tasks.map((task, idx) => {
       const items = task.items || [];
+      const normalItems = items.filter(i => !i.isSet);
+      const setItems = items.filter(i => i.isSet);
+      
+      // Aggregate sets
+      const setCats = {};
+      setItems.forEach(item => {
+        (item.rules || []).forEach(r => {
+          if (!r.category) return;
+          const normCat = r.category.trim().toLowerCase().replace(/[\s\.]+/g, '');
+          if (!setCats[normCat]) {
+            setCats[normCat] = { reqQty: 0, unit: r.unit, allowedProducts: null, display: r.category };
+          }
+          setCats[normCat].reqQty += r.qty * item.qty;
+          
+          if (r.allowedProducts && Array.isArray(r.allowedProducts)) {
+            if (setCats[normCat].allowedProducts === null) {
+              setCats[normCat].allowedProducts = [...r.allowedProducts];
+            } else {
+              r.allowedProducts.forEach(pid => {
+                if (!setCats[normCat].allowedProducts.includes(pid)) {
+                  setCats[normCat].allowedProducts.push(pid);
+                }
+              });
+            }
+          }
+        });
+      });
+      // Handle null overrides (if any set rule has no restriction, the whole category has no restriction)
+      setItems.forEach(item => {
+        (item.rules || []).forEach(r => {
+          if (!r.category) return;
+          const normCat = r.category.trim().toLowerCase().replace(/[\s\.]+/g, '');
+          if (!r.allowedProducts) {
+            setCats[normCat].allowedProducts = null;
+          }
+        });
+      });
+
+      // Merge normal items into setCats if they share the same category
+      for (let i = normalItems.length - 1; i >= 0; i--) {
+        const nItem = normalItems[i];
+        const p = this._products.find(prod => String(prod.id) === String(nItem.productId));
+        if (p && p.category) {
+          const normCat = p.category.trim().toLowerCase().replace(/[\s\.]+/g, '');
+          if (setCats[normCat]) {
+            // Category exists in sets! Merge this normal item into it.
+            setCats[normCat].reqQty += Number(nItem.qty);
+            setCats[normCat].minProds = setCats[normCat].minProds || {};
+            setCats[normCat].minProds[p.id] = (setCats[normCat].minProds[p.id] || 0) + Number(nItem.qty);
+            
+            // Ensure product is allowed in this category
+            if (setCats[normCat].allowedProducts !== null) {
+              if (!setCats[normCat].allowedProducts.includes(p.id)) {
+                setCats[normCat].allowedProducts.push(p.id);
+              }
+            }
+            // Remove from normal items rendering
+            normalItems.splice(i, 1);
+          }
+        }
+      }
+
       const fromWh = this._warehouses.find(w => String(w.id).trim() === String(task.fromWhId).trim()) || {};
       const toWh   = this._warehouses.find(w => String(w.id).trim() === String(task.toWhId).trim()) || {};
 
@@ -95,7 +158,10 @@ PAGES['picking'] = {
           </div>
 
           <div class="picking-items">
-            ${items.map(item => {
+
+
+            <!-- Normal Items -->
+            ${normalItems.map(item => {
               const p = this._products.find(x => x.id === item.productId) || {};
               return `
                 <div class="picking-item-row">
@@ -104,7 +170,10 @@ PAGES['picking'] = {
                   </div>
                   <div class="item-details">
                     <div class="item-name">${p.name || item.productId}</div>
-                    <div class="item-code">${p.code || ''}</div>
+                    <div class="item-code">
+                      ${p.code || ''}
+                      ${p.category ? `<span style="margin-left:6px;padding:2px 6px;background:var(--bg-hover);border-radius:4px;font-size:0.7rem;color:var(--text-secondary)">${p.category}</span>` : ''}
+                    </div>
                   </div>
                   <div class="item-qty" style="display:flex; flex-direction:column; align-items:flex-end; gap:4px">
                     <div style="font-size:0.75rem; color:var(--text-muted);">
@@ -112,13 +181,55 @@ PAGES['picking'] = {
                     </div>
                     <div style="display:flex; align-items:center; gap:6px">
                       <div style="font-size:0.75rem; color:var(--text-secondary); font-weight:600">จัดจริง:</div>
-                      <input type="number" class="qty-input-inline" data-task="${task.id}" data-pid="${item.productId}" value="${item.qty}" min="0" style="font-weight:bold; color:var(--primary); font-size:1rem; border:2px solid var(--primary-light); background:#F0F4FF;" />
+                      <input type="number" class="qty-input-inline" data-task="${task.id}" data-pid="${item.productId}" data-unit="${item.unit || p.unit}" value="${item.qty}" min="0" style="font-weight:bold; color:var(--primary); font-size:1rem; border:2px solid var(--primary-light); background:#F0F4FF;" />
                       <span class="qty-unit" style="font-weight:600">${item.unit || 'หน่วย'}</span>
                     </div>
                   </div>
                 </div>
               `;
             }).join('')}
+
+            <!-- Aggregated Set Categories -->
+            ${Object.keys(setCats).map(normCat => {
+              const g = setCats[normCat];
+              const prods = this._products.filter(p => {
+                const pCatNorm = (p.category || '').trim().toLowerCase().replace(/[\s\.]+/g, '');
+                return pCatNorm === normCat && (!g.allowedProducts || g.allowedProducts.includes(p.id));
+              });
+              
+              return `
+                <div style="margin-top:16px; border:2px dashed var(--border); border-radius:8px; overflow:hidden;">
+                  <div style="background:#f8f9fa; padding:10px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-weight:700; color:var(--text-primary); font-size:0.9rem">รวมหมวด ${g.display}</div>
+                    <div class="set-cat-req-badge" id="req-badge-${task.id}-${normCat}" data-task="${task.id}" data-cat="${normCat}" data-req="${g.reqQty}" style="background:#FFF3E0; color:#E65100; padding:4px 10px; border-radius:12px; font-size:0.8rem; font-weight:bold;">
+                      จัดแล้ว 0 / ${g.reqQty} ${g.unit}
+                    </div>
+                  </div>
+                  <div style="padding:8px 0;">
+                    ${prods.length === 0 ? `<div class="text-center text-muted" style="font-size:0.8rem; padding:10px">ไม่มีสินค้าที่อนุญาตในหมวดนี้</div>` : ''}
+                    ${prods.map(p => {
+                      const minQty = (g.minProds && g.minProds[p.id]) || 0;
+                      return `
+                      <div class="picking-item-row" style="border-bottom:none; margin-bottom:4px; padding:6px 14px; ${minQty > 0 ? 'background:#F0F4FF; border-radius:6px;' : ''}">
+                        <div class="item-img-mini">
+                          ${UI.image(p.imageUrl, '', 'width:36px;height:36px;object-fit:cover;border-radius:4px;')}
+                        </div>
+                        <div class="item-details">
+                          <div class="item-name" style="font-size:0.85rem">${p.name}</div>
+                          <div class="item-code" style="font-size:0.7rem">${p.code || ''} ${minQty > 0 ? `<span class="badge badge-primary" style="font-size:0.6rem">ล็อกขั้นต่ำ ${minQty}</span>` : ''}</div>
+                        </div>
+                        <div class="item-qty" style="display:flex; align-items:center; gap:6px">
+                          <input type="number" class="qty-input-inline set-input" data-task="${task.id}" data-cat="${normCat}" data-pid="${p.id}" data-unit="${p.unit}" value="${minQty}" min="${minQty}" onchange="if(this.value < ${minQty}) this.value = ${minQty}; PAGES.picking.validateSets('${task.id}')" oninput="PAGES.picking.validateSets('${task.id}')" style="font-weight:bold; color:var(--primary); font-size:1rem; border:1px solid var(--border); width:70px; text-align:center;" />
+                          <span class="qty-unit" style="font-size:0.8rem; font-weight:600">${p.unit}</span>
+                        </div>
+                      </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+
           </div>
 
           ${task.note ? `<div class="picking-note"><strong>หมายเหตุ:</strong> ${task.note}</div>` : ''}
@@ -128,29 +239,85 @@ PAGES['picking'] = {
               <span class="material-icons">cancel</span> ยกเลิก
             </button>
             <button class="btn btn-primary" onclick="PAGES['picking'].confirm('${task.id}')">
-              <span class="material-icons">check_circle</span> จัดของเสร็จสมบูรณ์
+              <span class="material-icons">check_circle</span> ยืนยันจัดของ
             </button>
           </div>
         </div>
       `;
     }).join('');
+    
+    // Auto-validate sets on initial render
+    setTimeout(() => {
+      this._tasks.forEach(t => this.validateSets(t.id));
+    }, 100);
+  },
+  
+  validateSets(taskId) {
+    const badges = document.querySelectorAll(`.set-cat-req-badge[data-task="${taskId}"]`);
+    let allValid = true;
+    
+    badges.forEach(badge => {
+      const cat = badge.dataset.cat;
+      const reqQty = parseInt(badge.dataset.req) || 0;
+      const inputs = document.querySelectorAll(`.set-input[data-task="${taskId}"][data-cat="${cat}"]`);
+      
+      let total = 0;
+      inputs.forEach(inp => total += (parseInt(inp.value) || 0));
+      
+      badge.innerHTML = `จัดแล้ว ${total} / ${reqQty} ${badge.innerHTML.split(' ')[4] || ''}`;
+      
+      if (total === reqQty) {
+        badge.style.background = '#E8F5E9';
+        badge.style.color = '#2E7D32';
+      } else {
+        badge.style.background = '#FFF3E0';
+        badge.style.color = '#E65100';
+        allValid = false;
+      }
+      badge.dataset.valid = (total === reqQty) ? '1' : '0';
+    });
+    
+    return allValid;
   },
 
   async confirm(id) {
-    const inputs = document.querySelectorAll(`.qty-input-inline[data-task="${id}"]`);
-    const updatedItems = Array.from(inputs).map(inp => ({
-      productId: inp.dataset.pid,
-      qty: parseInt(inp.value) || 0
-    }));
-
-    if (updatedItems.some(i => i.qty < 0)) return UI.toast('จำนวนสินค้าต้องไม่ติดลบ', 'warning');
+    const task = this._tasks.find(t => t.id === id);
+    if (!task) return;
     
-    const isZero = updatedItems.every(i => i.qty === 0);
-    const confirmMsg = isZero 
-      ? 'คุณระบุจำนวนเป็น 0 ทั้งหมด ระบบจะโอนสต็อกเป็น 0 และปิดรายการ คุณต้องการดำเนินการใช่หรือไม่?'
-      : 'กดยืนยันเมื่อจัดสินค้าใส่รถพนักงานเรียบร้อยแล้ว สต็อกจะถูกโอนตามจำนวนที่ระบุ';
+    // Check if Sets are completed
+    const badges = document.querySelectorAll(`.set-cat-req-badge[data-task="${id}"]`);
+    for (let badge of Array.from(badges)) {
+      if (badge.dataset.valid !== '1') {
+        return UI.toast(`กรุณาจัดสินค้าหมวด ${badge.dataset.cat} ให้ครบตามจำนวน (${badge.innerText})`, 'warning');
+      }
+    }
+    
+    let updatedItems = [];
+    
+    // Gather ALL inputs (both normal and set items)
+    const inputs = document.querySelectorAll(`.qty-input-inline[data-task="${id}"]`);
+    Array.from(inputs).forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) {
+        // Find existing product to aggregate quantities if same product is picked multiple times
+        const existing = updatedItems.find(i => i.productId === inp.dataset.pid);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          updatedItems.push({
+            productId: inp.dataset.pid,
+            qty: qty,
+            unit: inp.dataset.unit || 'หน่วย'
+          });
+        }
+      }
+    });
 
-    if (!await UI.confirm('ยืนยันรายการ', confirmMsg)) return;
+    if (updatedItems.length === 0 && Array.from(inputs).length > 0) {
+      if (!await UI.confirm('ยืนยันรายการ', 'คุณระบุจำนวนเป็น 0 ทั้งหมด ระบบจะโอนสต็อกเป็น 0 และปิดรายการ คุณต้องการดำเนินการใช่หรือไม่?')) return;
+    } else {
+      if (!await UI.confirm('ยืนยันรายการ', 'กดยืนยันเมื่อจัดสินค้าใส่รถพนักงานเรียบร้อยแล้ว สต็อกจะถูกโอนตามจำนวนที่ระบุ')) return;
+    }
 
     try {
       UI.loading(true);

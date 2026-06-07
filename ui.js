@@ -432,6 +432,7 @@ function getSidebarMenu(role) {
       roles: ['admin'],
       items: [
         { page: 'products', icon: 'inventory', label: 'จัดการสินค้า', roles: ['admin'] },
+        { page: 'sets', icon: 'collections_bookmark', label: 'จัดการจัดเซ็ต', roles: ['admin'] },
         { page: 'warehouses', icon: 'store', label: 'จัดการคลัง', roles: ['admin'] },
         { page: 'users', icon: 'group', label: 'จัดการผู้ใช้', roles: ['admin'] },
         { page: 'logs', icon: 'history', label: 'บันทึกระบบ', roles: ['admin'] },

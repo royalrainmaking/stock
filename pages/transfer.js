@@ -295,8 +295,12 @@ PAGES['transfer'] = {
     });
 
     const productsInStock = Object.values(grouped);
-    if (!productsInStock.length) return UI.toast('คลังนี้ไม่มีสินค้าคงเหลือ', 'warning');
 
+    // Inject Sets
+    // Wait, since we are showing tabs now and default is 'normal',
+    // We shouldn't inject sets into productsInStock initially.
+    // We can just call filterPicker() immediately after opening the modal.
+    
     // Sort by Master Product List order
     productsInStock.sort((a,b) => {
       const idxA = this._products.findIndex(p => p.id === a.productId);
@@ -304,11 +308,17 @@ PAGES['transfer'] = {
       return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
     });
 
+    PAGES.transfer._pickerType = 'normal'; // default
+    
     openModal('เลือกสินค้าที่จะเบิก', `
       <div class="mb-16">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary" id="tr-filter-normal" style="flex:1" onclick="PAGES.transfer.setFilterType('normal')">สินค้าปกติ</button>
+          <button class="btn btn-secondary" id="tr-filter-set" style="flex:1" onclick="PAGES.transfer.setFilterType('set')">สินค้าจัดเซ็ต</button>
+        </div>
         <div class="search-bar">
           <span class="material-icons">search</span>
-          <input type="text" id="tr-picker-query" placeholder="เบิกอะไรดี? ค้นหาชื่อหรือรหัส..." oninput="PAGES.transfer.filterPicker(this.value)" autofocus />
+          <input type="text" id="tr-picker-query" placeholder="เบิกอะไรดี? ค้นหาชื่อหรือรหัส..." oninput="PAGES.transfer.filterPicker()" autofocus />
         </div>
       </div>
       <div id="tr-picker-grid" class="product-picker-grid">
@@ -326,13 +336,13 @@ PAGES['transfer'] = {
           
           <input type="hidden" id="tr-pop-pid" />
           
-          <div class="form-group" style="margin-bottom:12px">
+          <div class="form-group" style="margin-bottom:12px; display:none">
             <label style="font-size:0.8rem;color:var(--text-secondary)">📦 จำนวน (ถาด)</label>
             <input type="number" id="tr-pop-trays" min="0" placeholder="0" style="font-size:1.2rem;height:45px;text-align:center;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" oninput="PAGES.transfer.popCalc()" />
           </div>
           
           <div class="form-group" style="margin-bottom:16px">
-            <label style="font-size:0.8rem;color:var(--text-secondary)">🍼 <span id="tr-pop-unit-label">จำนวน (เศษ)</span></label>
+            <label style="font-size:0.8rem;color:var(--text-secondary)">🍼 <span id="tr-pop-unit-label">จำนวน</span></label>
             <input type="number" id="tr-pop-units" min="0" placeholder="0" style="font-size:1.2rem;height:45px;text-align:center;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" oninput="PAGES.transfer.popCalc()" />
           </div>
           
@@ -357,86 +367,146 @@ PAGES['transfer'] = {
   renderPickerGrid(products) {
     if (!products.length) return '<div class="text-center p-20 text-muted">ไม่พบสินค้า</div>';
     return products.map(p => {
-      const st = PAGES['central-stock']._getExpiryStatus(p.nearestExp);
+      const st = p.isSet ? { color: 'var(--text-muted)' } : PAGES['central-stock']._getExpiryStatus(p.nearestExp);
       return `
-        <div class="picker-item" onclick="PAGES.transfer.showQtyInput('${p.id || p.productId}')">
+        <div class="picker-item" onclick="PAGES.transfer.showQtyInput('${p.id || p.productId}', ${p.isSet ? 'true' : 'false'})">
           ${UI.image(p.imageUrl, 'p-img')}
           <div class="p-info">
             <div class="p-code">${p.code || '-'}</div>
             <div class="p-name" style="font-size:0.82rem">${p.name}</div>
             <div class="p-cat" style="font-size:0.7rem">${p.category || '-'}</div>
-            <div style="font-size:0.8rem;margin-top:4px;color:var(--danger);font-weight:700">คงเหลือ: ${UI.currency(p.totalQty || p.stockQty, 0)} ${p.unit}</div>
-            <div style="font-size:0.7rem;color:${st.color};font-weight:700">📌 ล็อตที่ใกล้หมดอายุที่สุด: ${UI.dateStr(p.nearestExp) || '-'}</div>
+            ${p.isSet 
+              ? `<div style="font-size:0.8rem;margin-top:4px;color:var(--primary);font-weight:700">สินค้าจัดเซ็ต</div>`
+              : `<div style="font-size:0.8rem;margin-top:4px;color:var(--danger);font-weight:700">คงเหลือ: ${UI.currency(p.totalQty || p.stockQty, 0)} ${p.unit}</div>
+                 <div style="font-size:0.7rem;color:${st.color};font-weight:700">📌 ล็อตที่ใกล้หมดอายุที่สุด: ${UI.dateStr(p.nearestExp) || '-'}</div>`
+            }
           </div>
         </div>
       `;
     }).join('');
   },
 
-  showQtyInput(id) {
-    const s = this._centralStock.find(x => x.productId === id);
-    const p = s?.product;
-    if (!p) return;
+  showQtyInput(id, isSet = false) {
+    let p, totalQty = 0;
+    if (isSet) {
+      p = MASTER_DATA.sets.find(s => s.id === id);
+      if (!p) return;
+      p = { ...p, unit: 'เซ็ต', isSet: true };
+      totalQty = 999999;
+    } else {
+      const s = this._centralStock.find(x => x.productId === id);
+      p = s?.product;
+      if (!p) return;
+      totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
+    }
 
     document.getElementById('tr-pop-pid').value = p.id;
+    document.getElementById('tr-pop-pid').dataset.isSet = isSet ? 'true' : 'false';
     document.getElementById('tr-pop-title').textContent = p.name;
-    document.getElementById('tr-pop-tray-label').textContent = `บรรจุ 1 ถาด = ${p.unitsPerTray || 0} ${p.unit}`;
-    document.getElementById('tr-pop-unit-label').textContent = `จำนวน (เศษ/${p.unit || 'หน่วย'})`;
+    document.getElementById('tr-pop-tray-label').textContent = p.isSet ? 'ระบุจำนวนเซ็ตที่ต้องการเบิก' : `ระบุจำนวนที่ต้องการเบิก`;
+    document.getElementById('tr-pop-unit-label').textContent = `จำนวน (${p.unit || 'หน่วย'})`;
     document.getElementById('tr-pop-unit-text').textContent = p.unit || 'หน่วย';
-    const totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
-    document.getElementById('tr-pop-stock').textContent = `สต็อกคงเหลือรวม: ${UI.currency(totalQty, 0)} ${p.unit}`;
+    document.getElementById('tr-pop-stock').textContent = p.isSet ? `ไม่มีข้อจำกัดสต็อก (จัดตามจริงทีหลัง)` : `สต็อกคงเหลือรวม: ${UI.currency(totalQty, 0)} ${p.unit}`;
+
+    const trayInputDiv = document.getElementById('tr-pop-trays').parentElement;
+    if (p.isSet) {
+       document.getElementById('tr-pop-units').placeholder = 'ใส่จำนวนเซ็ต';
+    } else {
+       document.getElementById('tr-pop-units').placeholder = '0';
+    }
 
     document.getElementById('tr-pop-trays').value = '';
     document.getElementById('tr-pop-units').value = '';
     document.getElementById('tr-pop-total').textContent = 0;
 
     document.getElementById('tr-qty-popup').classList.remove('hidden');
-    setTimeout(() => document.getElementById('tr-pop-trays').focus(), 100);
+    setTimeout(() => {
+      if (p.isSet) document.getElementById('tr-pop-units').focus();
+      else document.getElementById('tr-pop-trays').focus();
+    }, 100);
   },
 
   popCalc() {
     const id = document.getElementById('tr-pop-pid').value;
-    const totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
-    if (totalQty === 0) return;
-    const s = this._centralStock.find(x => x.productId === id);
-    if (!s) return;
-    const p = s.product;
+    const isSet = document.getElementById('tr-pop-pid').dataset.isSet === 'true';
+    let p, totalQty = 0;
+    
+    if (isSet) {
+      p = MASTER_DATA.sets.find(s => s.id === id);
+      if (!p) return;
+      totalQty = 999999;
+    } else {
+      const s = this._centralStock.find(x => x.productId === id);
+      if (!s) return;
+      p = s.product;
+      totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
+    }
+    
     const trays = parseInt(document.getElementById('tr-pop-trays').value) || 0;
     const units = parseInt(document.getElementById('tr-pop-units').value) || 0;
-    const total = (trays * (p.unitsPerTray || 0)) + units;
+    const total = isSet ? units : (trays * (p.unitsPerTray || 0)) + units;
+    
     document.getElementById('tr-pop-total').textContent = UI.currency(total, 0);
 
     const totEl = document.getElementById('tr-pop-total');
-    if (total > totalQty) totEl.style.color = 'var(--danger)';
+    if (!isSet && total > totalQty) totEl.style.color = 'var(--danger)';
     else totEl.style.color = 'var(--primary)';
   },
 
   popAdd() {
     const id = document.getElementById('tr-pop-pid').value;
-    const totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
-    const s = this._centralStock.find(x => x.productId === id);
-    const p = s?.product;
+    const isSet = document.getElementById('tr-pop-pid').dataset.isSet === 'true';
+    let p, totalQty = 0;
+    
+    if (isSet) {
+      p = MASTER_DATA.sets.find(s => s.id === id);
+      if (!p) return;
+      p = { ...p, unit: 'เซ็ต', isSet: true };
+      totalQty = 999999;
+    } else {
+      totalQty = this._centralStock.filter(x => x.productId === id).reduce((a, b) => a + Number(b.qty), 0);
+      const s = this._centralStock.find(x => x.productId === id);
+      p = s?.product;
+    }
+    
     if (!p) return;
 
     const trays = parseInt(document.getElementById('tr-pop-trays').value) || 0;
     const units = parseInt(document.getElementById('tr-pop-units').value) || 0;
-    const total = (trays * (p.unitsPerTray || 0)) + units;
+    const total = isSet ? units : (trays * (p.unitsPerTray || 0)) + units;
 
     if (total <= 0) return UI.toast('กรุณาระบุจำนวน', 'warning');
-    if (total > totalQty) return UI.toast(`สต็อกรวมไม่เพียงพอ (คงเหลือ ${totalQty} ${p.unit})`, 'error');
+    if (!isSet && total > totalQty) return UI.toast(`สต็อกรวมไม่เพียงพอ (คงเหลือ ${totalQty} ${p.unit})`, 'error');
 
     // Add logic
-    const existing = this._items.find(i => i.productId === id);
+    const existing = this._items.find(i => (i.productId === id || i.setId === id));
     if (existing) {
-      if ((existing.qty + total) > totalQty) return UI.toast(`รวมแล้วเกินสต็อกรวมที่มี`, 'error');
-      existing.trays += trays;
-      existing.remUnits += units;
-      existing.qty += total;
+      if (!isSet && (existing.qty + total) > totalQty) return UI.toast(`รวมแล้วเกินสต็อกรวมที่มี`, 'error');
+      if (isSet) {
+        existing.qty += total;
+      } else {
+        existing.trays += trays;
+        existing.remUnits += units;
+        existing.qty += total;
+      }
     } else {
-      this._items.push({
-        productId: p.id,
-        trays, remUnits: units, qty: total, unit: p.unit, product: p
-      });
+      if (isSet) {
+        this._items.push({
+          isSet: true,
+          setId: p.id,
+          name: p.name,
+          code: p.code,
+          qty: total,
+          unit: 'เซ็ต',
+          rules: p.items,
+          product: p
+        });
+      } else {
+        this._items.push({
+          productId: p.id,
+          trays, remUnits: units, qty: total, unit: p.unit, product: p
+        });
+      }
     }
 
     UI.toast(`เพิ่ม ${p.name} เรียบร้อย`, 'success');
@@ -444,27 +514,62 @@ PAGES['transfer'] = {
     this.renderItems();
   },
 
-  filterPicker(query) {
-    const q = query.toLowerCase();
-    // Consolidated filter
-    const grouped = {};
-    const stockBatches = this._centralStock.filter(s => Number(s.qty) > 0);
-    stockBatches.forEach(s => {
-      const prod = s.product;
-      const pid = s.productId;
-      if (prod && (prod.name.toLowerCase().includes(q) || (prod.code || '').toLowerCase().includes(q) || (prod.category || '').toLowerCase().includes(q))) {
-        if (!grouped[pid]) {
-          grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
-        }
-        grouped[pid].totalQty += Number(s.qty);
-        if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
-          grouped[pid].nearestExp = s.expiryDate;
-        }
-      }
-    });
+  setFilterType(type) {
+    this._pickerType = type;
+    document.getElementById('tr-filter-normal').className = type === 'normal' ? 'btn btn-primary' : 'btn btn-secondary';
+    document.getElementById('tr-filter-set').className = type === 'set' ? 'btn btn-primary' : 'btn btn-secondary';
+    this.filterPicker();
+  },
 
-    const filtered = Object.values(grouped);
+  filterPicker() {
+    const query = document.getElementById('tr-picker-query')?.value || '';
+    const q = query.toLowerCase();
+    const type = this._pickerType || 'normal';
+    const filtered = [];
+
+    if (type === 'normal') {
+      const grouped = {};
+      const stockBatches = this._centralStock.filter(s => Number(s.qty) > 0);
+      stockBatches.forEach(s => {
+        const prod = s.product;
+        const pid = s.productId;
+        if (prod && (prod.name.toLowerCase().includes(q) || (prod.code || '').toLowerCase().includes(q) || (prod.category || '').toLowerCase().includes(q))) {
+          if (!grouped[pid]) {
+            grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
+          }
+          grouped[pid].totalQty += Number(s.qty);
+          if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
+            grouped[pid].nearestExp = s.expiryDate;
+          }
+        }
+      });
+      filtered.push(...Object.values(grouped));
+    }
+
+    // Inject Sets matching query
+    if (type === 'set' && MASTER_DATA.sets && MASTER_DATA.sets.length > 0) {
+      MASTER_DATA.sets.forEach(s => {
+        if (s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) {
+          filtered.push({
+            id: s.id,
+            productId: s.id,
+            code: s.code,
+            name: s.name,
+            category: 'เซ็ตสินค้า',
+            unit: 'เซ็ต',
+            totalQty: 'N/A',
+            nearestExp: '9999-12-31',
+            imageUrl: s.imageUrl || '',
+            isSet: true,
+            setRules: s.items
+          });
+        }
+      });
+    }
+
     document.getElementById('tr-picker-grid').innerHTML = this.renderPickerGrid(filtered);
+    
+    // Sort logic handled in initial load, but for search just show filtered
   },
 
   removeItem(idx) {
@@ -484,18 +589,17 @@ PAGES['transfer'] = {
         <table>
           <thead><tr>
             <th>#</th><th>สินค้า</th>
-            <th class="td-right">จำนวนเบิก (ถาด)</th>
-            <th class="td-right">เศษหน่วย</th>
-            <th class="td-right">รวมเบิกทั้งหมด</th>
+            <th class="td-right">จำนวนเบิก</th>
             <th class="td-center"></th>
           </tr></thead>
           <tbody>
             ${this._items.map((item, i) => `
               <tr>
                 <td>${i + 1}</td>
-                <td class="td-bold">${item.product?.name || item.productId}</td>
-                <td class="td-right">${UI.currency(item.trays, 0)} ถาด</td>
-                <td class="td-right">${UI.currency(item.remUnits, 0)} ${item.unit}</td>
+                <td class="td-bold">
+                  <div>${item.name || item.product?.name || item.productId}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal">${item.product?.category || (item.isSet ? 'เซ็ตสินค้า' : '-')}</div>
+                </td>
                 <td class="td-right fw-bold" style="color:var(--accent)">${UI.currency(item.qty, 0)} ${item.unit}</td>
                 <td class="td-center"><button class="btn btn-danger btn-xs" onclick="PAGES.transfer.removeItem(${i})"><span class="material-icons">close</span></button></td>
               </tr>
@@ -540,7 +644,10 @@ PAGES['transfer'] = {
         date: date,
         time: time,
         note: document.getElementById('tr-note')?.value,
-        items: this._items.map(i => ({ productId: i.productId, qty: i.qty, unit: i.unit })),
+        items: this._items.map(i => {
+          if (i.isSet) return { isSet: true, productId: i.setId, name: i.name, qty: i.qty, unit: i.unit, rules: i.rules };
+          return { productId: i.productId, qty: i.qty, unit: i.unit };
+        }),
       });
 
       UI.toast('สร้างรายการขอเบิกเรียบร้อยแล้ว ✅ รอพนักงานคลังจัดของ', 'success');

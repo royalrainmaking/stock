@@ -64,6 +64,12 @@ const API = {
   deleteProducts(productIds) { return this._post('deleteProducts', { productIds }); },
   saveProductOrder(productIds) { return this._post('saveProductOrder', { productIds }); },
 
+  // ── Sets ──────────────────────────────
+  getSets() { return this._call('getSets'); },
+  createSet(data) { return this._post('createSet', data); },
+  updateSet(data) { return this._post('updateSet', data); },
+  deleteSet(setId) { return this._post('deleteSet', { setId }); },
+
   // ── Warehouses ────────────────────────
   getWarehouses() { return this._call('getWarehouses'); },
   createWarehouse(data) { return this._post('createWarehouse', data); },
@@ -136,6 +142,7 @@ const API = {
 // Data is always fresh (no caching): call loadMasterData() each time a page needs it.
 const MASTER_DATA = {
   products: [],
+  sets: [],
   warehouses: [],
   suppliers: [],
   users: [],
@@ -144,6 +151,7 @@ const MASTER_DATA = {
   async load() {
     const res = await API.getMasterData();
     this.products = res.products || [];
+    this.sets = res.sets || [];
     this.warehouses = res.warehouses || [];
     this.suppliers = res.suppliers || [];
     this.users = res.users || [];
@@ -167,6 +175,9 @@ const DEMO_DATA = {
     { id: 'P003', code: 'P11501', name: '150ml ดีไลท์ น้ำตาลน้อย', category: '150ml', unit: 'ขวด', unitsPerCase: 24, costNoVat: 260.00, costVat: 278.20, empNoVat: 295.00, empVat: 315.65, fridgeNoVat: 318.00, fridgeVat: 340.26, sellPrice: 380.00, imageUrl: '' },
     { id: 'P004', code: 'P12100', name: '400ml บูลเบอร์รี่', category: '400ml', unit: 'ขวด', unitsPerCase: 12, costNoVat: 420.00, costVat: 449.40, empNoVat: 480.00, empVat: 513.60, fridgeNoVat: 510.00, fridgeVat: 545.70, sellPrice: 550.00, imageUrl: '' },
     { id: 'P005', code: 'P20100', name: '80g วุ้นมะพร้าว', category: '80g', unit: 'ถุง', unitsPerCase: 50, costNoVat: 100.00, costVat: 107.00, empNoVat: 115.00, empVat: 123.05, fridgeNoVat: 125.00, fridgeVat: 133.75, sellPrice: 140.00, imageUrl: '' },
+  ],
+  sets: [
+    { id: 'SET1', code: 'SET-001', name: 'Set 1 (85ml 9ขวด + 200ml 2ขวด)', items: [{ category: '85ml', qty: 9, unit: 'ขวด' }, { category: '200ml', qty: 2, unit: 'ขวด' }] }
   ],
   warehouses: [
     { id: 'W001', name: 'คลัง 1 (สาขา 00001)', type: 'central', location: 'DMP', active: true },
@@ -235,6 +246,7 @@ if (IS_DEMO) {
   };
   API.getUsers = () => Promise.resolve({ users: DEMO_DATA.users });
   API.getProducts = () => Promise.resolve({ products: DEMO_DATA.products });
+  API.getSets = () => Promise.resolve({ sets: DEMO_DATA.sets });
   API.getWarehouses = () => Promise.resolve({ warehouses: DEMO_DATA.warehouses });
   API.getCentralStock = (wid) => Promise.resolve({
     stock: DEMO_DATA.centralStock.filter(s => !wid || s.warehouseId === wid).map(s => ({
