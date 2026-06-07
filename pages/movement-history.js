@@ -255,7 +255,7 @@ PAGES['movement-history'] = {
                       </div>
                       <div>
                         <div class="fw-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
-                        <div style="font-size:0.75rem;color:var(--text-muted)">${p.code || ''}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
                       </div>
                     </div>
                   </td>

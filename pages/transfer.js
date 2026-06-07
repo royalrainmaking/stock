@@ -598,7 +598,7 @@ PAGES['transfer'] = {
                 <td>${i + 1}</td>
                 <td class="td-bold">
                   <div>${item.name || item.product?.name || item.productId}</div>
-                  <div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal">${item.product?.category || (item.isSet ? 'เซ็ตสินค้า' : '-')}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal"><span style="font-family:monospace">[${item.code || item.product?.code || '-'}]</span> ${item.product?.category || (item.isSet ? 'เซ็ตสินค้า' : '-')}</div>
                 </td>
                 <td class="td-right fw-bold" style="color:var(--accent)">${UI.currency(item.qty, 0)} ${item.unit}</td>
                 <td class="td-center"><button class="btn btn-danger btn-xs" onclick="PAGES.transfer.removeItem(${i})"><span class="material-icons">close</span></button></td>

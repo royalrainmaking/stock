@@ -542,7 +542,10 @@ PAGES['central-stock'] = {
       return `<tr>
                   <td class="text-muted">${i + 1}</td>
                   <td>${UI.image(p.product?.imageUrl, 'product-img')}</td>
-                  <td class="td-bold">${p.product?.name || p.productId}</td>
+                  <td>
+                    <div class="td-bold">${p.product?.name || p.productId}</div>
+                    <div style="font-size:0.65rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.product?.code || '-'}]</span> ${p.product?.category || ''}</div>
+                  </td>
                   <td style="font-size:0.8rem">${p.whName}</td>
                   <td><div style="min-width:140px">${batchHtml}</div></td>
                   <td class="td-right td-bold" style="color:${low ? 'var(--warning)' : 'var(--success)'}">${UI.currency(p.totalQty, 0)}</td>

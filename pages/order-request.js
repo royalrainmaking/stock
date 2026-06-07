@@ -69,7 +69,7 @@ PAGES['order-request'] = {
       this._users = ur.users || [];
       const sel = document.getElementById('or-product');
       if (sel) sel.innerHTML = '<option value="">-- เลือกสินค้า --</option>' +
-        this._products.map(p => `<option value="${p.id}" data-upc="${p.unitsPerCase||1}">${p.code} – ${p.name}</option>`).join('');
+        this._products.map(p => `<option value="${p.id}" data-upc="${p.unitsPerCase||1}">[${p.code||'-'}] ${p.name} (${p.category||''})</option>`).join('');
       this.renderHistory();
     } catch(e) { UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error'); }
   },
@@ -112,7 +112,10 @@ PAGES['order-request'] = {
         <tbody>
           ${this._items.map((item, i) => `
             <tr>
-              <td class="td-bold">${item.product?.name||item.productId}</td>
+              <td class="td-bold">
+                <div>${item.product?.name||item.productId}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:normal"><span style="font-family:monospace">[${item.product?.code||'-'}]</span> ${item.product?.category||''}</div>
+              </td>
               <td class="td-right">${UI.currency(item.qty,0)} ${item.unit}</td>
               <td><button class="btn btn-danger btn-xs" onclick="PAGES['order-request'].removeItem(${i})"><span class="material-icons">close</span></button></td>
             </tr>

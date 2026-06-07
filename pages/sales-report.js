@@ -8,6 +8,7 @@ PAGES['sales-report'] = {
   _rows: [],
   _warehouses: [],
   _selectedWh: '',
+  _products: [],
 
   async render() {
     const now = new Date();
@@ -74,8 +75,12 @@ PAGES['sales-report'] = {
     const end = document.getElementById('sr-end')?.value || this._endDate;
     const wh = document.getElementById('sr-wh')?.value || '';
     try {
-      const res = await API.getSalesReport(start, end, wh);
+      const [res, prodRes] = await Promise.all([
+        API.getSalesReport(start, end, wh),
+        API.getProducts()
+      ]);
       this._rows = res.rows || [];
+      this._products = prodRes.products || [];
       this.renderSummary();
       this.renderChart();
       this.renderTable();
@@ -158,7 +163,13 @@ PAGES['sales-report'] = {
                 <tr>
                   <td class="text-muted">${i+1}</td>
                   <td>${UI.dateStr(r.date)}</td>
-                  <td class="td-bold">${r.product}</td>
+                  <td class="td-bold">
+                    <div>${r.product}</div>
+                    ${(() => {
+                      const pFound = this._products.find(px => px.name === r.product);
+                      return `<div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal"><span style="font-family:monospace">[${pFound?.code||'-'}]</span> ${pFound?.category||''}</div>`;
+                    })()}
+                  </td>
                   <td style="font-size:0.82rem">${r.warehouseName}</td>
                   <td class="td-right">${UI.currency(r.units, 0)}</td>
                   <td class="td-right text-success fw-bold">฿${UI.currency(r.revenue)}</td>
@@ -182,7 +193,13 @@ PAGES['sales-report'] = {
                 const pct = Math.round(p.revenue/totalRev*100);
                 return `<tr>
                   <td>${i+1}</td>
-                  <td class="td-bold">${p.name}</td>
+                  <td class="td-bold">
+                    <div>${p.name}</div>
+                    ${(() => {
+                      const pFound = this._products.find(px => px.name === p.name);
+                      return `<div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal"><span style="font-family:monospace">[${pFound?.code||'-'}]</span> ${pFound?.category||''}</div>`;
+                    })()}
+                  </td>
                   <td class="td-right">${UI.currency(p.units, 0)}</td>
                   <td class="td-right text-success fw-bold">฿${UI.currency(p.revenue)}</td>
                   <td style="min-width:120px">

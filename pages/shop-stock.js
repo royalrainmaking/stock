@@ -225,7 +225,10 @@ PAGES['shop-stock'] = {
         <div class="ss-product-group">
           <div class="ss-product-header">
             ${UI.image(p.imageUrl, 'ss-item-img', 'width:24px;height:24px')}
-            <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
+            <div>
+              <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
+              <div style="font-size:0.6rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
+            </div>
           </div>
           <div class="ss-batch-list">
             ${g.batches.map(b => {
@@ -269,7 +272,10 @@ PAGES['shop-stock'] = {
         <div class="ss-product-group">
           <div class="ss-product-header">
             ${UI.image(p.imageUrl, 'ss-item-img', 'width:24px;height:24px')}
-            <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
+            <div>
+              <div class="ss-item-title" style="font-size:0.75rem">${p.name}</div>
+              <div style="font-size:0.6rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
+            </div>
           </div>
           <div class="ss-batch-list">
             ${g.batches.map(b => {
@@ -367,7 +373,7 @@ PAGES['shop-stock'] = {
     const qtyInput = document.getElementById(type === 'move' ? 'mv-qty' : (type === 'return' ? 'rt-qty' : 'sw-qty'));
     const qty = Number(qtyInput.value);
     
-    const item = { type, productId: pid, productName: p.name, qty, price: p.shopWholesale || 0, unit: p.unit };
+    const item = { type, productId: pid, productName: p.name, productCode: p.code, productCategory: p.category, qty, price: p.shopWholesale || 0, unit: p.unit };
     
     if (type === 'move') {
       const selectedExp = document.getElementById('mv-batch').value;
@@ -404,6 +410,7 @@ PAGES['shop-stock'] = {
           <span class="type-tag tag-${it.type}">${it.type === 'move' ? 'IN' : (it.type === 'return' ? 'OUT' : 'SWAP')}</span>
           <div style="flex:1">
             <div class="fw-bold">${it.productName}</div>
+            <div class="text-muted" style="font-size:0.6rem"><span style="font-family:monospace">[${it.productCode || '-'}]</span> ${it.productCategory || ''}</div>
             <div class="text-muted" style="font-size:0.6rem">${it.qty} ${it.unit} @ ${UI.currency(it.price)}</div>
           </div>
           <div class="fw-bold">${it.type === 'swap' ? '-' : UI.currency(amt)}</div>
@@ -559,7 +566,8 @@ PAGES['shop-stock'] = {
                       <span class="dn-item-type tag-${it.type}-dn">${it.type === 'move' ? 'IN' : (it.type === 'return' ? 'OUT' : 'SWAP')}</span>
                       ${it.productName}
                     </div>
-                    <div style="font-size:0.65rem; color:var(--text-muted); margin-top:3px">ล็อต: ${UI.dateStr(it.expiryDate || it.newExpiry)} | @ ฿${UI.currency(it.price)}</div>
+                    <div style="font-size:0.65rem; color:var(--text-muted); margin-top:3px"><span style="font-family:monospace">[${it.productCode || '-'}]</span> ${it.productCategory || ''}</div>
+                    <div style="font-size:0.65rem; color:var(--text-muted)">ล็อต: ${UI.dateStr(it.expiryDate || it.newExpiry)} | @ ฿${UI.currency(it.price)}</div>
                   </td>
                   <td style="text-align:right">
                     <span class="dn-item-qty">${it.qty}</span> <small style="color:var(--text-muted)">${it.unit}</small>
@@ -674,6 +682,10 @@ PAGES['shop-stock'] = {
                         <tr style="border-bottom:1px solid var(--bg-base)">
                           <td style="padding:6px 0">
                             <div class="fw-bold">${it.productName}</div>
+                            <div class="text-muted" style="font-size:0.65rem">
+                               <span style="font-family:monospace">[${it.productCode || PAGES['shop-stock']._products.find(p => p.id === it.productId)?.code || '-'}]</span> 
+                               ${it.productCategory || PAGES['shop-stock']._products.find(p => p.id === it.productId)?.category || ''}
+                            </div>
                             <div class="text-muted" style="font-size:0.6rem">${it.note || ''}</div>
                           </td>
                           <td style="text-align:right; padding:6px 0">${it.qty} ${it.unit}</td>

@@ -190,7 +190,10 @@ PAGES['billing-history'] = {
             <tbody>
               ${items.map(it => `
                 <tr>
-                  <td class="fw-bold">${it.productName || it.productId}</td>
+                  <td>
+                    <div class="fw-bold">${it.productName || it.productId}</div>
+                    <div class="text-muted" style="font-size:0.65rem">[${it.productCode || '-'}] ${it.productCategory || ''}</div>
+                  </td>
                   <td class="td-right">${UI.currency(it.sold, 0)} ${it.unit || ''}</td>
                   <td class="td-right">฿${UI.currency(it.pricePerUnit)}</td>
                   <td class="td-right text-primary-color fw-bold">฿${UI.currency(it.sold * it.pricePerUnit)}</td>

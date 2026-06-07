@@ -138,7 +138,10 @@ PAGES['billing'] = {
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed rgba(0,0,0,0.05)">
                 <div style="display:flex; align-items:center; gap:8px">
                   ${UI.image(s.product?.imageUrl, '', 'width:24px; height:24px; border-radius:4px; object-fit:cover; border:1px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.05)')}
-                  <span style="font-weight:600; color:var(--text-primary)">${s.product?.name}</span>
+                  <div style="display:flex; flex-direction:column;">
+                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem">${s.product?.name}</span>
+                    <span style="font-size:0.65rem; color:var(--text-muted)"><span style="font-family:monospace">[${s.product?.code || '-'}]</span> ${s.product?.category || ''}</span>
+                  </div>
                 </div>
                 <span style="font-weight:800; color:var(--primary)">${sold} <small style="font-weight:400; color:var(--text-muted)">${s.product?.unit || 'ขวด'}</small></span>
               </div>
@@ -173,6 +176,7 @@ PAGES['billing'] = {
                   <td>${UI.image(s.product?.imageUrl, '', 'width:36px; height:36px; border-radius:4px; object-fit:cover')}</td>
                   <td>
                     <div class="fw-bold">${s.product?.name}</div>
+                    <div class="text-muted" style="font-size:0.65rem"><span style="font-family:monospace">[${s.product?.code || '-'}]</span> ${s.product?.category || ''}</div>
                     <div class="text-muted" style="font-size:0.6rem">@ ฿${UI.currency(s.product?.sellWholesale)}</div>
                   </td>
                   <td class="td-right">${s.qty}</td>
@@ -202,7 +206,7 @@ PAGES['billing'] = {
     try {
       UI.loading(true);
       const items = b._stock.map(s => ({
-        productId: s.productId, productName: s.product?.name, unit: s.product?.unit,
+        productId: s.productId, productName: s.product?.name, productCode: s.product?.code, productCategory: s.product?.category, unit: s.product?.unit,
         qty: s.qty, consigned: s.consigned || 0, sold: s.qty - (s.consigned || 0),
         pricePerUnit: s.product?.sellWholesale || 0, imageUrl: s.product?.imageUrl,
         expiryDate: s.expiryDate
@@ -238,7 +242,7 @@ PAGES['billing'] = {
                 <tr>
                   <td>
                     <div class="fw-bold" style="font-size:0.85rem">${it.productName}</div>
-                    <div class="text-muted" style="font-size:0.65rem">@ ฿${UI.currency(it.pricePerUnit)}</div>
+                    <div class="text-muted" style="font-size:0.65rem">[${it.productCode || '-'}] ${it.productCategory || ''} | @ ฿${UI.currency(it.pricePerUnit)}</div>
                   </td>
                   <td style="text-align:right; white-space:nowrap">${it.sold} <small style="color:var(--text-muted)">${it.unit || 'ขวด'}</small></td>
                   <td style="text-align:right; font-weight:700">฿${UI.currency(it.sold * it.pricePerUnit)}</td>

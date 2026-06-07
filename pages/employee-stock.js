@@ -312,6 +312,7 @@ PAGES['employee-stock'] = {
           <div>
             <div style="font-size:0.75rem;color:var(--primary);font-weight:700">${p.product?.code || '-'}</div>
             <div style="font-weight:800;font-size:1.1rem;line-height:1.2">${p.product?.name || p.productId}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted)">${p.product?.category || ''}</div>
           </div>
         </div>
         
@@ -380,7 +381,10 @@ PAGES['employee-stock'] = {
               return `<tr>
                 <td class="text-muted">${i+1}</td>
                 <td>${UI.image(p.product?.imageUrl, 'product-img')}</td>
-                <td class="td-bold">${p.product?.name || p.productId}</td>
+                <td>
+                  <div class="td-bold">${p.product?.name || p.productId}</div>
+                  <div style="font-size:0.65rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.product?.code || '-'}]</span> ${p.product?.category || ''}</div>
+                </td>
                 <td><div style="min-width:160px">${batchHtml}</div></td>
                 <td class="td-right td-bold">${UI.currency(qty, 0)}</td>
                 <td class="td-right text-warning">${UI.currency(con, 0)}</td>

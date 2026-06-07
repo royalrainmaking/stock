@@ -245,7 +245,10 @@ PAGES['tax-invoice'] = {
             ${items.map((it, idx) => `
               <tr>
                 <td style="text-align:center">${idx + 1}</td>
-                <td>${it.productName || it.productId}</td>
+                <td>
+                  <div style="font-weight:bold">${it.productName || it.productId}</div>
+                  <div style="font-size:0.75rem;color:#666"><span style="font-family:monospace">[${it.productCode || '-'}]</span> ${it.productCategory || ''}</div>
+                </td>
                 <td style="text-align:center">${it.totalSold} ${it.unit || 'ขวด'}</td>
                 <td style="text-align:right">฿${UI.currency(it.pricePerUnit)}</td>
                 <td style="text-align:right">฿${UI.currency(it.totalAmt)}</td>

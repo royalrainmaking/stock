@@ -126,7 +126,13 @@ PAGES['dashboard'] = {
                         const pFound = this._products.find(px => px.name === p.name);
                         return UI.image(pFound?.imageUrl, 'product-img', 'width:32px;height:32px;border-radius:4px');
                       })()}
-                      <span>${p.name}</span>
+                      <div>
+                        <div class="td-bold">${p.name}</div>
+                        ${(() => {
+                          const pFound = this._products.find(px => px.name === p.name);
+                          return `<div style="font-size:0.75rem;color:var(--text-muted);font-weight:normal"><span style="font-family:monospace">[${pFound?.code||'-'}]</span> ${pFound?.category||''}</div>`;
+                        })()}
+                      </div>
                     </div>
                   </td>
                   <td class="td-right">${UI.currency(p.units, 0)}</td>

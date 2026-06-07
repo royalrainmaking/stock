@@ -299,8 +299,9 @@ PAGES['consign'] = {
         <div class="picker-item no-hover" style="cursor:default; height:auto; min-height:180px">
           ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9')}
           <div class="p-info" style="width:100%">
-            <div class="p-code">${p?.code || '-'}</div>
-            <div class="p-name" style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-bottom:8px">${p?.name || g.product.id}</div>
+            <div class="p-code" style="font-family:monospace; color:var(--primary)">${p?.code || '-'}</div>
+            <div class="p-name" style="font-size:0.9rem; font-weight:700; color:var(--text-main)">${p?.name || g.product.id}</div>
+            <div class="p-cat" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px">${p?.category || '-'}</div>
             
             <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; border-bottom:1px solid var(--border-light); padding-bottom:4px">ล็อตสินค้าที่มี:</div>
             <div class="batch-selector-container">
@@ -412,7 +413,10 @@ PAGES['consign'] = {
           ${this._items.map((item, i) => `
             <tr>
               <td>${i+1}</td>
-              <td class="td-bold">${item.product?.name||item.productId}</td>
+              <td class="td-bold">
+                <div>${item.product?.name||item.productId}</div>
+                <div style="font-size:0.75rem; color:var(--text-muted); font-weight:normal"><span style="font-family:monospace">[${item.product?.code||'-'}]</span> ${item.product?.category||''}</div>
+              </td>
               <td style="font-size:0.85rem; color:var(--text-secondary)">${UI.dateStr(item.expiryDate) || '-'}</td>
               <td class="td-right text-warning fw-bold">${UI.currency(item.qty,0)}</td>
               <td>${item.unit}</td>

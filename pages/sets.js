@@ -220,7 +220,7 @@ PAGES['sets'] = {
                   <img src="${p.imageUrl || 'https://via.placeholder.com/60?text=No+Img'}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;flex-shrink:0;border:1px solid #eee" onerror="this.src='https://via.placeholder.com/60?text=No+Img'" />
                   <div style="display:flex; flex-direction:column; overflow:hidden;">
                     <div style="font-weight:600; font-size:0.8rem; color:var(--text-primary); line-height:1.2;">${p.name}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">รหัส: ${p.code}</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
                   </div>
                 </label>
               `;
