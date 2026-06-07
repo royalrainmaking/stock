@@ -4,7 +4,7 @@
 
 const CONFIG = {
   // ── Google Apps Script URL (Copy URL ที่ได้จากการ Deploy Web App มาวางที่นี่) ───
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbzDhh99m31My0DOoAAR-MkZ3okVpZ0vGXL82oYwKnVgeT3Ek7ltUlvuwSbLa14AisylGg/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbwZCi3K4fQPaovJhaA2Xw3IUO2UgHInIthRus40dpl7gKrqfMhdRlAKzXBo7iUmkZ23kQ/exec',
 
   // ── Gemini API Key ────────────────────────────────────────
   // ย้ายไปไว้ที่ Code.gs ฝั่ง Backend เพื่อความปลอดภัยแล้ว
