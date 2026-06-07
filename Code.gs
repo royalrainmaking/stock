@@ -14,6 +14,9 @@
 const SPREADSHEET_ID = '1H1GVv2yVPfdNh1Z2ZR5K7-hJ52gPXFZauPDpE7c-Pr4';
 const VAT_RATE = 0.07;
 
+// ── Gemini API Key ───────────────────────────────────────────────────
+const GEMINI_API_KEY = 'AQ.Ab8RN6IOHqIQ0AQan5-lG0OU74QOh_QoEujp969qq-geMYOvxQ';
+
 // Sheet names
 const SN = {
   USERS: 'Users',
@@ -2296,7 +2299,6 @@ function askForPermissions() {
 function scanBill(user, data) {
   requireRole(user, 'admin', 'stock');
   if (!data.base64) throw new Error('ไม่พบข้อมูลรูปภาพ');
-  if (!data.apiKey) throw new Error('ไม่พบ API Key');
 
   try {
     let b64 = data.base64;
@@ -2306,9 +2308,7 @@ function scanBill(user, data) {
       mimeType = parts[0].replace('data:', '').replace(';', '');
       b64 = parts[1];
     }
-    
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent`;
-    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
     const payload = {
       contents: [{
         parts: [
@@ -2316,14 +2316,18 @@ function scanBill(user, data) {
           { inline_data: { mime_type: mimeType, data: b64 } }
         ]
       }],
-      generationConfig: { temperature: 0, maxOutputTokens: 1024 }
+      generationConfig: { 
+        temperature: 0, 
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json"
+      }
     };
 
     const options = {
       method: 'post',
       contentType: 'application/json',
       headers: {
-        'x-goog-api-key': data.apiKey
+        'x-goog-api-key': GEMINI_API_KEY
       },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
