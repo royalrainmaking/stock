@@ -149,29 +149,8 @@ PAGES['employee-stock'] = {
     const container = document.getElementById('es-wh-selector');
     if (!container) return;
 
-    const isAllActive = !this._selectedWh;
-    const allActiveStyle = isAllActive 
-      ? 'border-color:var(--primary); background:var(--bg-card); box-shadow:var(--shadow-lg); transform:translateY(-2px)' 
-      : 'border-color:var(--border-light); background:transparent';
-    const allAvatarHtml = `
-      <div style="
-        width:42px; height:42px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-dark));
-        display:flex; align-items:center; justify-content:center; color:#fff
-      ">
-        <span class="material-icons" style="font-size:20px">people</span>
-      </div>
-    `;
-
-    let html = `
-      <div class="avatar-select-item" onclick="PAGES['employee-stock'].setWh('')" style="
-        display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; padding:6px 12px;
-        border-radius:12px; border:2px solid; transition:all 0.2s; min-width:90px; text-align:center; ${allActiveStyle}
-      " onpointerenter="this.style.borderColor='var(--primary)'" onpointerleave="this.style.borderColor='${isAllActive ? 'var(--primary)' : 'var(--border-light)'}'">
-        ${allAvatarHtml}
-        <div style="font-size:0.75rem; font-weight:700; color:${isAllActive ? 'var(--primary)' : 'var(--text-secondary)'}">ทุกพนักงาน</div>
-      </div>
-    `;
-
+    let html = '';
+    
     this._warehouses.forEach(w => {
       const isActive = this._selectedWh === w.id;
       const activeStyle = isActive 
@@ -197,11 +176,19 @@ PAGES['employee-stock'] = {
   },
 
   renderContent() {
-    const data = this._allStock.filter(d =>
-      (!this._selectedWh || d.warehouse.id === this._selectedWh)
-    );
+    if (!this._selectedWh) {
+      document.getElementById('es-content').innerHTML = UI.emptyState(
+        'person_search', 
+        'กรุณาเลือกพนักงาน', 
+        'คลิกที่รูปโปรไฟล์พนักงานด้านบนเพื่อดูข้อมูลคลังสินค้าและยอดขายสะสม'
+      );
+      return;
+    }
+
+    const data = this._allStock.filter(d => d.warehouse.id === this._selectedWh);
+    
     if (!data.length) {
-      document.getElementById('es-content').innerHTML = UI.emptyState('person_pin', 'ไม่มีคลังพนักงาน', 'สร้างคลังพนักงานก่อนในหน้า "จัดการคลัง"');
+      document.getElementById('es-content').innerHTML = UI.emptyState('person_pin', 'ไม่พบข้อมูล', 'ไม่มีข้อมูลคลังสินค้าสำหรับพนักงานที่เลือก');
       return;
     }
 
@@ -260,6 +247,9 @@ PAGES['employee-stock'] = {
               </div>
             </div>
             <div style="display:flex;gap:10px;align-items:center">
+               <button class="btn btn-secondary btn-sm" onclick="PAGES['employee-stock'].viewDailyWithdrawal('${wh.id}', '${emp.displayName || wh.name}')" title="ดูประวัติการเบิกรายวันแยกตามครั้ง">
+                 <span class="material-icons">history</span> ประวัติการเบิก
+               </button>
                <div class="badge badge-blue" style="padding:6px 14px;font-size:0.95rem">ยอดส่งเงิน: ฿${UI.currency(totalWholesale, 2)}</div>
                <div class="badge badge-pink" style="padding:6px 14px;font-size:0.95rem">ค่าคอมฯ: ฿${UI.currency(totalCommission, 2)}</div>
             </div>
@@ -281,7 +271,7 @@ PAGES['employee-stock'] = {
     const sold = qty - p.totalConsigned;
     const wholesalePrice = p.product?.sellWholesale || 0;
     const commissionPrice = p.product?.sellCommission || 0;
-    const barColor = qty === 0 ? 'var(--danger)' : qty <= 5 ? 'var(--warning)' : 'var(--success)';
+    const barColor = qty === 0 ? 'var(--danger)' : 'var(--primary)';
 
     const batchRows = p.batches.map(b => {
       const st = this._getExpiryStatus(b.expiryDate);
@@ -304,7 +294,7 @@ PAGES['employee-stock'] = {
     }).join('');
 
     return `
-      <div style="background:#fff;border:1.5px solid ${qty <= 5 ? 'var(--warning)' : 'var(--border)'};border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)">
         <div style="display:flex;gap:12px">
           <div style="width:50px;height:50px;flex-shrink:0;background:var(--bg-card2);border-radius:10px;border:1px solid var(--border-light);overflow:hidden;display:flex;align-items:center;justify-content:center">
              ${UI.image(p.product?.imageUrl, 'product-img')}
@@ -316,14 +306,18 @@ PAGES['employee-stock'] = {
           </div>
         </div>
         
-        <div style="background:var(--bg-card2);padding:12px;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg-card2);padding:12px;border-radius:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
           <div style="border-right:1px solid var(--border)">
-             <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase">ถือครองรวม</div>
-             <div style="font-size:1.6rem;font-weight:900;color:${barColor};line-height:1">${UI.currency(qty, 0)} <small style="font-weight:400;font-size:0.85rem">${p.unit}</small></div>
+             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase">ถือครอง</div>
+             <div style="font-size:1.3rem;font-weight:900;color:${barColor};line-height:1">${UI.currency(qty, 0)} <small style="font-weight:400;font-size:0.75rem">${p.unit}</small></div>
           </div>
-          <div style="padding-left:4px">
-             <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase">ขายสุทธิรวม</div>
-             <div style="font-size:1.6rem;font-weight:900;color:var(--success);line-height:1">${UI.currency(sold, 0)} <small style="font-weight:400;font-size:0.85rem;color:var(--text-secondary)">${p.unit}</small></div>
+          <div style="border-right:1px solid var(--border);padding-left:6px">
+             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase">ฝากคืน</div>
+             <div style="font-size:1.3rem;font-weight:900;color:var(--warning);line-height:1">${UI.currency(p.totalConsigned || 0, 0)} <small style="font-weight:400;font-size:0.75rem;color:var(--text-secondary)">${p.unit}</small></div>
+          </div>
+          <div style="padding-left:6px">
+             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase">ขายสุทธิ</div>
+             <div style="font-size:1.3rem;font-weight:900;color:var(--success);line-height:1">${UI.currency(sold, 0)} <small style="font-weight:400;font-size:0.75rem;color:var(--text-secondary)">${p.unit}</small></div>
           </div>
         </div>
 
@@ -404,5 +398,264 @@ PAGES['employee-stock'] = {
         </table>
       </div>
     `;
+  },
+
+  async viewDailyWithdrawal(whId, empName) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const body = `
+      <div style="margin-bottom:16px; background:var(--bg-card2); padding:16px; border-radius:12px; display:flex; align-items:center; gap:12px;">
+        <label style="font-weight:bold; margin:0">เลือกวันที่:</label>
+        <input type="date" id="es-dw-date" class="form-control" value="${today}" onchange="PAGES['employee-stock'].loadDailyWithdrawal('${whId}')" style="max-width:200px">
+      </div>
+      <div id="es-dw-content">
+        ${UI.spinner()}
+      </div>
+    `;
+    
+    openModal(`ประวัติการเบิก: ${empName}`, body, `<button class="btn btn-secondary" onclick="closeModal()">ปิด</button>`, '700px');
+    
+    this.loadDailyWithdrawal(whId);
+  },
+
+  async loadDailyWithdrawal(whId) {
+    const contentDiv = document.getElementById('es-dw-content');
+    if (!contentDiv) return;
+    
+    const dateStr = document.getElementById('es-dw-date').value;
+    if (!dateStr) return;
+    
+    try {
+      contentDiv.innerHTML = UI.spinner();
+      const res = await API.getOrders();
+      const orders = res.orders || [];
+      
+      // Filter for withdrawals to this employee warehouse on the selected date
+      const dwOrders = orders.filter(o => 
+        (o.id.startsWith('REQ') || o.id.startsWith('TR')) &&
+        String(o.toWhId).trim() === String(whId).trim() &&
+        o.createdAt && o.createdAt.startsWith(dateStr)
+      );
+      
+      this._currentOrders = dwOrders; // Store locally for printing
+      
+      if (dwOrders.length === 0) {
+        contentDiv.innerHTML = UI.emptyState('history', `ไม่พบรายการเบิกในวันที่ ${UI.dateStr(dateStr)}`, 'พนักงานคนนี้ไม่มีรายการเบิกสินค้าในวันที่คุณเลือก');
+        return;
+      }
+      
+      // Sort by time (newest first or oldest first? let's do chronological: oldest first)
+      dwOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      
+      let html = `<div style="font-weight:700; margin-bottom:16px; color:var(--primary); font-size:1.1rem">
+        📌 ในวันที่ ${UI.dateStr(dateStr)} มีการเบิกทั้งหมด ${dwOrders.length} ครั้ง
+      </div>`;
+      
+      dwOrders.forEach((o, index) => {
+        const timeStr = UI.dateTimeParts(o.createdAt).time;
+        
+        let statusBadge = '';
+        if (o.status === 'pending') statusBadge = '<span class="badge badge-yellow">รอจัดสินค้า</span>';
+        else if (o.status === 'completed') statusBadge = '<span class="badge badge-green">จัดเสร็จแล้ว</span>';
+        else if (o.status === 'rejected') statusBadge = '<span class="badge badge-red">ถูกปฏิเสธ</span>';
+        
+        const itemsHtml = (o.items || []).map(it => {
+          const p = this._products.find(x => x.id === it.productId) || {};
+          return `
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed var(--border-light); font-size:0.9rem;">
+              <div style="display:flex; align-items:center; gap:8px">
+                 ${UI.image(p.imageUrl, '', 'width:32px;height:32px;object-fit:cover;border-radius:4px;')}
+                 <div>
+                   <div style="font-weight:600">${p.name || it.productId}</div>
+                   <div style="font-size:0.7rem;color:var(--text-muted)">${p.category || ''}</div>
+                 </div>
+              </div>
+              <div style="font-weight:800; color:var(--primary); font-size:1.1rem; display:flex; align-items:center;">
+                 ${it.qty} <small style="font-weight:400; font-size:0.8rem; margin-left:4px">${it.unit || p.unit || 'หน่วย'}</small>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        html += `
+          <div style="background:#fff; border:1px solid var(--border); border-radius:12px; margin-bottom:16px; box-shadow:var(--shadow-sm); overflow:hidden;">
+            <div style="background:var(--bg-card2); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border);">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div style="background:var(--primary); color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:0.9rem">
+                  ${index + 1}
+                </div>
+                <div>
+                  <div style="font-weight:700; color:var(--text-primary); font-size:0.95rem">เวลา ${timeStr} น.</div>
+                  <div style="font-size:0.7rem; color:var(--text-muted)">เลขที่รายการ: ${o.id}</div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px">
+                ${statusBadge}
+                <button class="btn btn-secondary btn-sm" onclick="PAGES['employee-stock'].printOrderBill('${o.id}')" title="พิมพ์บิล">
+                  <span class="material-icons" style="font-size:16px">print</span> พิมพ์บิล
+                </button>
+              </div>
+            </div>
+            <div style="padding:8px 16px;">
+              ${itemsHtml}
+              ${o.note ? `<div style="margin-top:12px; padding:10px; background:#FEF9C3; border-radius:8px; font-size:0.85rem; color:#854D0E">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle">info</span> <strong>หมายเหตุ:</strong> ${o.note}
+              </div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      
+      contentDiv.innerHTML = html;
+      
+    } catch (e) {
+      contentDiv.innerHTML = `<div class="alert alert-danger"><span class="material-icons">error</span> ${e.message}</div>`;
+    }
+  },
+
+  async printOrderBill(orderId) {
+    try {
+      const order = (this._currentOrders || []).find(o => o.id === orderId);
+      if (!order) throw new Error('ไม่พบข้อมูลบิล โปรดโหลดหน้านี้ใหม่');
+      
+      UI.loading(true);
+      if (!MASTER_DATA._loaded) await MASTER_DATA.load();
+      
+      const products = MASTER_DATA.products || [];
+      const warehouses = MASTER_DATA.warehouses || [];
+      
+      const fromWh = warehouses.find(w => w.id === order.fromWhId) || { name: order.fromWhId };
+      const toWh = warehouses.find(w => w.id === order.toWhId) || { name: order.toWhId };
+      
+      let totalQty = 0;
+      let totalAmount = 0;
+      
+      const itemsHtml = (order.items || []).map((it, idx) => {
+        const p = products.find(x => x.id === it.productId) || {};
+        const price = p.sellWholesale || 0;
+        const qty = Number(it.qty) || 0;
+        const rowTotal = price * qty;
+        totalQty += qty;
+        totalAmount += rowTotal;
+        return `
+          <tr>
+            <td>${idx + 1}. ${p.name || it.productId}</td>
+            <td class="text-right">${qty}</td>
+            <td class="text-right">${UI.currency(price, 2)}</td>
+            <td class="text-right">${UI.currency(rowTotal, 2)}</td>
+          </tr>
+        `;
+      }).join('');
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>ใบเบิกสินค้า ${order.id}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+            body { font-family: 'Sarabun', sans-serif; font-size: 14px; margin: 0; padding: 20px; color: #000; background: #f5f5f5; }
+            .bill-wrapper { max-width: 480px; margin: 0 auto; background: #fff; border: 1px solid #ddd; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; }
+            @media print {
+              body { background: #fff; padding: 0; margin: 0; }
+              .bill-wrapper { border: none; box-shadow: none; max-width: 100%; padding: 0; margin: 0; }
+              .no-print { display: none !important; }
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .header h2 { margin: 0 0 5px 0; font-size: 22px; font-weight: 700; }
+            .header p { margin: 0 0 15px 0; font-size: 14px; color: #555; }
+            .info-box { border-bottom: 2px dashed #000; padding-bottom: 15px; margin-bottom: 15px; font-size: 14px; line-height: 1.6; }
+            .info-row { display: flex; justify-content: space-between; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+            th { border-bottom: 2px solid #000; padding: 8px 0; text-align: left; font-weight: 600; }
+            td { padding: 8px 0; vertical-align: top; border-bottom: 1px dashed #ccc; }
+            th.text-right, td.text-right { text-align: right; }
+            .summary-box { border-top: 2px solid #000; margin-top: -20px; padding-top: 10px; }
+            .summary-row { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 5px; }
+            .grand-total { font-weight: 700; font-size: 18px; border-bottom: 3px double #000; padding-bottom: 5px; }
+            .signatures { margin-top: 40px; display: flex; justify-content: space-between; text-align: center; }
+            .sig-box { width: 45%; }
+            .sig-line { border-bottom: 1px solid #000; height: 40px; margin-bottom: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="no-print text-center" style="margin-bottom:20px;">
+            <button onclick="window.print()" style="padding:10px 20px; font-size:16px; font-family:'Sarabun'; background:#1976d2; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow:0 2px 5px rgba(0,0,0,0.2);">🖨️ พิมพ์บิล</button>
+            <button onclick="window.close()" style="padding:10px 20px; font-size:16px; font-family:'Sarabun'; background:#e0e0e0; color:#333; border:none; border-radius:6px; cursor:pointer; font-weight:bold; margin-left:10px;">ปิดหน้าต่าง</button>
+          </div>
+          <div class="bill-wrapper">
+            <div class="header text-center">
+              <h2>ใบเบิกสินค้า / ใบส่งของ</h2>
+              <p>เอกสารแสดงรายการเบิกสินค้าให้พนักงาน</p>
+            </div>
+            <div class="info-box">
+              <div class="info-row">
+                <div><b>เลขที่:</b> ${order.id}</div>
+                <div><b>วันที่:</b> ${UI.dateStr(order.createdAt)}</div>
+              </div>
+              <div class="info-row">
+                <div><b>ผู้ขอเบิก (พนักงาน):</b> ${order.requestedBy || toWh.employeeName || toWh.name}</div>
+                <div><b>เวลา:</b> ${UI.dateTimeParts(order.createdAt).time} น.</div>
+              </div>
+              <div class="info-row">
+                <div><b>เบิกจากคลัง:</b> ${fromWh.name}</div>
+              </div>
+            </div>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th>รายการ</th>
+                  <th class="text-right">จำนวน</th>
+                  <th class="text-right">ราคา/หน่วย</th>
+                  <th class="text-right">จำนวนเงิน</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+            
+            <div class="summary-box">
+              <div class="summary-row">
+                <div>รวมจำนวนสุทธิ:</div>
+                <div>${totalQty} ชิ้น</div>
+              </div>
+              <div class="summary-row grand-total">
+                <div>รวมเป็นเงิน (ราคาส่ง):</div>
+                <div>${UI.currency(totalAmount, 2)} บาท</div>
+              </div>
+            </div>
+            
+            ${order.note ? `<div style="margin-top:20px; font-size:13px;"><b>หมายเหตุ:</b> ${order.note}</div>` : ''}
+            
+            <div class="signatures">
+              <div class="sig-box">
+                <div class="sig-line"></div>
+                <div>( .................................................. )</div>
+                <div style="margin-top:5px">ผู้รับของ (พนักงาน)</div>
+              </div>
+              <div class="sig-box">
+                <div class="sig-line"></div>
+                <div>( .................................................. )</div>
+                <div style="margin-top:5px">ผู้จ่ายของ/คลังสินค้า</div>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const printWindow = window.open('', '_blank', 'width=600,height=800');
+      printWindow.document.write(html);
+      printWindow.document.close();
+      
+    } catch (e) {
+      UI.toast(e.message, 'error');
+    } finally {
+      UI.loading(false);
+    }
   }
 };

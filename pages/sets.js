@@ -86,10 +86,35 @@ PAGES['sets'] = {
             <th>#</th>
             <th>รายละเอียดเซ็ต</th>
             <th>รายการสินค้าในเซ็ต</th>
+            <th class="td-right">ต้นทุน (ไม่รวม/รวม)</th>
+            <th class="td-right">ส่งเซลล์</th>
+            <th class="td-right">ค่าคอมฯ</th>
+            <th class="td-right">ส่งร้านค้า</th>
             <th class="td-center">จัดการ</th>
           </tr></thead>
           <tbody>
-            ${data.map((s, i) => `
+            ${data.map((s, i) => {
+              let t = { costNoVat: 0, costVat: 0, sellWholesale: 0, sellCommission: 0, shopWholesale: 0 };
+              if (s.items) {
+                s.items.forEach(it => {
+                  let p = null;
+                  if (it.allowedProducts && it.allowedProducts.length > 0) {
+                    p = MASTER_DATA.products.find(x => it.allowedProducts.includes(x.id));
+                  }
+                  if (!p && it.category) {
+                    p = MASTER_DATA.products.find(x => x.category === it.category);
+                  }
+                  if (p) {
+                    const q = Number(it.qty) || 0;
+                    t.costNoVat += (Number(p.costNoVat) || 0) * q;
+                    t.costVat += (Number(p.costVat) || 0) * q;
+                    t.sellWholesale += (Number(p.sellWholesale) || 0) * q;
+                    t.sellCommission += (Number(p.sellCommission) || 0) * q;
+                    t.shopWholesale += (Number(p.shopWholesale) || 0) * q;
+                  }
+                });
+              }
+              return `
               <tr style="transition:var(--transition)" 
                   onpointerenter="this.style.background='var(--bg-hover)'" 
                   onpointerleave="this.style.background='transparent'">
@@ -108,6 +133,13 @@ PAGES['sets'] = {
                   ${(s.items || []).map(it => `<span class="badge badge-gray" style="font-size:0.75rem">${it.category} x${it.qty} ${it.unit}</span>`).join('')}
                   </div>
                 </td>
+                <td class="td-right">
+                  <div style="font-size:0.8rem;color:var(--text-secondary)">฿${UI.currency(t.costNoVat)}</div>
+                  <div class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">฿${UI.currency(t.costVat)}</div>
+                </td>
+                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(t.sellWholesale)}</td>
+                <td class="td-right" style="color:#BE185D;font-weight:700">฿${UI.currency(t.sellCommission)}</td>
+                <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(t.shopWholesale)}</td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
                     <button class="btn btn-secondary btn-icon" onclick="PAGES.sets.openEdit('${s.id}')" title="แก้ไข"><span class="material-icons" style="font-size:16px">edit</span></button>
@@ -115,7 +147,7 @@ PAGES['sets'] = {
                   </div>
                 </td>
               </tr>
-            `).join('')}
+            `}).join('')}
           </tbody>
         </table>
       </div>
@@ -203,7 +235,7 @@ PAGES['sets'] = {
 
     // Use the existing categories from products
     const categories = [...new Set(MASTER_DATA.products.map(p => p.category).filter(Boolean))];
-    const unitOptions = ['ขวด', 'ถ้วย', 'ชิ้น', 'แพ็ค', 'กล่อง', 'ถุง'];
+    const unitOptions = ['ขวด', 'ถ้วย', 'ชุด', 'กล่อง', 'ชิ้น', 'อัน', 'แพ็ค', 'หลอด', 'มัด', 'โหล', 'ถัง', 'ตัว'];
 
     container.innerHTML = this._tempItems.map((rule, index) => {
       const categoryProducts = rule.category ? MASTER_DATA.products.filter(p => p.category === rule.category) : [];
