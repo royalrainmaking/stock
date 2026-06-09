@@ -44,6 +44,12 @@ PAGES['movement-history'] = {
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="mh-end-date" onchange="PAGES['movement-history'].applyFilter()" />
           </div>
+          <div class="form-group" style="width:160px">
+            <label>ผู้ทำรายการ</label>
+            <select id="mh-employee" onchange="PAGES['movement-history'].applyFilter()">
+              <option value="">-- ทั้งหมด --</option>
+            </select>
+          </div>
           <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (รายละเอียด, รหัส)</label>
             <input type="text" id="mh-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['movement-history'].applyFilter()" />
@@ -86,6 +92,13 @@ PAGES['movement-history'] = {
       this._products = pRes.products || [];
       this._users = uRes.users || [];
       
+      const emps = Array.from(new Set(this._history.map(h => h.username))).filter(Boolean).sort();
+      const empSelect = document.getElementById('mh-employee');
+      if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- ทั้งหมด --</option>' + 
+          emps.map(e => `<option value="${e}">${e}</option>`).join('');
+      }
+
       this.applyFilter();
     } catch(e) {
       UI.toast('โหลดประวัติล้มเหลว: ' + e.message, 'error');
@@ -95,10 +108,12 @@ PAGES['movement-history'] = {
   applyFilter(e) {
     if (e) e.preventDefault();
     const q = (document.getElementById('mh-query')?.value || '').toLowerCase().trim();
+    const emp = document.getElementById('mh-employee')?.value;
     
     const filtered = this._history.filter(h => {
       const matchQuery = !q || h.id.toLowerCase().includes(q) || h.username.toLowerCase().includes(q);
-      return matchQuery;
+      const matchEmp = !emp || h.username === emp;
+      return matchQuery && matchEmp;
     });
 
     // Update summary stats

@@ -318,7 +318,7 @@ PAGES['employee-stock'] = {
             </div>
           </div>
           
-          ${renderSection('สินค้าปกติ', normalProducts, 'inventory_2')}
+          ${renderSection('สินค้าเขต', normalProducts, 'inventory_2')}
           ${renderSection('สินค้าจัดเซ็ต', setProducts, 'category')}
           
           ${this._viewMode !== 'card' && productList.length > 0 ? `

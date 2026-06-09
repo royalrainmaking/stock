@@ -50,6 +50,12 @@ PAGES['billing-history'] = {
             <label>วันที่สิ้นสุด</label>
             <input type="date" id="bh-end-date" value="${this._filters.endDate}" onchange="PAGES['billing-history'].applyFilters()" />
           </div>
+          <div class="form-group" style="width:160px">
+            <label>พนักงาน</label>
+            <select id="bh-employee" onchange="PAGES['billing-history'].applyFilters()">
+              <option value="">-- ทั้งหมด --</option>
+            </select>
+          </div>
           <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (พนักงาน, เลขอ้างอิง)</label>
             <input type="text" id="bh-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['billing-history'].applyFilters()" />
@@ -74,6 +80,14 @@ PAGES['billing-history'] = {
     try {
       const res = await API.getBillingHistory(this._filters.startDate, this._filters.endDate);
       this._billings = res.billings || [];
+      
+      const emps = Array.from(new Set(this._billings.map(b => b.employee?.displayName))).filter(Boolean).sort();
+      const empSelect = document.getElementById('bh-employee');
+      if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- ทั้งหมด --</option>' + 
+          emps.map(e => `<option value="${e}">${e}</option>`).join('');
+      }
+
       this.applyFilters();
     } catch(e) {
       container.innerHTML = `<div class="alert alert-danger"><span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px">warning</span>${e.message}</div>`;
@@ -83,11 +97,14 @@ PAGES['billing-history'] = {
   applyFilters(e) {
     if (e) e.preventDefault();
     const q = (document.getElementById('bh-query')?.value || '').toLowerCase().trim();
-    const filtered = this._billings.filter(b => 
-      !q || b.id.toLowerCase().includes(q) || 
-      (b.employee?.displayName || '').toLowerCase().includes(q) ||
-      (b.warehouseName || '').toLowerCase().includes(q)
-    );
+    const emp = document.getElementById('bh-employee')?.value;
+    const filtered = this._billings.filter(b => {
+      const matchSearch = !q || b.id.toLowerCase().includes(q) || 
+                          (b.employee?.displayName || '').toLowerCase().includes(q) ||
+                          (b.warehouseName || '').toLowerCase().includes(q);
+      const matchEmp = !emp || b.employee?.displayName === emp;
+      return matchSearch && matchEmp;
+    });
 
     // Update stats
     const totalCount = filtered.length;

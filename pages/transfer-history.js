@@ -53,6 +53,12 @@ PAGES['transfer-history'] = {
               <option value="rejected">❌ ถูกปฏิเสธ</option>
             </select>
           </div>
+          <div class="form-group" style="width:160px">
+            <label>พนักงาน</label>
+            <select id="th-employee" onchange="PAGES['transfer-history'].applyFilter()">
+              <option value="">-- ทั้งหมด --</option>
+            </select>
+          </div>
           <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (เลขอ้างอิง, พนักงาน)</label>
             <input type="text" id="th-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['transfer-history'].applyFilter()" />
@@ -87,6 +93,15 @@ PAGES['transfer-history'] = {
       this._orders = (oRes.orders || []).filter(o => o.id?.startsWith('REQ') || o.id?.startsWith('TR'));
       this._products = pRes.products || [];
       this._warehouses = wRes.warehouses || [];
+
+      // Populate employee dropdown
+      const emps = Array.from(new Set(this._orders.map(o => o.requestedBy))).filter(Boolean).sort();
+      const empSelect = document.getElementById('th-employee');
+      if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- ทั้งหมด --</option>' + 
+          emps.map(e => `<option value="${e}">${e}</option>`).join('');
+      }
+
       this.applyFilter();
     } catch(e) {
       UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
@@ -97,16 +112,18 @@ PAGES['transfer-history'] = {
     if (e) e.preventDefault();
     const q = document.getElementById('th-query')?.value.toLowerCase().trim();
     const s = document.getElementById('th-status')?.value;
+    const emp = document.getElementById('th-employee')?.value;
     const startDate = document.getElementById('th-start-date').value;
     const endDate = document.getElementById('th-end-date').value;
     
     const filtered = this._orders.filter(o => {
       const matchSearch = !q || o.id.toLowerCase().includes(q) || (o.requestedBy||'').toLowerCase().includes(q);
       const matchStatus = !s || o.status === s;
-      const createdAt = o.createdAt?.split('T')[0] || '';
-      const matchDate = (!startDate || createdAt >= startDate) && (!endDate || createdAt <= endDate);
+      const matchEmp = !emp || o.requestedBy === emp;
+      const billDate = o.date || o.createdAt?.split('T')[0] || '';
+      const matchDate = (!startDate || billDate >= startDate) && (!endDate || billDate <= endDate);
       
-      return matchSearch && matchStatus && matchDate;
+      return matchSearch && matchStatus && matchEmp && matchDate;
     });
 
     // Update summary stats
@@ -168,10 +185,10 @@ PAGES['transfer-history'] = {
 
               return `
                 <tr class="animate-in" style="animation-delay: ${idx * 0.03}s; border-bottom:1px solid var(--border-light)">
-                  <td style="font-size:0.8rem">
-                    <div class="fw-bold">${dt.date}</div>
-                    <div style="color:var(--text-muted)">${dt.time} น.</div>
-                  </td>
+                <td style="font-size:0.82rem">
+                  <div class="fw-bold text-primary-color">${UI.dateStr(o.date || o.createdAt)}</div>
+                  <div style="font-size:0.75rem;color:var(--text-muted)">${UI.dateTimeParts(o.createdAt).time} น.</div>
+                </td>
                   <td>
                     <div style="display:flex;align-items:center;gap:8px">
                       <div>

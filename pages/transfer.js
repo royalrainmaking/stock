@@ -318,7 +318,7 @@ PAGES['transfer'] = {
     openModal('เลือกสินค้าที่จะเบิก', `
       <div class="mb-16">
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn btn-primary" id="tr-filter-normal" style="flex:1" onclick="PAGES.transfer.setFilterType('normal')">สินค้าปกติ</button>
+          <button class="btn btn-primary" id="tr-filter-normal" style="flex:1" onclick="PAGES.transfer.setFilterType('normal')">สินค้าเขต</button>
           <button class="btn btn-secondary" id="tr-filter-set" style="flex:1" onclick="PAGES.transfer.setFilterType('set')">สินค้าจัดเซ็ต</button>
         </div>
         <div class="search-bar">
@@ -486,9 +486,9 @@ PAGES['transfer'] = {
 
     // Prevent mixing normal products and sets
     if (this._items.length > 0) {
-      const hasSet = this._items[0].isSet;
+      const hasSet = !!this._items[0].isSet;
       if (hasSet !== isSet) {
-        return UI.toast('ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันในบิลเดียวได้ กรุณาแยกบิล', 'error');
+        return UI.toast('ไม่สามารถเบิกสินค้าเขตและสินค้าจัดเซ็ตรวมกันในบิลเดียวได้ กรุณาแยกบิล', 'error');
       }
     }
 
@@ -545,7 +545,7 @@ PAGES['transfer'] = {
       btnNormal.style.opacity = '0.4';
       btnNormal.style.cursor = 'not-allowed';
       btnNormal.className = 'btn btn-secondary';
-      btnNormal.title = 'ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันได้';
+      btnNormal.title = 'ไม่สามารถเบิกสินค้าเขตและสินค้าจัดเซ็ตรวมกันได้';
       
       btnSet.disabled = false;
       btnSet.style.opacity = '1';
@@ -558,7 +558,7 @@ PAGES['transfer'] = {
       btnSet.style.opacity = '0.4';
       btnSet.style.cursor = 'not-allowed';
       btnSet.className = 'btn btn-secondary';
-      btnSet.title = 'ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันได้';
+      btnSet.title = 'ไม่สามารถเบิกสินค้าเขตและสินค้าจัดเซ็ตรวมกันได้';
       
       btnNormal.disabled = false;
       btnNormal.style.opacity = '1';
@@ -636,6 +636,12 @@ PAGES['transfer'] = {
         }
       });
     }
+    // Sort by Master Product List order (จัดการสินค้า)
+    filtered.sort((a, b) => {
+      const idxA = this._products.findIndex(p => p.id === a.productId);
+      const idxB = this._products.findIndex(p => p.id === b.productId);
+      return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+    });
 
     document.getElementById('tr-picker-grid').innerHTML = this.renderPickerGrid(filtered);
     

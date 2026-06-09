@@ -36,9 +36,21 @@ PAGES['receive-history'] = {
       </div>
 
       <div id="rh-summary-ribbon" class="grid-3 mb-16">
-        <div class="stat-card blue"><div class="stat-bg-icon"><span class="material-icons">receipt_long</span></div><div class="stat-label">จำนวนบิลทั้งหมด</div><div id="rh-sum-count" class="stat-value">0</div></div>
-        <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label">จำนวนสินค้าที่รับเข้า</div><div id="rh-sum-units" class="stat-value">0</div></div>
-        <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมมูลค่าสินค้าประมาณการ</div><div id="rh-sum-value" class="stat-value">฿0</div></div>
+        <div class="stat-card blue" style="cursor:pointer; transition:transform 0.2s" onpointerenter="this.style.transform='scale(1.02)'" onpointerleave="this.style.transform='none'" onclick="PAGES['receive-history'].viewBillSummary()">
+          <div class="stat-bg-icon"><span class="material-icons">receipt_long</span></div>
+          <div class="stat-label">จำนวนบิลทั้งหมด (คลิกเพื่อดู)</div>
+          <div id="rh-sum-count" class="stat-value">0</div>
+        </div>
+        <div class="stat-card green" style="cursor:pointer; transition:transform 0.2s" onpointerenter="this.style.transform='scale(1.02)'" onpointerleave="this.style.transform='none'" onclick="PAGES['receive-history'].viewAggregateSummary()">
+          <div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div>
+          <div class="stat-label">จำนวนสินค้าที่รับเข้า (คลิกเพื่อดู)</div>
+          <div id="rh-sum-units" class="stat-value">0</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-bg-icon"><span class="material-icons">payments</span></div>
+          <div class="stat-label">รวมมูลค่าสินค้าประมาณการ</div>
+          <div id="rh-sum-value" class="stat-value">฿0</div>
+        </div>
       </div>
 
       <div class="filter-card">
@@ -56,6 +68,12 @@ PAGES['receive-history'] = {
             <select id="rh-warehouse" onchange="PAGES['receive-history'].applyFilters()">
               <option value="">ทุกคลังสินค้า</option>
               ${this._warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="width:160px">
+            <label>ผู้ทำรายการ</label>
+            <select id="rh-employee" onchange="PAGES['receive-history'].applyFilters()">
+              <option value="">-- ทั้งหมด --</option>
             </select>
           </div>
           <div class="form-group" style="flex:1;min-width:200px">
@@ -124,12 +142,22 @@ PAGES['receive-history'] = {
       const res = await API._call('getReceiveHistory', filters);
       let data = res.history || [];
 
-      // Manual client-side filter for query if backend doesn't support it yet
-      if (filters.query) {
-        data = data.filter(h => 
-          (h.docNo || '').toLowerCase().includes(filters.query) || 
-          (h.supplier || '').toLowerCase().includes(filters.query)
-        );
+      // Manual client-side filter for query and employee
+      const emp = document.getElementById('rh-employee')?.value;
+      if (filters.query || emp) {
+        data = data.filter(h => {
+          const matchQuery = !filters.query || (h.docNo || '').toLowerCase().includes(filters.query) || (h.supplier || '').toLowerCase().includes(filters.query);
+          const matchEmp = !emp || h.username === emp;
+          return matchQuery && matchEmp;
+        });
+      }
+
+      // Populate employee dropdown if it's the first time
+      const empSelect = document.getElementById('rh-employee');
+      if (empSelect && empSelect.options.length <= 1) {
+        const emps = Array.from(new Set((res.history || []).map(h => h.username))).filter(Boolean).sort();
+        empSelect.innerHTML = '<option value="">-- ทั้งหมด --</option>' + 
+          emps.map(e => `<option value="${e}">${e}</option>`).join('');
       }
 
       if (!data.length) {
@@ -251,6 +279,147 @@ PAGES['receive-history'] = {
   applyFilters(e) {
     if (e) e.preventDefault();
     this.fetchAndRender();
+  },
+
+  viewBillSummary() {
+    if (!this._history || this._history.length === 0) {
+      return UI.toast('ไม่มีข้อมูลบิลสำหรับแสดง', 'warning');
+    }
+
+    let totalValue = 0;
+    const rowsHtml = this._history.map((h, idx) => {
+      const wh = this._warehouses.find(w => w.id === h.toWarehouseId) || { name: h.toWarehouseId };
+      const dateStr = UI.dateTimeStr(h.createdAt);
+      const items = h.items || [];
+      const billVal = items.reduce((sum, item) => {
+          const p = this._products.find(x => x.id === item.productId) || {};
+          const cNoVat = item.costNoVat || p.costNoVat || 0;
+          const disc = item.discount || 0;
+          return sum + (Number(item.qty) * Math.max(0, cNoVat - disc) * (1 + (CONFIG.VAT_RATE || 0.07)));
+      }, 0);
+      totalValue += billVal;
+      let supName = 'ไม่ระบุ';
+      if (h.supplier) supName = h.supplier;
+      else if (h.supplierId) {
+        const sup = this._suppliers.find(s => s.id === h.supplierId);
+        supName = sup ? sup.name : h.supplierId;
+      }
+      return `
+      <tr onpointerenter="this.style.background='var(--bg-hover)'" onpointerleave="this.style.background='transparent'" style="cursor:pointer" onclick="PAGES['receive-history'].viewDetail(${idx})">
+        <td class="text-muted">${idx + 1}</td>
+        <td style="font-size:0.85rem">${dateStr}</td>
+        <td class="fw-bold" style="color:var(--primary)">${h.docNo || h.poNo || '-'}</td>
+        <td style="font-size:0.85rem">${wh.name}</td>
+        <td style="font-size:0.85rem">${supName}</td>
+        <td class="td-right fw-bold" style="color:var(--success)">฿${UI.currency(billVal, 2)}</td>
+      </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <div style="margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap">
+         <div class="badge badge-blue" style="font-size:1rem; padding:8px 16px;"><span class="material-icons" style="font-size:18px;margin-right:6px">receipt_long</span> รวมบิล: ${this._history.length} ใบ</div>
+      </div>
+      <div class="table-wrap" style="max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:8px">
+        <table class="table" style="margin:0">
+          <thead style="position:sticky;top:0;z-index:10;background:var(--bg-card)">
+            <tr>
+              <th>ลำดับ</th>
+              <th>วันที่/เวลา</th>
+              <th>เลขที่บิล / PO</th>
+              <th>คลังที่รับ</th>
+              <th>ผู้จำหน่าย (Supplier)</th>
+              <th class="td-right">ยอดรวม (EST)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot style="position:sticky;bottom:0;background:var(--bg-card);border-top:2px solid var(--border)">
+            <tr>
+              <td colspan="5" class="td-right fw-bold">รวมมูลค่าทั้งหมด</td>
+              <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(totalValue, 2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="text-muted" style="font-size:0.8rem; margin-top:8px">💡 คลิกที่แถวเพื่อดูรายละเอียดของบิลนั้นๆ</div>
+    `;
+
+    openModal('สรุปรายการบิลทั้งหมด', html, `<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>`, '900px');
+  },
+
+  viewAggregateSummary() {
+    if (!this._history || this._history.length === 0) {
+      return UI.toast('ไม่มีข้อมูลสำหรับสรุป', 'warning');
+    }
+
+    const summary = {};
+    let totalQty = 0;
+    let totalValue = 0;
+
+    this._history.forEach(h => {
+      (h.items || []).forEach(it => {
+        if (!summary[it.productId]) {
+          const p = this._products.find(x => x.id === it.productId) || {};
+          summary[it.productId] = {
+            id: p.id || it.productId,
+            code: p.code || '-',
+            name: p.name || it.productId,
+            category: p.category || '-',
+            unit: p.unit || it.unit || '',
+            qty: 0,
+            totalValue: 0
+          };
+        }
+        const p = this._products.find(x => x.id === it.productId) || {};
+        const cNoVat = it.costNoVat || p.costNoVat || 0;
+        const disc = it.discount || 0;
+        const val = Number(it.qty) * Math.max(0, cNoVat - disc) * (1 + (CONFIG.VAT_RATE || 0.07));
+        
+        summary[it.productId].qty += Number(it.qty);
+        summary[it.productId].totalValue += val;
+        
+        totalQty += Number(it.qty);
+        totalValue += val;
+      });
+    });
+
+    const sortedList = Object.values(summary).sort((a, b) => b.qty - a.qty);
+
+    const html = `
+      <div style="margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap">
+         <div class="badge badge-blue" style="font-size:1rem; padding:8px 16px;"><span class="material-icons" style="font-size:18px;margin-right:6px">receipt_long</span> รวมบิล: ${this._history.length} ใบ</div>
+         <div class="badge badge-green" style="font-size:1rem; padding:8px 16px;"><span class="material-icons" style="font-size:18px;margin-right:6px">inventory_2</span> รวมสินค้า: ${UI.currency(totalQty, 0)} ชิ้น</div>
+         <div class="badge badge-purple" style="font-size:1rem; padding:8px 16px;"><span class="material-icons" style="font-size:18px;margin-right:6px">payments</span> มูลค่ารวม: ฿${UI.currency(totalValue, 2)}</div>
+      </div>
+      <div class="table-wrap" style="max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:8px">
+        <table class="table" style="margin:0">
+          <thead style="position:sticky;top:0;z-index:10;background:var(--bg-card)">
+            <tr>
+              <th>รหัสสินค้า</th>
+              <th>ชื่อสินค้า</th>
+              <th>หมวดหมู่</th>
+              <th class="td-right">จำนวนรับเข้าทั้งหมด</th>
+              <th class="td-right">มูลค่ารวมโดยประมาณ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedList.map(item => `
+              <tr onpointerenter="this.style.background='var(--bg-hover)'" onpointerleave="this.style.background='transparent'">
+                <td style="font-family:monospace; font-weight:bold; color:var(--text-secondary)">${item.code}</td>
+                <td class="fw-bold">${item.name}</td>
+                <td><span class="badge badge-gray" style="font-size:0.75rem">${item.category}</span></td>
+                <td class="td-right fw-bold" style="color:var(--primary); font-size:1.05rem">${UI.currency(item.qty, 0)} <span style="font-size:0.8rem;color:var(--text-muted)">${item.unit}</span></td>
+                <td class="td-right fw-bold" style="color:var(--success)">฿${UI.currency(item.totalValue, 2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    openModal('สรุปยอดสินค้ารับเข้าทั้งหมด (รวมจากบิลที่ค้นหา)', html, `<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>`, '900px');
   },
 
   async viewDetail(indexOrId) {

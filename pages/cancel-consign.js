@@ -68,7 +68,7 @@ PAGES['cancel-consign'] = {
           <div style="background:var(--bg-base); border:1px dashed var(--border); border-radius:12px; padding:12px; display:flex; gap:10px; align-items:flex-start">
             <span class="material-icons" style="color:var(--warning); font-size:20px; flex-shrink:0">info_outline</span>
             <p style="font-size:0.8rem; line-height:1.4; color:var(--text-secondary); margin:0">
-              การยกเลิกฝาก จะย้ายสินค้าฝากคืน (Consigned) กลับมาเป็นสินค้าปกติพร้อมจำหน่าย เพื่อทำการคิดเงินในระบบ
+              การยกเลิกฝาก จะย้ายสินค้าฝากคืน (Consigned) กลับมาเป็นสินค้าเขตพร้อมจำหน่าย เพื่อทำการคิดเงินในระบบ
             </p>
           </div>
         </div>

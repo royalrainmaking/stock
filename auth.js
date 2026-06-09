@@ -93,6 +93,11 @@ function togglePassword(inputId, btn) {
 }
 
 function logout() {
+  if (!AUTH.isLoggedIn()) {
+    document.getElementById('main-app').classList.add('hidden');
+    document.getElementById('login-screen').classList.remove('hidden');
+    return;
+  }
   AUTH.clearSession();
   closeUserMenu();
   document.getElementById('main-app').classList.add('hidden');

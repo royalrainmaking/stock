@@ -680,6 +680,7 @@ tbody tr:hover { background: var(--bg-hover); }
 .justify-between { justify-content: space-between; }
 .wrap { flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap: 16px; }
 
 /* Product image thumbnail */
 .product-img {
