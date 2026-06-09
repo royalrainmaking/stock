@@ -59,6 +59,12 @@ PAGES['transfer-history'] = {
               <option value="">-- ทั้งหมด --</option>
             </select>
           </div>
+          <div class="form-group" style="width:160px">
+            <label>คลังปลายทาง</label>
+            <select id="th-warehouse" onchange="PAGES['transfer-history'].applyFilter()">
+              <option value="">-- ทั้งหมด --</option>
+            </select>
+          </div>
           <div class="form-group" style="flex:1;min-width:200px">
             <label>ค้นหา (เลขอ้างอิง, พนักงาน)</label>
             <input type="text" id="th-query" placeholder="ระบุคำค้นหา..." oninput="PAGES['transfer-history'].applyFilter()" />
@@ -102,6 +108,17 @@ PAGES['transfer-history'] = {
           emps.map(e => `<option value="${e}">${e}</option>`).join('');
       }
 
+      // Populate destination warehouse dropdown
+      const destWhSelect = document.getElementById('th-warehouse');
+      if (destWhSelect) {
+        const destWhIds = Array.from(new Set(this._orders.map(o => o.toWhId))).filter(Boolean);
+        const whOptions = destWhIds.map(id => {
+          const w = this._warehouses.find(x => x.id === id);
+          return `<option value="${id}">${w ? (w.employeeName || w.name) : id}</option>`;
+        });
+        destWhSelect.innerHTML = '<option value="">-- ทั้งหมด --</option>' + whOptions.join('');
+      }
+
       this.applyFilter();
     } catch(e) {
       UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
@@ -113,6 +130,7 @@ PAGES['transfer-history'] = {
     const q = document.getElementById('th-query')?.value.toLowerCase().trim();
     const s = document.getElementById('th-status')?.value;
     const emp = document.getElementById('th-employee')?.value;
+    const wh = document.getElementById('th-warehouse')?.value;
     const startDate = document.getElementById('th-start-date').value;
     const endDate = document.getElementById('th-end-date').value;
     
@@ -120,10 +138,11 @@ PAGES['transfer-history'] = {
       const matchSearch = !q || o.id.toLowerCase().includes(q) || (o.requestedBy||'').toLowerCase().includes(q);
       const matchStatus = !s || o.status === s;
       const matchEmp = !emp || o.requestedBy === emp;
+      const matchWh = !wh || o.toWhId === wh;
       const billDate = o.date || o.createdAt?.split('T')[0] || '';
       const matchDate = (!startDate || billDate >= startDate) && (!endDate || billDate <= endDate);
       
-      return matchSearch && matchStatus && matchEmp && matchDate;
+      return matchSearch && matchStatus && matchEmp && matchWh && matchDate;
     });
 
     // Update summary stats
