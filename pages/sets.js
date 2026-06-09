@@ -136,8 +136,8 @@ PAGES['sets'] = {
                   <div style="font-size:0.8rem;color:var(--text-secondary)">฿${UI.currency(t.costNoVat)}</div>
                   <div class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">฿${UI.currency(t.costVat)}</div>
                 </td>
-                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(t.costVat)}</td>
-                <td class="td-right fw-bold" style="color:#BE185D">฿${UI.currency(100 - t.costVat)}</td>
+                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(t.sellWholesale)}</td>
+                <td class="td-right fw-bold" style="color:#BE185D">฿${UI.currency(100 - t.sellWholesale)}</td>
 
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">

@@ -217,6 +217,7 @@ PAGES['employee-stock'] = {
              const setObj = MASTER_DATA.sets.find(set => set.id === pid);
              if (setObj) {
                 let cost = 0;
+                let wholesale = 0;
                 (setObj.items || []).forEach(it => {
                   let cp = null;
                   if (it.allowedProducts && it.allowedProducts.length > 0) {
@@ -227,6 +228,7 @@ PAGES['employee-stock'] = {
                   }
                   if (cp) {
                     cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+                    wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
                   }
                 });
                 
@@ -237,8 +239,8 @@ PAGES['employee-stock'] = {
                    imageUrl: setObj.imageUrl,
                    category: 'เซ็ตสินค้า',
                    unit: 'เซ็ต',
-                   sellWholesale: cost,
-                   sellCommission: 100 - cost,
+                   sellWholesale: wholesale,
+                   sellCommission: 100 - wholesale,
                    isSet: true
                 };
              }
@@ -273,17 +275,29 @@ PAGES['employee-stock'] = {
       // Sort sets by name
       setProducts.sort((a, b) => (a.product?.name || '').localeCompare(b.product?.name || ''));
 
-      const totalWholesale = productList.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellWholesale || 0), 0);
-      const totalCommission = productList.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellCommission || 0), 0);
+      const normalWholesale = normalProducts.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellWholesale || 0), 0);
+      const normalCommission = normalProducts.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellCommission || 0), 0);
       
-      const renderSection = (title, items, icon) => {
+      const setWholesale = setProducts.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellWholesale || 0), 0);
+      const setCommission = setProducts.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellCommission || 0), 0);
+
+      const totalWholesale = normalWholesale + setWholesale;
+      const totalCommission = normalCommission + setCommission;
+      
+      const renderSection = (title, items, icon, sectionWholesale, sectionCommission) => {
         if (!items.length) return '';
         const maxQty = Math.max(...items.map(p => p.totalQty), 1);
         return `
           <div style="margin-bottom:20px;">
-            <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.1rem;color:var(--text-primary);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--border)">
-              <span class="material-icons" style="color:var(--primary)">${icon}</span>
-              ${title} <span class="badge badge-gray" style="font-size:0.8rem">${items.length} รายการ</span>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--border);flex-wrap:wrap;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.1rem;color:var(--text-primary);">
+                <span class="material-icons" style="color:var(--primary)">${icon}</span>
+                ${title} <span class="badge badge-gray" style="font-size:0.8rem">${items.length} รายการ</span>
+              </div>
+              <div style="display:flex;gap:12px;font-size:0.9rem;font-weight:bold;background:var(--bg-card2);padding:4px 12px;border-radius:20px;">
+                <span class="text-primary">ส่งเงิน: ฿${UI.currency(sectionWholesale, 2)}</span>
+                <span style="color:#BE185D">คอมฯ: ฿${UI.currency(sectionCommission, 2)}</span>
+              </div>
             </div>
             ${this._viewMode === 'card'
               ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
@@ -309,25 +323,21 @@ PAGES['employee-stock'] = {
                 </div>
               </div>
             </div>
-            <div style="display:flex;gap:10px;align-items:center">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
                <button class="btn btn-secondary btn-sm" onclick="PAGES['employee-stock'].viewDailyWithdrawal('${wh.id}', '${emp.displayName || wh.name}')" title="ดูประวัติการเบิกรายวันแยกตามครั้ง">
                  <span class="material-icons">history</span> ประวัติการเบิก
                </button>
-               <div class="badge badge-blue" style="padding:6px 14px;font-size:0.95rem">ยอดส่งเงิน: ฿${UI.currency(totalWholesale, 2)}</div>
-               <div class="badge badge-pink" style="padding:6px 14px;font-size:0.95rem">ค่าคอมฯ: ฿${UI.currency(totalCommission, 2)}</div>
+               <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                 <div style="display:flex;gap:6px">
+                   <div class="badge badge-blue" style="padding:6px 14px;font-size:0.95rem">ยอดส่งเงินรวม: ฿${UI.currency(totalWholesale, 2)}</div>
+                   <div class="badge badge-pink" style="padding:6px 14px;font-size:0.95rem">ค่าคอมฯรวม: ฿${UI.currency(totalCommission, 2)}</div>
+                 </div>
+               </div>
             </div>
           </div>
           
-          ${renderSection('สินค้าเขต', normalProducts, 'inventory_2')}
-          ${renderSection('สินค้าจัดเซ็ต', setProducts, 'category')}
-          
-          ${this._viewMode !== 'card' && productList.length > 0 ? `
-            <div style="background:var(--bg-card2); padding:16px; border-radius:8px; margin-top:20px; display:flex; justify-content:flex-end; gap:20px; font-weight:bold;">
-              <div>ยอดรวมทั้งหมดของพนักงาน</div>
-              <div class="text-primary">ส่งเงิน: ฿${UI.currency(totalWholesale, 2)}</div>
-              <div style="color:#BE185D">คอมฯ: ฿${UI.currency(totalCommission, 2)}</div>
-            </div>
-          ` : ''}
+          ${renderSection('สินค้าเขต', normalProducts, 'inventory_2', normalWholesale, normalCommission)}
+          ${renderSection('สินค้าจัดเซ็ต', setProducts, 'category', setWholesale, setCommission)}
         </div>
       `;
     }).join('');

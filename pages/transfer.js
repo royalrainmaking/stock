@@ -592,67 +592,71 @@ PAGES['transfer'] = {
   },
 
   filterPicker() {
-    const query = document.getElementById('tr-picker-query')?.value || '';
-    const q = query.toLowerCase();
-    const type = this._pickerType || 'normal';
-    const filtered = [];
+    try {
+      const query = document.getElementById('tr-picker-query')?.value || '';
+      const q = query.toLowerCase().trim();
+      const type = this._pickerType || 'normal';
+      const filtered = [];
 
-    if (type === 'normal') {
-      const grouped = {};
-      const stockBatches = this._centralStock.filter(s => Number(s.qty) > 0);
-      stockBatches.forEach(s => {
-        const prod = s.product;
-        const pid = s.productId;
-        if (prod) {
-          const pName = (prod.name || '').toLowerCase();
-          const pCode = (prod.code || '').toLowerCase();
-          const pCat = (prod.category || '').toLowerCase();
-          if (pName.includes(q) || pCode.includes(q) || pCat.includes(q)) {
-            if (!grouped[pid]) {
-              grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
-            }
-            grouped[pid].totalQty += Number(s.qty);
-            if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
-              grouped[pid].nearestExp = s.expiryDate;
+      if (type === 'normal') {
+        const grouped = {};
+        const stockBatches = this._centralStock.filter(s => Number(s.qty) > 0);
+        stockBatches.forEach(s => {
+          const prod = s.product;
+          const pid = s.productId;
+          if (prod) {
+            const pName = String(prod.name || '').toLowerCase();
+            const pCode = String(prod.code || '').toLowerCase();
+            const pCat = String(prod.category || '').toLowerCase();
+            if (pName.includes(q) || pCode.includes(q) || pCat.includes(q)) {
+              if (!grouped[pid]) {
+                grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
+              }
+              grouped[pid].totalQty += Number(s.qty);
+              if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
+                grouped[pid].nearestExp = s.expiryDate;
+              }
             }
           }
-        }
-      });
-      filtered.push(...Object.values(grouped));
-    }
+        });
+        filtered.push(...Object.values(grouped));
+      }
 
-    // Inject Sets matching query
-    if (type === 'set' && MASTER_DATA.sets && MASTER_DATA.sets.length > 0) {
-      MASTER_DATA.sets.forEach(s => {
-        const sName = (s.name || '').toLowerCase();
-        const sCode = (s.code || '').toLowerCase();
-        if (sName.includes(q) || sCode.includes(q)) {
-          filtered.push({
-            id: s.id,
-            productId: s.id,
-            code: s.code,
-            name: s.name,
-            category: 'เซ็ตสินค้า',
-            unit: 'เซ็ต',
-            totalQty: 'N/A',
-            nearestExp: '9999-12-31',
-            imageUrl: s.imageUrl || '',
-            isSet: true,
-            setRules: s.items
-          });
-        }
+      // Inject Sets matching query
+      if (type === 'set' && MASTER_DATA.sets && MASTER_DATA.sets.length > 0) {
+        MASTER_DATA.sets.forEach(s => {
+          const sName = String(s.name || '').toLowerCase();
+          const sCode = String(s.code || '').toLowerCase();
+          if (sName.includes(q) || sCode.includes(q)) {
+            filtered.push({
+              id: s.id,
+              productId: s.id,
+              code: s.code,
+              name: s.name,
+              category: 'เซ็ตสินค้า',
+              unit: 'เซ็ต',
+              totalQty: 'N/A',
+              nearestExp: '9999-12-31',
+              imageUrl: s.imageUrl || '',
+              isSet: true,
+              setRules: s.items
+            });
+          }
+        });
+      }
+      // Sort by Master Product List order (จัดการสินค้า)
+      const masterProds = this._products || [];
+      filtered.sort((a, b) => {
+        const idxA = masterProds.findIndex(p => p.id === a.productId);
+        const idxB = masterProds.findIndex(p => p.id === b.productId);
+        return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
       });
-    }
-    // Sort by Master Product List order (จัดการสินค้า)
-    filtered.sort((a, b) => {
-      const idxA = this._products.findIndex(p => p.id === a.productId);
-      const idxB = this._products.findIndex(p => p.id === b.productId);
-      return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
-    });
 
-    document.getElementById('tr-picker-grid').innerHTML = this.renderPickerGrid(filtered);
-    
-    // Sort logic handled in initial load, but for search just show filtered
+      document.getElementById('tr-picker-grid').innerHTML = this.renderPickerGrid(filtered);
+    } catch (e) {
+      console.error('filterPicker error:', e);
+      UI.toast('เกิดข้อผิดพลาดในการค้นหา: ' + e.message, 'error');
+    }
   },
 
   removeItem(idx) {
@@ -662,6 +666,16 @@ PAGES['transfer'] = {
 
   renderItems() {
     const el = document.getElementById('tr-items-list');
+
+    // Sort items by Master Product List order before rendering
+    this._items.sort((a, b) => {
+      const idA = a.isSet ? a.setId : a.productId;
+      const idB = b.isSet ? b.setId : b.productId;
+      const idxA = this._products.findIndex(p => p.id === idA);
+      const idxB = this._products.findIndex(p => p.id === idB);
+      return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+    });
+
     if (!this._items.length) {
       el.innerHTML = UI.emptyState('swap_horiz', 'ยังไม่มีรายการ', 'เลือกสินค้าและจำนวนที่ต้องการเบิก');
       return;

@@ -159,9 +159,14 @@ PAGES['picking'] = {
 
           <div class="picking-items">
 
-
             <!-- Normal Items -->
-            ${normalItems.map(item => {
+            ${(() => {
+              normalItems.sort((a, b) => {
+                const idxA = this._products.findIndex(p => String(p.id) === String(a.productId));
+                const idxB = this._products.findIndex(p => String(p.id) === String(b.productId));
+                return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+              });
+              return normalItems.map(item => {
               const p = this._products.find(x => x.id === item.productId) || {};
               return `
                 <div class="picking-item-row">
@@ -187,10 +192,18 @@ PAGES['picking'] = {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('');
+            })()}
 
             <!-- Aggregated Set Categories -->
-            ${Object.keys(setCats).map(normCat => {
+            ${(() => {
+              const keys = Object.keys(setCats);
+              keys.sort((catA, catB) => {
+                const idxA = this._products.findIndex(p => (p.category || '').trim().toLowerCase().replace(/[\s\.]+/g, '') === catA);
+                const idxB = this._products.findIndex(p => (p.category || '').trim().toLowerCase().replace(/[\s\.]+/g, '') === catB);
+                return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+              });
+              return keys.map(normCat => {
               const g = setCats[normCat];
               const prods = this._products.filter(p => {
                 const pCatNorm = (p.category || '').trim().toLowerCase().replace(/[\s\.]+/g, '');
@@ -228,7 +241,8 @@ PAGES['picking'] = {
                   </div>
                 </div>
               `;
-            }).join('')}
+            }).join('');
+            })()}
 
           </div>
 

@@ -71,9 +71,13 @@ const APP = {
 // ── Bootstrap ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => APP.init());
 
-// Global listener: auto-select text in number inputs on focus
+// Global listener: auto-select or clear text in number inputs on focus
 document.addEventListener('focusin', (e) => {
   if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'number') {
-    e.target.select();
+    if (e.target.value === '0') {
+      e.target.value = '';
+    } else {
+      e.target.select();
+    }
   }
 });
