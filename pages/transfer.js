@@ -308,7 +308,12 @@ PAGES['transfer'] = {
       return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
     });
 
-    PAGES.transfer._pickerType = 'normal'; // default
+    // Set picker type based on existing items
+    if (this._items.length > 0) {
+      PAGES.transfer._pickerType = this._items[0].isSet ? 'set' : 'normal';
+    } else {
+      PAGES.transfer._pickerType = 'normal'; // default
+    }
     
     openModal('เลือกสินค้าที่จะเบิก', `
       <div class="mb-16">
@@ -362,6 +367,7 @@ PAGES['transfer'] = {
         @keyframes popIn { from { transform:scale(0.9); opacity:0; } to { transform:scale(1); opacity:1; } }
       </style>
     `, `<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>`, '850px');
+    this.updateFilterButtons();
   },
 
   renderPickerGrid(products) {
@@ -478,6 +484,14 @@ PAGES['transfer'] = {
     if (total <= 0) return UI.toast('กรุณาระบุจำนวน', 'warning');
     if (!isSet && total > totalQty) return UI.toast(`สต็อกรวมไม่เพียงพอ (คงเหลือ ${totalQty} ${p.unit})`, 'error');
 
+    // Prevent mixing normal products and sets
+    if (this._items.length > 0) {
+      const hasSet = this._items[0].isSet;
+      if (hasSet !== isSet) {
+        return UI.toast('ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันในบิลเดียวได้ กรุณาแยกบิล', 'error');
+      }
+    }
+
     // Add logic
     const existing = this._items.find(i => (i.productId === id || i.setId === id));
     if (existing) {
@@ -511,14 +525,70 @@ PAGES['transfer'] = {
 
     UI.toast(`เพิ่ม ${p.name} เรียบร้อย`, 'success');
     document.getElementById('tr-qty-popup').classList.add('hidden');
+    this.updateFilterButtons();
     this.renderItems();
   },
 
-  setFilterType(type) {
-    this._pickerType = type;
-    document.getElementById('tr-filter-normal').className = type === 'normal' ? 'btn btn-primary' : 'btn btn-secondary';
-    document.getElementById('tr-filter-set').className = type === 'set' ? 'btn btn-primary' : 'btn btn-secondary';
+  updateFilterButtons() {
+    const btnNormal = document.getElementById('tr-filter-normal');
+    const btnSet = document.getElementById('tr-filter-set');
+    if (!btnNormal || !btnSet) return;
+
+    let allowedType = 'all';
+    if (this._items.length > 0) {
+      allowedType = this._items[0].isSet ? 'set' : 'normal';
+    }
+
+    if (allowedType === 'set') {
+      this._pickerType = 'set';
+      btnNormal.disabled = true;
+      btnNormal.style.opacity = '0.4';
+      btnNormal.style.cursor = 'not-allowed';
+      btnNormal.className = 'btn btn-secondary';
+      btnNormal.title = 'ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันได้';
+      
+      btnSet.disabled = false;
+      btnSet.style.opacity = '1';
+      btnSet.style.cursor = 'pointer';
+      btnSet.className = 'btn btn-primary';
+      btnSet.removeAttribute('title');
+    } else if (allowedType === 'normal') {
+      this._pickerType = 'normal';
+      btnSet.disabled = true;
+      btnSet.style.opacity = '0.4';
+      btnSet.style.cursor = 'not-allowed';
+      btnSet.className = 'btn btn-secondary';
+      btnSet.title = 'ไม่สามารถเบิกสินค้าปกติและสินค้าจัดเซ็ตรวมกันได้';
+      
+      btnNormal.disabled = false;
+      btnNormal.style.opacity = '1';
+      btnNormal.style.cursor = 'pointer';
+      btnNormal.className = 'btn btn-primary';
+      btnNormal.removeAttribute('title');
+    } else {
+      btnNormal.disabled = false;
+      btnNormal.style.opacity = '1';
+      btnNormal.style.cursor = 'pointer';
+      btnNormal.className = 'btn ' + (this._pickerType === 'normal' ? 'btn-primary' : 'btn-secondary');
+      btnNormal.removeAttribute('title');
+
+      btnSet.disabled = false;
+      btnSet.style.opacity = '1';
+      btnSet.style.cursor = 'pointer';
+      btnSet.className = 'btn ' + (this._pickerType === 'set' ? 'btn-primary' : 'btn-secondary');
+      btnSet.removeAttribute('title');
+    }
+
     this.filterPicker();
+  },
+
+  setFilterType(type) {
+    if (this._items.length > 0) {
+       const allowedType = this._items[0].isSet ? 'set' : 'normal';
+       if (allowedType !== type) return; // Prevent switching to disabled type
+    }
+    this._pickerType = type;
+    this.updateFilterButtons();
   },
 
   filterPicker() {

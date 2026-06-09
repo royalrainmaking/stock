@@ -89,7 +89,6 @@ PAGES['sets'] = {
             <th class="td-right">ต้นทุน (ไม่รวม/รวม)</th>
             <th class="td-right">ส่งเซลล์</th>
             <th class="td-right">ค่าคอมฯ</th>
-            <th class="td-right">ส่งร้านค้า</th>
             <th class="td-center">จัดการ</th>
           </tr></thead>
           <tbody>
@@ -137,9 +136,9 @@ PAGES['sets'] = {
                   <div style="font-size:0.8rem;color:var(--text-secondary)">฿${UI.currency(t.costNoVat)}</div>
                   <div class="td-bold" style="font-size:0.95rem;color:var(--text-primary)">฿${UI.currency(t.costVat)}</div>
                 </td>
-                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(t.sellWholesale)}</td>
-                <td class="td-right" style="color:#BE185D;font-weight:700">฿${UI.currency(t.sellCommission)}</td>
-                <td class="td-right fw-bold" style="color:var(--accent)">฿${UI.currency(t.shopWholesale)}</td>
+                <td class="td-right fw-bold" style="color:var(--primary)">฿${UI.currency(t.costVat)}</td>
+                <td class="td-right fw-bold" style="color:#BE185D">฿${UI.currency(100 - t.costVat)}</td>
+
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
                     <button class="btn btn-secondary btn-icon" onclick="PAGES.sets.openEdit('${s.id}')" title="แก้ไข"><span class="material-icons" style="font-size:16px">edit</span></button>

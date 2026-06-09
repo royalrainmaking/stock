@@ -294,26 +294,81 @@ PAGES['picking'] = {
     
     let updatedItems = [];
     
-    // Gather ALL inputs (both normal and set items)
-    const inputs = document.querySelectorAll(`.qty-input-inline[data-task="${id}"]`);
-    Array.from(inputs).forEach(inp => {
-      const qty = parseInt(inp.value) || 0;
-      if (qty > 0) {
-        // Find existing product to aggregate quantities if same product is picked multiple times
-        const existing = updatedItems.find(i => i.productId === inp.dataset.pid);
-        if (existing) {
-          existing.qty += qty;
-        } else {
-          updatedItems.push({
-            productId: inp.dataset.pid,
-            qty: qty,
-            unit: inp.dataset.unit || 'หน่วย'
-          });
+    // Normal items
+    task.items.filter(i => !i.isSet).forEach(item => {
+      const inp = document.querySelector(`.qty-input-inline[data-task="${id}"][data-pid="${item.productId}"]:not(.set-input)`);
+      if (inp) {
+        const qty = parseInt(inp.value) || 0;
+        if (qty > 0) {
+          const existing = updatedItems.find(i => i.productId === item.productId && !i.isSet);
+          if (existing) {
+            existing.qty += qty;
+          } else {
+            updatedItems.push({
+              productId: item.productId,
+              qty: qty,
+              unit: inp.dataset.unit || 'หน่วย'
+            });
+          }
         }
       }
     });
 
-    if (updatedItems.length === 0 && Array.from(inputs).length > 0) {
+    // Set items
+    task.items.filter(i => i.isSet).forEach(item => {
+       // Find all inputs for this set's categories
+       let pickedComponents = [];
+       const inputs = document.querySelectorAll(`.set-input[data-task="${id}"]`);
+       
+       Array.from(inputs).forEach(inp => {
+          // Verify if this input belongs to this set's rules
+          // Since we aggregate inputs by category per task, we can just distribute them.
+          // But actually `item` (the Set) needs its components. 
+          // If we have multiple sets in a task sharing categories, this is tricky.
+          // In picking.js, the UI aggregates by category. So all inputs belong to the task generally.
+          // We can just assign the total picked components to the FIRST set and empty the rest, 
+          // OR we can just pass ALL picked set components in ONE of the set items.
+       });
+       // Actually, easier approach: just pass all picked set components in each Set object 
+       // but we only need to deduct them ONCE per task!
+       // Let's just collect all picked set components for the entire task.
+    });
+    
+    // Collect all set components for the task
+    let allPickedSetComponents = [];
+    const setInputs = document.querySelectorAll(`.set-input[data-task="${id}"]`);
+    Array.from(setInputs).forEach(inp => {
+      const qty = parseInt(inp.value) || 0;
+      if (qty > 0) {
+        const existing = allPickedSetComponents.find(i => i.productId === inp.dataset.pid);
+        if (existing) {
+           existing.qty += qty;
+        } else {
+           allPickedSetComponents.push({
+             productId: inp.dataset.pid,
+             qty: qty,
+             unit: inp.dataset.unit || 'หน่วย'
+           });
+        }
+      }
+    });
+
+    // Now push the Set items
+    // To prevent deducting components multiple times if there are multiple sets, 
+    // we assign ALL components to the first Set item, and empty components for others.
+    let isFirstSet = true;
+    task.items.filter(i => i.isSet).forEach(item => {
+       updatedItems.push({
+          isSet: true,
+          productId: item.productId,
+          qty: item.qty,
+          unit: item.unit,
+          pickedComponents: isFirstSet ? allPickedSetComponents : []
+       });
+       isFirstSet = false;
+    });
+
+    if (updatedItems.length === 0) {
       if (!await UI.confirm('ยืนยันรายการ', 'คุณระบุจำนวนเป็น 0 ทั้งหมด ระบบจะโอนสต็อกเป็น 0 และปิดรายการ คุณต้องการดำเนินการใช่หรือไม่?')) return;
     } else {
       if (!await UI.confirm('ยืนยันรายการ', 'กดยืนยันเมื่อจัดสินค้าใส่รถพนักงานเรียบร้อยแล้ว สต็อกจะถูกโอนตามจำนวนที่ระบุ')) return;

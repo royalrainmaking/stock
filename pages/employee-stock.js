@@ -127,14 +127,13 @@ PAGES['employee-stock'] = {
   async load() {
     this.showWhLoading(true);
     try {
-      const [stockRes, whRes, prRes] = await Promise.all([
+      const [stockRes] = await Promise.all([
         API.getAllEmployeeStocks(),
-        API.getWarehouses(),
-        API.getProducts(),
+        MASTER_DATA.load()
       ]);
       this._allStock = stockRes.warehouses || [];
-      this._warehouses = (whRes.warehouses || []).filter(w => w.type === 'employee');
-      this._products = prRes.products || [];
+      this._warehouses = MASTER_DATA.warehouses.filter(w => w.type === 'employee');
+      this._products = MASTER_DATA.products || [];
 
       this.renderWarehouses();
       this.renderContent();
@@ -198,7 +197,14 @@ PAGES['employee-stock'] = {
       let stock = d.stock || [];
 
       if (this._search) {
-        stock = stock.filter(s => s.product?.name?.toLowerCase().includes(this._search));
+        stock = stock.filter(s => {
+          let name = s.product?.name;
+          if (!name) {
+             const set = MASTER_DATA.sets.find(set => set.id === s.productId);
+             if (set) name = set.name;
+          }
+          return name?.toLowerCase().includes(this._search);
+        });
       }
 
       // Grouping logic for this employee
@@ -206,13 +212,46 @@ PAGES['employee-stock'] = {
       stock.forEach(s => {
         const pid = s.productId;
         if (!grouped[pid]) {
+          let p = s.product;
+          if (!p || !p.name) {
+             const setObj = MASTER_DATA.sets.find(set => set.id === pid);
+             if (setObj) {
+                let cost = 0;
+                (setObj.items || []).forEach(it => {
+                  let cp = null;
+                  if (it.allowedProducts && it.allowedProducts.length > 0) {
+                    cp = MASTER_DATA.products.find(x => it.allowedProducts.includes(x.id));
+                  }
+                  if (!cp && it.category) {
+                    cp = MASTER_DATA.products.find(x => x.category === it.category);
+                  }
+                  if (cp) {
+                    cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+                  }
+                });
+                
+                p = {
+                   id: setObj.id,
+                   name: setObj.name,
+                   code: setObj.code,
+                   imageUrl: setObj.imageUrl,
+                   category: 'เซ็ตสินค้า',
+                   unit: 'เซ็ต',
+                   sellWholesale: cost,
+                   sellCommission: 100 - cost,
+                   isSet: true
+                };
+             }
+          }
+          
           grouped[pid] = {
-            product: s.product,
+            product: p,
             productId: pid,
-            unit: s.unit || s.product?.unit || 'หน่วย',
+            unit: s.unit || p?.unit || 'หน่วย',
             totalQty: 0,
             totalConsigned: 0,
-            batches: []
+            batches: [],
+            isSet: p?.isSet || false
           };
         }
         grouped[pid].totalQty += s.qty;
@@ -221,20 +260,44 @@ PAGES['employee-stock'] = {
       });
 
       const productList = Object.values(grouped);
-      // Sort
-      productList.sort((a, b) => {
+      const normalProducts = productList.filter(p => !p.isSet);
+      const setProducts = productList.filter(p => p.isSet);
+
+      // Sort: Normal products
+      normalProducts.sort((a, b) => {
         const idxA = this._products.findIndex(p => p.id === a.productId);
         const idxB = this._products.findIndex(p => p.id === b.productId);
         return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
       });
+      
+      // Sort sets by name
+      setProducts.sort((a, b) => (a.product?.name || '').localeCompare(b.product?.name || ''));
 
-      const totalWholesale = stock.reduce((a, s) => a + (s.qty - (s.consigned || 0)) * (s.product?.sellWholesale || 0), 0);
-      const totalCommission = stock.reduce((a, s) => a + (s.qty - (s.consigned || 0)) * (s.product?.sellCommission || 0), 0);
-      const maxTotalQty = Math.max(...productList.map(p => p.totalQty), 1);
+      const totalWholesale = productList.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellWholesale || 0), 0);
+      const totalCommission = productList.reduce((a, p) => a + (p.totalQty - p.totalConsigned) * (p.product?.sellCommission || 0), 0);
+      
+      const renderSection = (title, items, icon) => {
+        if (!items.length) return '';
+        const maxQty = Math.max(...items.map(p => p.totalQty), 1);
+        return `
+          <div style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.1rem;color:var(--text-primary);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--border)">
+              <span class="material-icons" style="color:var(--primary)">${icon}</span>
+              ${title} <span class="badge badge-gray" style="font-size:0.8rem">${items.length} รายการ</span>
+            </div>
+            ${this._viewMode === 'card'
+              ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+                   ${items.map(p => this._renderEmpCard(p, maxQty)).join('')}
+                 </div>`
+              : this._renderEmpTable(items, null, null)
+            }
+          </div>
+        `;
+      };
 
       return `
         <div class="card mb-16">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
             <div style="display:flex;align-items:center;gap:12px">
               <div style="border:2px solid #fff;border-radius:50%;box-shadow:var(--shadow)">
                 ${UI.avatar(emp.avatar, emp.displayName, 46)}
@@ -255,12 +318,16 @@ PAGES['employee-stock'] = {
             </div>
           </div>
           
-          ${this._viewMode === 'card'
-            ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
-                 ${productList.map(p => this._renderEmpCard(p, maxTotalQty)).join('')}
-               </div>`
-            : this._renderEmpTable(productList, totalWholesale, totalCommission)
-          }
+          ${renderSection('สินค้าปกติ', normalProducts, 'inventory_2')}
+          ${renderSection('สินค้าจัดเซ็ต', setProducts, 'category')}
+          
+          ${this._viewMode !== 'card' && productList.length > 0 ? `
+            <div style="background:var(--bg-card2); padding:16px; border-radius:8px; margin-top:20px; display:flex; justify-content:flex-end; gap:20px; font-weight:bold;">
+              <div>ยอดรวมทั้งหมดของพนักงาน</div>
+              <div class="text-primary">ส่งเงิน: ฿${UI.currency(totalWholesale, 2)}</div>
+              <div style="color:#BE185D">คอมฯ: ฿${UI.currency(totalCommission, 2)}</div>
+            </div>
+          ` : ''}
         </div>
       `;
     }).join('');
@@ -388,13 +455,15 @@ PAGES['employee-stock'] = {
               </tr>`;
             }).join('')}
           </tbody>
+          ${totalWholesale !== null ? `
           <tfoot>
             <tr style="background:var(--bg-card2); font-weight:bold">
-              <td colspan="7" class="td-right">ยอดรวมทั้งหมดของพนักงาน</td>
+              <td colspan="7" class="td-right">ยอดรวม</td>
               <td class="td-right text-primary">฿${UI.currency(totalWholesale, 2)}</td>
               <td class="td-right" style="color:#BE185D">฿${UI.currency(totalCommission, 2)}</td>
             </tr>
           </tfoot>
+          ` : ''}
         </table>
       </div>
     `;
