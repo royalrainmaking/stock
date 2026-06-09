@@ -603,13 +603,18 @@ PAGES['transfer'] = {
       stockBatches.forEach(s => {
         const prod = s.product;
         const pid = s.productId;
-        if (prod && (prod.name.toLowerCase().includes(q) || (prod.code || '').toLowerCase().includes(q) || (prod.category || '').toLowerCase().includes(q))) {
-          if (!grouped[pid]) {
-            grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
-          }
-          grouped[pid].totalQty += Number(s.qty);
-          if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
-            grouped[pid].nearestExp = s.expiryDate;
+        if (prod) {
+          const pName = (prod.name || '').toLowerCase();
+          const pCode = (prod.code || '').toLowerCase();
+          const pCat = (prod.category || '').toLowerCase();
+          if (pName.includes(q) || pCode.includes(q) || pCat.includes(q)) {
+            if (!grouped[pid]) {
+              grouped[pid] = { ...prod, productId: pid, totalQty: 0, nearestExp: '9999-12-31' };
+            }
+            grouped[pid].totalQty += Number(s.qty);
+            if (s.expiryDate && s.expiryDate < grouped[pid].nearestExp) {
+              grouped[pid].nearestExp = s.expiryDate;
+            }
           }
         }
       });
@@ -619,7 +624,9 @@ PAGES['transfer'] = {
     // Inject Sets matching query
     if (type === 'set' && MASTER_DATA.sets && MASTER_DATA.sets.length > 0) {
       MASTER_DATA.sets.forEach(s => {
-        if (s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) {
+        const sName = (s.name || '').toLowerCase();
+        const sCode = (s.code || '').toLowerCase();
+        if (sName.includes(q) || sCode.includes(q)) {
           filtered.push({
             id: s.id,
             productId: s.id,

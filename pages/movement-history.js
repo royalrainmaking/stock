@@ -111,7 +111,7 @@ PAGES['movement-history'] = {
     const emp = document.getElementById('mh-employee')?.value;
     
     const filtered = this._history.filter(h => {
-      const matchQuery = !q || h.id.toLowerCase().includes(q) || h.username.toLowerCase().includes(q);
+      const matchQuery = !q || (h.id || '').toLowerCase().includes(q) || (h.username || '').toLowerCase().includes(q);
       const matchEmp = !emp || h.username === emp;
       return matchQuery && matchEmp;
     });

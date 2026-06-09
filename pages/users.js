@@ -59,9 +59,9 @@ PAGES['users'] = {
   filtered() {
     if (!this._search) return this._users;
     return this._users.filter(u =>
-      u.username?.toLowerCase().includes(this._search) ||
-      u.displayName?.toLowerCase().includes(this._search) ||
-      u.email?.toLowerCase().includes(this._search)
+      (u.username || '').toLowerCase().includes(this._search) ||
+      (u.displayName || '').toLowerCase().includes(this._search) ||
+      (u.email || '').toLowerCase().includes(this._search)
     );
   },
 

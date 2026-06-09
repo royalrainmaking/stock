@@ -290,20 +290,44 @@ PAGES['transfer-history'] = {
           <tbody>
             ${items.map(it => {
               const p = this._products.find(x => x.id === it.productId) || {};
+              const setObj = MASTER_DATA.sets?.find(x => x.id === it.productId);
+              
+              const displayName = setObj ? setObj.name : (p.name || it.productId);
+              const displayCode = setObj ? setObj.code : (p.code || '-');
+              const displayCat = setObj ? 'สินค้าจัดเซ็ต' : (p.category || '');
+              const displayImg = setObj ? setObj.imageUrl : p.imageUrl;
+              const unit = setObj ? 'เซ็ต' : (it.unit || p.unit || 'หน่วย');
+
+              let subItemsHtml = '';
+              if (setObj && setObj.items) {
+                 subItemsHtml = `
+                    <div style="margin-top:8px; background:var(--bg-base); padding:8px 12px; border-radius:6px; font-size:0.75rem; border:1px solid var(--border-light)">
+                      <div style="color:var(--text-secondary); margin-bottom:4px">📌 ส่วนประกอบในเซ็ต (รวมที่เบิกทั้งหมด):</div>
+                      <ul style="padding-left:16px; margin:0; color:var(--text-muted)">
+                        ${setObj.items.map(subIt => {
+                          const subP = this._products.find(x => x.id === subIt.productId) || {};
+                          return `<li>${subP.name || subIt.productId} : <span style="color:var(--primary);font-weight:bold">${subIt.qty * (Number(it.qty) || 1)}</span> ${subP.unit || 'หน่วย'}</li>`;
+                        }).join('')}
+                      </ul>
+                    </div>
+                 `;
+              }
+
               return `
                 <tr>
                   <td>
-                    <div style="display:flex;align-items:center;gap:12px">
+                    <div style="display:flex;align-items:flex-start;gap:12px">
                       <div class="item-img-mini" style="width:36px;height:36px;flex-shrink:0">
-                        ${UI.image(p.imageUrl, '', 'width:40px;height:40px;object-fit:cover;border-radius:4px;')}
+                        ${UI.image(displayImg, '', 'width:40px;height:40px;object-fit:cover;border-radius:4px;')}
                       </div>
                       <div>
-                        <div class="fw-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
-                        <div style="font-size:0.75rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
+                        <div class="fw-bold" style="font-size:0.85rem">${displayName}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted)"><span style="font-family:monospace">[${displayCode}]</span> ${displayCat}</div>
+                        ${subItemsHtml}
                       </div>
                     </div>
                   </td>
-                  <td class="td-right fw-bold" style="color:var(--primary);font-size:0.9rem">${UI.currency(it.qty, 0)} ${it.unit}</td>
+                  <td class="td-right fw-bold" style="color:var(--primary);font-size:0.9rem">${UI.currency(it.qty, 0)} ${unit}</td>
                 </tr>
               `;
             }).join('')}

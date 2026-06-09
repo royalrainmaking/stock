@@ -203,7 +203,7 @@ PAGES['employee-stock'] = {
              const set = MASTER_DATA.sets.find(set => set.id === s.productId);
              if (set) name = set.name;
           }
-          return name?.toLowerCase().includes(this._search);
+          return (name || '').toLowerCase().includes(this._search);
         });
       }
 
@@ -259,7 +259,7 @@ PAGES['employee-stock'] = {
         grouped[pid].batches.push(s);
       });
 
-      const productList = Object.values(grouped);
+      const productList = Object.values(grouped).filter(p => p.totalQty > 0);
       const normalProducts = productList.filter(p => !p.isSet);
       const setProducts = productList.filter(p => p.isSet);
 
@@ -340,7 +340,7 @@ PAGES['employee-stock'] = {
     const commissionPrice = p.product?.sellCommission || 0;
     const barColor = qty === 0 ? 'var(--danger)' : 'var(--primary)';
 
-    const batchRows = p.batches.map(b => {
+    const batchRows = p.batches.filter(b => b.qty > 0).map(b => {
       const st = this._getExpiryStatus(b.expiryDate);
       const bSold = b.qty - (b.consigned || 0);
       return `
@@ -430,7 +430,7 @@ PAGES['employee-stock'] = {
               const whAmt = sold * (p.product?.sellWholesale || 0);
               const commAmt = sold * (p.product?.sellCommission || 0);
 
-              const batchHtml = p.batches.map(b => {
+              const batchHtml = p.batches.filter(b => b.qty > 0).map(b => {
                 const st = this._getExpiryStatus(b.expiryDate);
                 const bSold = b.qty - (b.consigned || 0);
                 return `<div style="font-size:0.75rem;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #eee;padding:2px 0">

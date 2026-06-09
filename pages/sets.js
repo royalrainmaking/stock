@@ -67,8 +67,8 @@ PAGES['sets'] = {
   filtered() {
     if (!this._search) return this._sets;
     return this._sets.filter(s =>
-      s.name.toLowerCase().includes(this._search) ||
-      s.code.toLowerCase().includes(this._search)
+      (s.name || '').toLowerCase().includes(this._search) ||
+      (s.code || '').toLowerCase().includes(this._search)
     );
   },
 

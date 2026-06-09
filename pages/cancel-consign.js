@@ -377,7 +377,7 @@ PAGES['cancel-consign'] = {
     const q = query.toLowerCase();
     const filtered = this._stock.filter(s => {
       const p = s.product;
-      return p && (p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
+      return p && ((p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
     });
     document.getElementById('re-picker-grid').innerHTML = this.renderPickerGrid(filtered);
   },

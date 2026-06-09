@@ -164,8 +164,8 @@ PAGES['products'] = {
   filtered() {
     if (!this._search) return this._products;
     return this._products.filter(p =>
-      p.name.toLowerCase().includes(this._search) ||
-      p.code.toLowerCase().includes(this._search) ||
+      (p.name || '').toLowerCase().includes(this._search) ||
+      (p.code || '').toLowerCase().includes(this._search) ||
       (p.category || '').toLowerCase().includes(this._search)
     );
   },

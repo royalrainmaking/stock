@@ -64,8 +64,8 @@ PAGES['shops'] = {
   filtered() {
     if (!this._search) return this._shops;
     return this._shops.filter(s => 
-      s.name.toLowerCase().includes(this._search) ||
-      s.id.toLowerCase().includes(this._search) ||
+      (s.name || '').toLowerCase().includes(this._search) ||
+      (s.id || '').toLowerCase().includes(this._search) ||
       (s.phone && s.phone.includes(this._search))
     );
   },

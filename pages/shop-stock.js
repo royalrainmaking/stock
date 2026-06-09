@@ -664,7 +664,7 @@ PAGES['shop-stock'] = {
                       ${g.netTotal === 0 ? '-' : '฿' + UI.currency(g.netTotal)}
                     </div>
                     <div style="display:flex; gap:3px; justify-content:flex-end; margin-top:2px">
-                      ${types.map(t => `<span class="type-tag tag-${t?.toLowerCase().includes('return') ? 'return' : (t?.toLowerCase().includes('swap') ? 'swap' : 'move')}" style="font-size:0.55rem">${t}</span>`).join('')}
+                      ${types.map(t => `<span class="type-tag tag-${(t || '').toLowerCase().includes('return') ? 'return' : ((t || '').toLowerCase().includes('swap') ? 'swap' : 'move')}" style="font-size:0.55rem">${t || ''}</span>`).join('')}
                     </div>
                   </div>
                 </div>

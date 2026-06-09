@@ -328,7 +328,7 @@ PAGES['central-stock'] = {
   renderContent() {
     const data = this._stock.filter(s =>
       (!this._selectedWh || s.warehouseId === this._selectedWh) &&
-      (!this._search || s.product?.name?.toLowerCase().includes(this._search) || s.product?.code?.toLowerCase().includes(this._search))
+      (!this._search || (s.product?.name || '').toLowerCase().includes(this._search) || (s.product?.code || '').toLowerCase().includes(this._search))
     );
     if (!data.length) {
       document.getElementById('cs-content').innerHTML = UI.emptyState('warehouse', 'ไม่มีข้อมูลสินค้าในคลัง', 'ลองเปลี่ยนตัวกรอง หรือรับสินค้าเข้าคลังก่อน');
@@ -420,7 +420,7 @@ PAGES['central-stock'] = {
 
     // Build batch list
     const canEdit = AUTH.hasRole('admin', 'stock');
-    const batchRows = p.batches.map(b => {
+    const batchRows = p.batches.filter(b => b.qty > 0).map(b => {
       const st = this._getExpiryStatus(b.expiryDate);
       const expiryStr = b.expiryDate || '9999-12-31';
       return `
@@ -523,7 +523,7 @@ PAGES['central-stock'] = {
       const low = p.totalQty <= 10;
       const cost = p.product?.costVat || 0;
       const canEdit = AUTH.hasRole('admin', 'stock');
-      const batchHtml = p.batches.map(b => {
+      const batchHtml = p.batches.filter(b => b.qty > 0).map(b => {
         const st = this._getExpiryStatus(b.expiryDate);
         const expiryStr = b.expiryDate || '9999-12-31';
         return `<div style="font-size:0.72rem;display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px dotted #eee">

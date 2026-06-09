@@ -213,7 +213,7 @@ PAGES.movement = {
     const q = query.toLowerCase().trim();
     const otherWhId = type === 'from' ? this._toWh : this._fromWh;
     
-    const filtered = this._warehouses.filter(w => w.name.toLowerCase().includes(q) || (w.employeeName || '').toLowerCase().includes(q));
+    const filtered = this._warehouses.filter(w => (w.name || '').toLowerCase().includes(q) || (w.employeeName || '').toLowerCase().includes(q));
     
     const central = filtered.filter(w => w.type === 'central');
     const employee = filtered.filter(w => w.type === 'employee');
@@ -427,7 +427,7 @@ PAGES.movement = {
     const q = query.toLowerCase();
     const filtered = this._sourceStock.filter(s => {
       const p = s.product;
-      return p && (p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
+      return p && ((p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q));
     });
     document.getElementById('mv-picker-grid').innerHTML = this.renderPickerGrid(filtered);
   },
