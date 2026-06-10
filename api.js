@@ -79,6 +79,7 @@ const API = {
   // ── Stock Operations ──────────────────
   getCentralStock(warehouseId) { return this._call('getCentralStock', { warehouseId }); },
   getEmployeeStock(employeeId) { return this._call('getEmployeeStock', { employeeId }); },
+  getEmployeeFinance(employeeId, month) { return this._call('getEmployeeFinance', { employeeId, month }); },
   getAllEmployeeStocks(date) { return this._call('getAllEmployeeStocks', { date }); },
   getMovementHistory(params) { return this._call('getMovementHistory', params); },
 

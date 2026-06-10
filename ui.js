@@ -397,6 +397,7 @@ function getSidebarMenu(role) {
       roles: ['admin', 'cashier'],
       items: [
         { page: 'billing', icon: 'payments', label: 'คิดเงินพนักงาน', roles: ['admin', 'cashier'] },
+        { page: 'finance', icon: 'account_balance_wallet', label: 'บัญชีพนักงาน', roles: ['admin', 'cashier'] },
         { page: 'tax-invoice', icon: 'receipt', label: 'ใบกำกับภาษี', roles: ['admin', 'cashier'] },
       ]
     },

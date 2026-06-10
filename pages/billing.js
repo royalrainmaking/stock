@@ -337,13 +337,109 @@ PAGES['billing'] = {
       </div>
     `, `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-success" onclick="PAGES.billing.confirmBilling(${idx})">ยืนยันและออกใบเสร็จ</button>
+      <button class="btn btn-success" onclick="PAGES.billing.openFinanceSettlement(${idx})">ดำเนินการชำระเงิน <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_forward</span></button>
     `, 'max-width:650px');
   },
 
-  async confirmBilling(idx) {
+  openFinanceSettlement(idx) {
     const b = this._billings[idx];
     const note = document.getElementById('bill-note')?.value || '';
+    
+    const html = `
+      <div style="background:var(--bg-base); padding:15px; border-radius:12px; margin-bottom:15px">
+         <div class="text-muted" style="font-size:0.8rem">ยอดค่าสินค้าที่ต้องส่ง</div>
+         <div class="fw-bold" style="font-size:1.5rem; color:var(--success)">฿${UI.currency(b._totalAmt)}</div>
+         <input type="hidden" id="fin-goods-amt" value="${b._totalAmt}" />
+      </div>
+      
+      <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group"><label>เงินประกัน</label><input type="number" class="fin-input" id="fin-deposit" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ชำระหนี้</label><input type="number" class="fin-input" id="fin-debt" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ฝากเงิน</label><input type="number" class="fin-input" id="fin-save" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ค่าเช่าซื้อรถ/พ่วง</label><input type="number" class="fin-input" id="fin-hire" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ค่าเช่ารถ</label><input type="number" class="fin-input" id="fin-rent" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ค่าหลอด</label><input type="number" class="fin-input" id="fin-straw" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group"><label>ค่าถุง</label><input type="number" class="fin-input" id="fin-bag" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" /></div>
+        <div class="form-group">
+           <label>อื่นๆ</label>
+           <div style="display:flex; gap:5px">
+             <input type="text" id="fin-other-note" placeholder="ระบุชื่อค่าใช้จ่าย..." style="flex:2" />
+             <input type="number" class="fin-input" id="fin-other" value="0" style="flex:1" onfocus="this.select()" oninput="PAGES.billing.calcFinance()" />
+           </div>
+        </div>
+      </div>
+      
+      <div style="background:var(--bg-card2); padding:15px; border-radius:12px; margin-top:15px; border:2px solid var(--primary); text-align:center;">
+         <div class="text-muted" style="font-size:0.9rem; font-weight:bold;">ยอดรวมที่ต้องชำระทั้งสิ้น</div>
+         <div class="fw-bold" style="font-size:2.5rem; color:var(--primary)" id="fin-grand-total">฿${UI.currency(b._totalAmt)}</div>
+         <input type="hidden" id="fin-grand-val" value="${b._totalAmt}" />
+      </div>
+      
+      <h4 style="margin-top:20px; color:var(--text-secondary)">ช่องทางการชำระเงิน</h4>
+      <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label>จ่ายเงินสด (บาท)</label>
+          <input type="number" id="fin-cash" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinanceTransfer()" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--success); text-align:center; border:2px solid var(--success)"/>
+        </div>
+        <div class="form-group">
+          <label>เงินโอน (บาท)</label>
+          <input type="number" id="fin-transfer" value="${b._totalAmt}" onfocus="this.select()" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--primary); text-align:center; border:2px solid var(--primary)"/>
+        </div>
+      </div>
+    `;
+
+    openModal('ชำระเงินและปิดบิล', html, `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="PAGES.billing.confirmBilling(${idx}, '${note}')"><span class="material-icons">payments</span> ยืนยันชำระเงินและออกใบเสร็จ</button>
+    `, 'max-width:600px');
+  },
+  
+  calcFinance() {
+    const goods = parseFloat(document.getElementById('fin-goods-amt').value) || 0;
+    const inputs = document.querySelectorAll('.fin-input');
+    let totalFee = 0;
+    inputs.forEach(el => totalFee += (parseFloat(el.value) || 0));
+    
+    const grand = goods + totalFee;
+    document.getElementById('fin-grand-val').value = grand;
+    document.getElementById('fin-grand-total').textContent = '฿' + UI.currency(grand);
+    this.calcFinanceTransfer();
+  },
+  
+  calcFinanceTransfer() {
+    const grand = parseFloat(document.getElementById('fin-grand-val').value) || 0;
+    const cash = parseFloat(document.getElementById('fin-cash').value) || 0;
+    const transfer = grand - cash;
+    document.getElementById('fin-transfer').value = transfer >= 0 ? transfer : 0;
+  },
+
+  async confirmBilling(idx, prevNote) {
+    const b = this._billings[idx];
+    const note = prevNote || '';
+    
+    const cashPaid = parseFloat(document.getElementById('fin-cash')?.value) || 0;
+    const transferPaid = parseFloat(document.getElementById('fin-transfer')?.value) || 0;
+    
+    const financeItems = [];
+    financeItems.push({ category: 'ค่าสินค้า', amount: b._totalAmt });
+    
+    const addFee = (id, cat) => {
+      const v = parseFloat(document.getElementById(id)?.value) || 0;
+      if (v > 0) financeItems.push({ category: cat, amount: v });
+    };
+    addFee('fin-deposit', 'เงินประกัน');
+    addFee('fin-debt', 'ชำระหนี้');
+    addFee('fin-save', 'ฝากเงิน');
+    addFee('fin-hire', 'ค่าเช่าซื้อรถ/พ่วง');
+    addFee('fin-rent', 'ค่าเช่ารถ');
+    addFee('fin-straw', 'ค่าหลอด');
+    addFee('fin-bag', 'ค่าถุง');
+    
+    const otherVal = parseFloat(document.getElementById('fin-other')?.value) || 0;
+    if (otherVal > 0) {
+       financeItems.push({ category: 'อื่นๆ', amount: otherVal, note: document.getElementById('fin-other-note')?.value || '' });
+    }
+
     try {
       UI.loading(true);
       const items = b._stock.map(s => ({
@@ -352,7 +448,11 @@ PAGES['billing'] = {
         pricePerUnit: s.product?.sellWholesale || 0, imageUrl: s.product?.imageUrl,
         expiryDate: s.expiryDate, isSet: s.product?.isSet, setItems: s.product?.setItems
       }));
-      const res = await API.doBilling({ warehouseId: b.warehouseId, employeeId: b.employee?.id, date: this._date, totalAmt: b._totalAmt, totalUnits: b._totalUnits, note, items });
+      const res = await API.doBilling({ 
+        warehouseId: b.warehouseId, employeeId: b.employee?.id, date: this._date, 
+        totalAmt: b._totalAmt, totalUnits: b._totalUnits, note, items,
+        cashPaid, transferPaid, financeItems
+      });
       closeModal();
       
       const groupedReceipt = {};

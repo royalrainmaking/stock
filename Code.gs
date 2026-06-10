@@ -23,7 +23,7 @@ function getSpreadsheet() {
 }
 
 // ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'fgdfgfdgfdgfdgfd';
+const GEMINI_API_KEY = 'ดอหกห';
 
 // Sheet names
 const SN = {
@@ -41,6 +41,7 @@ const SN = {
   SUPPLIERS: 'Suppliers',
   COMPANY_INFO: 'CompanyInfo',
   SETS: 'Sets',
+  EMPLOYEE_FINANCE: 'EmployeeFinance',
 };
 
 // ── UTILS ───────────────────────────────────────────────────
@@ -130,6 +131,7 @@ function handleRequest(e) {
       // Stock
       case 'getCentralStock': result = getCentralStock(e.parameter.warehouseId); break;
       case 'getEmployeeStock': result = getEmployeeStock(e.parameter.employeeId); break;
+      case 'getEmployeeFinance': result = getEmployeeFinance(e.parameter.employeeId, e.parameter.month); break;
       case 'getAllEmployeeStocks': result = getAllEmployeeStocks(e.parameter.date); break;
       case 'receiveGoods': result = receiveGoods(user, body); break;
        case 'transferToEmployee': result = transferToEmployee(user, body); break;
@@ -234,7 +236,7 @@ function getHeaders(name) {
     [SN.CENTRAL_STOCK]: ['productId','warehouseId','expiryDate','qty','unit','lastUpdated'],
     [SN.EMPLOYEE_STOCK]: ['productId','warehouseId','expiryDate','qty','consigned','unit','lastUpdated'],
     [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate','poNo','taxInvoiceNo','supplierId','costNoVat','discount'],
-    [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','userId','createdAt', 'items'],
+    [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','cashPaid','transferPaid','userId','createdAt', 'items'],
     [SN.LOGS]: ['id','ts','userId','username','action','detail','ip'],
     [SN.ORDERS]: ['id','date','requestedBy','userId','fromWhId','toWhId','status','note','items','createdAt'],
     [SN.SHOPS]: ['id','name','address','lat','lng','ownerName','phone','salesPersonId','active','createdAt','imageUrl'],
@@ -242,6 +244,7 @@ function getHeaders(name) {
     [SN.SUPPLIERS]: ['id', 'name', 'address', 'phone', 'fax', 'taxId', 'createdAt'],
     [SN.COMPANY_INFO]: ['id', 'name', 'address', 'phone', 'fax', 'taxId'],
     [SN.SETS]: ['id','code','name','items','active','createdAt','imageUrl'],
+    [SN.EMPLOYEE_FINANCE]: ['id','date','employeeId','warehouseId','billingId','category','amount','note','createdAt'],
   };
   return headers[name] || [];
 }
@@ -1514,6 +1517,14 @@ function getBillingList(date) {
   return { billings: result };
 }
 
+function getEmployeeFinance(employeeId, month) {
+  const finance = sheetData(getSheet(SN.EMPLOYEE_FINANCE));
+  let result = finance;
+  if (employeeId) result = result.filter(f => f.employeeId === employeeId);
+  if (month) result = result.filter(f => (f.date || '').startsWith(month));
+  return { finance: result };
+}
+
 function doBilling(user, data) {
   requireRole(user, 'admin', 'cashier');
   const { warehouseId, date, totalAmt, totalUnits, note, items } = data;
@@ -1524,12 +1535,36 @@ function doBilling(user, data) {
   if (existing) throw new Error('คิดเงินพนักงานนี้ไปแล้ววันนี้');
 
   const billingId = generateId('B');
+  const cashPaid = Number(data.cashPaid) || 0;
+  const transferPaid = Number(data.transferPaid) || 0;
+
   appendRow(getSheet(SN.BILLING), {
     id: billingId, warehouseId, employeeId: data.employeeId || '',
     date: today, totalAmt, totalUnits, note: note || '',
+    cashPaid: cashPaid, transferPaid: transferPaid,
     userId: user.id, createdAt: new Date().toISOString(),
     items: JSON.stringify(items || []),
   });
+
+  // Save finance items
+  if (data.financeItems && data.financeItems.length > 0) {
+    const finSheet = getSheet(SN.EMPLOYEE_FINANCE);
+    data.financeItems.forEach(fi => {
+      if (Number(fi.amount) !== 0) {
+        appendRow(finSheet, {
+          id: generateId('F'),
+          date: today,
+          employeeId: data.employeeId || '',
+          warehouseId: warehouseId || '',
+          billingId: billingId,
+          category: fi.category || '',
+          amount: Number(fi.amount) || 0,
+          note: fi.note || '',
+          createdAt: new Date().toISOString()
+        });
+      }
+    });
+  }
 
   // Reset employee stock (move consigned back, clear sold)
   if (items?.length) {

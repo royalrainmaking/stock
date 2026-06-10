@@ -121,8 +121,9 @@ PAGES['consign'] = {
 
   async loadWarehouses() {
     try {
-      const res = await API.getWarehouses();
+      const [res, prodRes] = await Promise.all([API.getWarehouses(), API.getProducts()]);
       this._employeeWarehouses = (res.warehouses || []).filter(w => w.type === 'employee');
+      this._productsCache = prodRes.products || [];
 
       const thumb = document.getElementById('co-emp-thumb');
       if (thumb && !this._selectedWh) {
@@ -288,31 +289,33 @@ PAGES['consign'] = {
       groups[pid].batches.push(s);
     });
 
-    return Object.values(groups).map(g => {
+    // Sort groups based on productsCache order
+    const sortedGroups = Object.values(groups).sort((a, b) => {
+      const idxA = this._productsCache ? this._productsCache.findIndex(p => p.id === a.product.id) : -1;
+      const idxB = this._productsCache ? this._productsCache.findIndex(p => p.id === b.product.id) : -1;
+      const orderA = idxA === -1 ? 9999 : idxA;
+      const orderB = idxB === -1 ? 9999 : idxB;
+      return orderA - orderB;
+    });
+
+    return sortedGroups.map(g => {
       const p = g.product;
+      const firstBatch = g.batches.filter(s => Number(s.qty) > 0).sort((a,b) => (a.expiryDate||'9999').localeCompare(b.expiryDate||'9999'))[0];
+      if (!firstBatch) return '';
+      
+      const available = Math.max(0, firstBatch.qty - (firstBatch.consigned || 0));
       return `
-        <div class="picker-item no-hover" style="cursor:default;">
+        <div class="picker-item" style="cursor:pointer; transition:transform 0.2s;" onclick="PAGES.consign.showQtyInput('${firstBatch.productId}', '${firstBatch.expiryDate || ''}')" onpointerenter="this.style.transform='scale(1.02)'" onpointerleave="this.style.transform='scale(1)'">
           ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9;')}
           <div class="p-info" style="width:100%;">
             <div class="p-code">${p?.code || '-'}</div>
-            <div class="p-name">${p?.name || g.product.id}</div>
-            <div class="p-cat" style="margin-bottom:8px;">${p?.category || '-'}</div>
+            <div class="p-name" style="margin-bottom:8px;">${p?.name || g.product.id}</div>
             
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; border-bottom:1px solid var(--border-light); padding-bottom:4px;">ล็อตสินค้าที่มี:</div>
-            <div class="batch-selector-container">
-              ${g.batches.filter(s => Number(s.qty) > 0).sort((a,b) => (a.expiryDate||'9999').localeCompare(b.expiryDate||'9999')).map(s => {
-                const available = Math.max(0, s.qty - (s.consigned || 0));
-                return `
-                <div class="batch-badge" onclick="PAGES.consign.showQtyInput('${s.productId}', '${s.expiryDate || ''}')">
-                   <span class="material-icons" style="font-size:14px; flex-shrink:0;">event_note</span>
-                   <div style="flex:1; min-width:0; overflow:hidden;">
-                     <div class="batch-exp">EXP: ${UI.dateStr(s.expiryDate) || '-'}</div>
-                     <div class="batch-qty">คงเหลือ: ${UI.currency(available, 0)} ${p?.unit || ''} ${s.consigned > 0 ? `<span style="color:var(--warning)">(ฝากแล้ว ${UI.currency(s.consigned,0)})</span>` : ''}</div>
-                   </div>
-                   <span class="material-icons" style="font-size:18px; color:var(--primary); flex-shrink:0;">add_circle</span>
-                </div>`;
-              }).join('')}
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card2); padding:8px; border-radius:8px; border:1px solid var(--border-light)">
+               <div style="font-size:0.75rem; color:var(--text-muted)">คงเหลือฝากได้:</div>
+               <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${UI.currency(available, 0)} ${p?.unit || ''}</div>
             </div>
+            ${firstBatch.consigned > 0 ? `<div style="font-size:0.7rem; color:var(--warning); text-align:right; margin-top:4px;">(ฝากอยู่ ${UI.currency(firstBatch.consigned,0)})</div>` : ''}
           </div>
         </div>
       `;
