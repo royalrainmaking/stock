@@ -300,7 +300,7 @@ PAGES['central-stock'] = {
     const total = this._stock.reduce((a, s) => a + s.qty, 0);
     const skus = new Set(this._stock.map(s => s.productId)).size;
     const low = this._stock.filter(s => s.qty <= 10).length;
-    const val = this._stock.reduce((a, s) => a + (s.product?.costVat || 0) * s.qty, 0);
+    const val = this._stock.reduce((a, s) => a + (Number(s.product?.costVat) || 0) * s.qty, 0);
     document.getElementById('cs-summary').innerHTML = `
       <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div>
         <div class="stat-label">สินค้าคงเหลือรวม</div>
@@ -315,7 +315,7 @@ PAGES['central-stock'] = {
       <div class="stat-card orange"><div class="stat-bg-icon"><span class="material-icons">payments</span></div>
         <div class="stat-label">มูลค่าคงคลัง</div>
         <div class="stat-value" style="color:var(--warning);font-size:1.4rem">฿${UI.currency(val, 2)}</div>
-        <div class="stat-sub">ราคาทุน (VAT)</div>
+        <div class="stat-sub">ราคาต้นทุน (รวม VAT)</div>
       </div>
       <div class="stat-card pink"><div class="stat-bg-icon"><span class="material-icons">warning</span></div>
         <div class="stat-label">สต็อกต่ำ (≤10)</div>
@@ -416,7 +416,7 @@ PAGES['central-stock'] = {
     const qty = p.totalQty;
     const isLow = qty <= 10;
     const barColor = qty === 0 ? 'var(--danger)' : isLow ? 'var(--warning)' : 'var(--success)';
-    const totalVal = (p.product?.costVat || 0) * qty;
+    const totalVal = (Number(p.product?.costVat) || 0) * qty;
 
     // Build batch list
     const canEdit = AUTH.hasRole('admin', 'stock');
@@ -505,7 +505,7 @@ PAGES['central-stock'] = {
       grouped[pid].batches.push(s);
     });
 
-    const totalVal = data.reduce((a, s) => a + (s.product?.costVat || 0) * s.qty, 0);
+    const totalVal = data.reduce((a, s) => a + (Number(s.product?.costVat) || 0) * s.qty, 0);
     const productList = Object.values(grouped);
 
     return `
@@ -521,7 +521,7 @@ PAGES['central-stock'] = {
             <tbody>
               ${productList.map((p, i) => {
       const low = p.totalQty <= 10;
-      const cost = p.product?.costVat || 0;
+      const cost = Number(p.product?.costVat) || 0;
       const canEdit = AUTH.hasRole('admin', 'stock');
       const batchHtml = p.batches.filter(b => b.qty > 0).map(b => {
         const st = this._getExpiryStatus(b.expiryDate);

@@ -84,6 +84,7 @@ PAGES['receive-history'] = {
             <span class="material-icons">search</span> ค้นหา
           </button>
           ${AUTH.isAdmin() ? `<button type="button" class="btn btn-secondary" style="height:42px" onclick="PAGES['receive-history'].migrateCosts()"><span class="material-icons">sync</span> ดึงราคาบิลเก่า</button>` : ''}
+          <button type="button" class="btn btn-warning" style="height:42px" onclick="PAGES['receive-history'].checkMismatches()"><span class="material-icons">troubleshoot</span> วิเคราะห์ส่วนต่าง</button>
         </form>
       </div>
 
@@ -448,6 +449,73 @@ PAGES['receive-history'] = {
       this.fetchAndRender();
     } catch(e) {
       UI.toast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    } finally {
+      UI.loading(false);
+    }
+  },
+
+  async checkMismatches() {
+    UI.loading(true);
+    try {
+      const [rh, cs, es] = await Promise.all([
+        API._call('getReceiveHistory', {}),
+        API.getCentralStock(),
+        API.getAllEmployeeStocks()
+      ]);
+      const history = rh.history || [];
+      const central = cs.stock || [];
+      const empWh = es.warehouses || [];
+
+      const summary = {};
+      history.forEach(h => {
+        (h.items || []).forEach(it => {
+          if (!summary[it.productId]) summary[it.productId] = { id: it.productId, received: 0, current: 0, rVal:0, cVal:0 };
+          summary[it.productId].received += Number(it.qty) || 0;
+          const p = this._products.find(x => x.id === it.productId) || {};
+          summary[it.productId].rVal += (Number(it.qty) || 0) * Math.max(0, (it.costNoVat || p.costNoVat || 0) - (it.discount || 0)) * (1 + (CONFIG.VAT_RATE || 0.07));
+        });
+      });
+
+      central.forEach(s => {
+        if (!summary[s.productId]) summary[s.productId] = { id: s.productId, received: 0, current: 0, rVal:0, cVal:0 };
+        summary[s.productId].current += Number(s.qty) || 0;
+      });
+
+      empWh.forEach(wh => {
+        (wh.stock || []).forEach(s => {
+          if (!summary[s.productId]) summary[s.productId] = { id: s.productId, received: 0, current: 0, rVal:0, cVal:0 };
+          summary[s.productId].current += Number(s.qty) || 0;
+        });
+      });
+
+      const diffs = [];
+      Object.values(summary).forEach(s => {
+        const p = this._products.find(x => x.id === s.id) || { name: s.id, code: s.id };
+        s.cVal = s.current * (Number(p.costVat) || 0);
+        s.diffQty = s.received - s.current;
+        s.diffVal = s.rVal - s.cVal;
+        s.name = p.name;
+        s.code = p.code;
+        if (s.diffQty !== 0 || Math.abs(s.diffVal) > 1) diffs.push(s);
+      });
+
+      diffs.sort((a, b) => b.diffQty - a.diffQty);
+
+      let html = '<div style="max-height:600px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"><table class="table" style="margin:0"><thead><tr style="position:sticky;top:0;background:var(--bg-card);z-index:10"><th>สินค้า</th><th class="td-right">รับเข้า(ยอดสะสม)</th><th class="td-right">เหลือปัจจุบัน(รวมพนักงาน)</th><th class="td-right">ส่วนต่าง(จำนวน)</th><th class="td-right">ส่วนต่าง(มูลค่า)</th></tr></thead><tbody>';
+      diffs.forEach(d => {
+        html += `<tr>
+          <td>${d.name}<br><small class="text-muted" style="font-family:monospace">${d.code}</small></td>
+          <td class="td-right fw-bold" style="color:var(--primary)">${UI.currency(d.received, 0)}</td>
+          <td class="td-right fw-bold" style="color:var(--text-secondary)">${UI.currency(d.current, 0)}</td>
+          <td class="td-right fw-bold" style="color:${d.diffQty > 0 ? 'var(--danger)' : (d.diffQty < 0 ? 'var(--warning)' : 'var(--success)')}">${UI.currency(d.diffQty, 0)}</td>
+          <td class="td-right fw-bold" style="color:${d.diffVal > 0 ? 'var(--danger)' : 'var(--success)'}">${UI.currency(d.diffVal, 2)}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div><div class="text-muted" style="font-size:0.85rem;margin-top:16px;background:var(--bg-card2);padding:12px;border-radius:8px"><b>ความหมายของส่วนต่าง:</b><br>🔸 <b>ส่วนต่างจำนวน (บวก):</b> สินค้าหายไปจากคลัง (ถูกคิดเงินขายออก, พนักงานคีย์ปรับลดยอดทิ้ง, นำไปประกอบเป็นสินค้าจัดเซ็ต)<br>🔸 <b>ส่วนต่างจำนวน (ลบ):</b> สินค้างอกเพิ่มมาโดยไม่ได้ผ่านการรับเข้า (เช่น พนักงานแอดสต็อกให้เองด้วยปุ่มแก้ไข หรือยกเลิกบิลขาย)<br>🔸 <b>ส่วนต่างมูลค่า:</b> ราคาทุนที่รับเข้าในอดีต (หรือได้ส่วนลด) ไม่ตรงกับราคาต้นทุนปัจจุบันเป๊ะๆ, หรือเป็นสินค้าที่ถูกลบออกจากระบบแล้ว</div>';
+      
+      openModal('วิเคราะห์ส่วนต่าง (ประวัติรับเข้า vs สต็อกคงเหลือปัจจุบัน)', html, '<button class="btn btn-secondary" onclick="closeModal()">ปิดหน้าต่าง</button>', '900px');
+    } catch(e) {
+      UI.toast(e.message, 'error');
     } finally {
       UI.loading(false);
     }
