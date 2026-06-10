@@ -150,10 +150,17 @@ PAGES['billing'] = {
     }
     const i = parseInt(idx);
     const b = this._billings[i];
-    const totalComm = b._stock.reduce((sum, s) => {
+    
+    const groupedItems = {};
+    b._stock.forEach(s => {
       const sold = s.qty - (s.consigned || 0);
-      return sum + (sold > 0 ? sold * (s.product?.sellCommission || 0) : 0);
-    }, 0);
+      if (!groupedItems[s.productId]) {
+        groupedItems[s.productId] = { product: s.product, sold: 0 };
+      }
+      groupedItems[s.productId].sold += sold;
+    });
+    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+    const totalComm = itemsToBill.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
     
     container.innerHTML = `
       <div class="card p-20" style="border-top: 4px solid ${b.billed ? 'var(--success)' : 'var(--primary)'}; max-width: 600px;">
@@ -174,32 +181,50 @@ PAGES['billing'] = {
             <span class="material-icons" style="font-size:14px">inventory</span> สรุปสินค้าคงเหลือ (หักฝากวาง)
           </div>
           ${(() => {
-            const groupedItems = {};
-            b._stock.forEach(s => {
-              const sold = s.qty - (s.consigned || 0);
-              if (!groupedItems[s.productId]) {
-                groupedItems[s.productId] = { product: s.product, sold: 0 };
-              }
-              groupedItems[s.productId].sold += sold;
-            });
-            const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
             if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:10px; font-size:0.8rem">ไม่มีรายการที่ต้องคิดเงิน</div>';
-            return itemsToBill.map(it => `
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
-                <div style="display:flex; align-items:flex-start; gap:8px; flex:1;">
-                  ${UI.image(it.product?.imageUrl, '', 'width:32px; height:32px; border-radius:4px; object-fit:cover; border:1px solid var(--border-light); box-shadow:0 2px 4px rgba(0,0,0,0.05); margin-top:2px;')}
-                  <div style="display:flex; flex-direction:column;">
-                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem">${it.product?.name}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted)"><span style="font-family:monospace">[${it.product?.code || '-'}]</span> ${it.product?.category || ''}</span>
-                    <span style="font-size:0.65rem; color:var(--text-secondary); margin-top:2px;">ราคา: ฿${UI.currency(it.product?.sellWholesale || 0)} | <span style="color:#BE185D;">คอม: ฿${UI.currency(it.product?.sellCommission || 0)}</span></span>
+            
+            const zoneItems = itemsToBill.filter(it => !it.product?.isSet);
+            const setItems = itemsToBill.filter(it => it.product?.isSet);
+            let html = '';
+
+            const renderItem = (it) => `
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
+                <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+                  ${UI.image(it.product?.imageUrl, '', 'width:32px; height:32px; border-radius:4px; object-fit:cover; border:1px solid var(--border-light); box-shadow:0 2px 4px rgba(0,0,0,0.05); flex-shrink:0;')}
+                  <div style="display:flex; flex-direction:column; overflow:hidden;">
+                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.product?.name}</span>
+                    <span style="font-size:0.65rem; color:var(--text-muted);"><span style="font-family:monospace">[${it.product?.code || '-'}]</span></span>
                   </div>
                 </div>
-                <div style="text-align:right;">
-                  <span style="font-weight:800; color:var(--primary); font-size:0.95rem;">${it.sold} <small style="font-weight:400; color:var(--text-muted)">${it.product?.unit || 'หน่วย'}</small></span>
-                  <div style="font-size:0.75rem; font-weight:700; color:var(--text-primary); margin-top:2px;">฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
+                <div style="display:flex; gap:12px; align-items:center; text-align:right; font-weight:600; margin-left:8px; flex-shrink:0;">
+                  <div style="width:45px; color:var(--primary);">${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span></div>
+                  <div style="width:65px; color:#BE185D;"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">คอม</span><br/>฿${UI.currency((it.product?.sellCommission || 0) * it.sold)}</div>
+                  <div style="width:65px; color:var(--success);"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">ราคา</span><br/>฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
                 </div>
               </div>
-            `).join('');
+            `;
+
+            if (zoneItems.length > 0) {
+              const zoneTotal = zoneItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
+              const zoneComm = zoneItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
+              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเขต</div>`;
+              html += zoneItems.map(renderItem).join('');
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
+                         <span>รวมสินค้าเขต</span>
+                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(zoneComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(zoneTotal)}</span></span>
+                       </div>`;
+            }
+            if (setItems.length > 0) {
+              const setTotal = setItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
+              const setComm = setItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
+              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเซ็ท</div>`;
+              html += setItems.map(renderItem).join('');
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
+                         <span>รวมสินค้าเซ็ท</span>
+                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(setComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(setTotal)}</span></span>
+                       </div>`;
+            }
+            return html;
           })()}
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1); color:var(--primary)">
             <span>รวมขายสุทธิ</span>
@@ -230,10 +255,17 @@ PAGES['billing'] = {
 
   openBilling(idx) {
     const b = this._billings[idx];
-    const totalComm = b._stock.reduce((sum, s) => {
+    const groupedItems = {};
+    b._stock.forEach(s => {
       const sold = s.qty - (s.consigned || 0);
-      return sum + (sold > 0 ? sold * (s.product?.sellCommission || 0) : 0);
-    }, 0);
+      if (!groupedItems[s.productId]) {
+        groupedItems[s.productId] = { product: s.product, sold: 0 };
+      }
+      groupedItems[s.productId].sold += sold;
+    });
+    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+    const totalComm = itemsToBill.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
+
     openModal(`คิดเงิน: ${b.employee?.displayName}`, `
       <div class="receipt-card" style="margin-bottom:16px; border:none; box-shadow:none; padding:12px">
         <div style="font-size:0.75rem; font-weight:800; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:5px">
@@ -241,17 +273,13 @@ PAGES['billing'] = {
         </div>
         <div style="max-height:350px; overflow-y:auto; padding-right:8px">
           ${(() => {
-            const groupedItems = {};
-            b._stock.forEach(s => {
-              const sold = s.qty - (s.consigned || 0);
-              if (!groupedItems[s.productId]) {
-                groupedItems[s.productId] = { product: s.product, sold: 0 };
-              }
-              groupedItems[s.productId].sold += sold;
-            });
-            const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
             if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:20px">ไม่มีรายการที่ต้องคิดเงิน</div>';
-            return itemsToBill.map(it => {
+            
+            const zoneItems = itemsToBill.filter(it => !it.product?.isSet);
+            const setItems = itemsToBill.filter(it => it.product?.isSet);
+            let html = '';
+
+            const renderModalItem = (it) => {
               let setDetails = '';
               if (it.product?.isSet && it.product.setItems && it.product.setItems.length > 0) {
                 setDetails = `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px; padding:4px 8px; background:var(--bg-base); border-radius:4px; border-left:2px solid var(--primary)">
@@ -261,18 +289,41 @@ PAGES['billing'] = {
               }
               return `
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--border-light)">
-                  <div style="flex:1">
-                    <div style="font-weight:700; font-size:0.85rem">${it.product?.name}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted)">[${it.product?.code || '-'}] ราคา: ฿${UI.currency(it.product?.sellWholesale || 0)} | <span style="color:#BE185D;">คอม: ฿${UI.currency(it.product?.sellCommission || 0)}</span></div>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-weight:700; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.product?.name}</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:2px;">[${it.product?.code || '-'}]</div>
                     ${setDetails}
                   </div>
-                  <div style="text-align:right; margin-left:12px">
-                    <div style="font-weight:800; color:var(--primary)">${it.sold} <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400">${it.product?.unit || 'หน่วย'}</span></div>
-                    <div style="font-weight:700; font-size:0.9rem">฿${UI.currency(it.sold * (it.product?.sellWholesale || 0))}</div>
+                  <div style="display:flex; gap:12px; align-items:center; text-align:right; font-weight:600; margin-left:8px; flex-shrink:0;">
+                    <div style="width:45px; color:var(--primary);">${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span></div>
+                    <div style="width:65px; color:#BE185D;"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">คอม</span><br/>฿${UI.currency((it.product?.sellCommission || 0) * it.sold)}</div>
+                    <div style="width:65px; color:var(--success);"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">ราคา</span><br/>฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
                   </div>
                 </div>
               `;
-            }).join('');
+            };
+
+            if (zoneItems.length > 0) {
+              const zoneTotal = zoneItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
+              const zoneComm = zoneItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
+              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเขต</div>`;
+              html += zoneItems.map(renderModalItem).join('');
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
+                         <span>รวมสินค้าเขต</span>
+                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(zoneComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(zoneTotal)}</span></span>
+                       </div>`;
+            }
+            if (setItems.length > 0) {
+              const setTotal = setItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
+              const setComm = setItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
+              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเซ็ท</div>`;
+              html += setItems.map(renderModalItem).join('');
+              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
+                         <span>รวมสินค้าเซ็ท</span>
+                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(setComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(setTotal)}</span></span>
+                       </div>`;
+            }
+            return html;
           })()}
         </div>
       </div>
