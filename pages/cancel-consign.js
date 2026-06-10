@@ -293,12 +293,12 @@ PAGES['cancel-consign'] = {
         <div class="picker-item" style="cursor:pointer; transition:transform 0.2s;" onclick="PAGES['cancel-consign'].showQtyInput('${firstBatch.productId}', '${firstBatch.expiryDate || ''}')" onpointerenter="this.style.transform='scale(1.02)'" onpointerleave="this.style.transform='scale(1)'">
           ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9;')}
           <div class="p-info" style="width:100%;">
-            <div class="p-code">${p?.code || '-'}</div>
+            <div class="p-code" style="font-family:monospace">[${p?.code || '-'}] ${p?.category || ''}</div>
             <div class="p-name" style="margin-bottom:8px;">${p?.name || g.product.id}</div>
             
             <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card2); padding:8px; border-radius:8px; border:1px solid var(--border-light)">
                <div style="font-size:0.75rem; color:var(--text-muted)">ยอดฝากอยู่:</div>
-               <div style="font-size:0.9rem; font-weight:700; color:var(--warning)">${UI.currency(firstBatch.consigned, 0)} ${p?.unit || ''}</div>
+               <div style="font-size:0.9rem; font-weight:700; color:var(--warning)">${UI.currency(firstBatch.consigned, 0)} ${p?.category === 'Set' || p?.isSet ? 'ชุด' : (p?.unit || '')}</div>
             </div>
           </div>
         </div>
@@ -314,8 +314,8 @@ PAGES['cancel-consign'] = {
     document.getElementById('re-pop-pid').value = id;
     document.getElementById('re-pop-expiry-val').value = expiryDate || '';
     document.getElementById('re-pop-title').textContent = p.name;
-    document.getElementById('re-pop-unit-text').textContent = p.unit || 'หน่วย';
-    document.getElementById('re-pop-stock').innerHTML = `ล็อตหมดอายุ: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>ยอดฝากคืนคงเหลือ: ${UI.currency(s.consigned, 0)} ${p.unit}`;
+    document.getElementById('re-pop-unit-text').textContent = p.category === 'Set' || p.isSet ? 'ชุด' : (p.unit || 'หน่วย');
+    document.getElementById('re-pop-stock').innerHTML = `ล็อตหมดอายุ: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>ยอดฝากคืนคงเหลือ: ${UI.currency(s.consigned, 0)} ${p.category === 'Set' || p.isSet ? 'ชุด' : p.unit}`;
 
     document.getElementById('re-pop-units').value = '';
     document.getElementById('re-pop-total').textContent = 0;
@@ -357,7 +357,7 @@ PAGES['cancel-consign'] = {
       if ((existing.qty + total) > s.consigned) return UI.toast(`รวมแล้วเกินยอดฝากที่มี`, 'error');
       existing.qty += total;
     } else {
-      this._items.push({ productId: id, expiryDate, qty: total, unit: p.unit || 'หน่วย', product: p, maxReturn: s.consigned });
+      this._items.push({ productId: id, expiryDate, qty: total, unit: p.category === 'Set' || p.isSet ? 'ชุด' : (p.unit || 'หน่วย'), product: p, maxReturn: s.consigned });
     }
 
     UI.toast(`เพิ่ม ${p.name} เรียบร้อย`, 'success');
@@ -387,12 +387,19 @@ PAGES['cancel-consign'] = {
       return;
     }
 
+    // Sort _items by productsCache
+    const sortedItems = [...this._items].sort((a, b) => {
+      const idxA = this._productsCache ? this._productsCache.findIndex(p => p.id === a.productId) : -1;
+      const idxB = this._productsCache ? this._productsCache.findIndex(p => p.id === b.productId) : -1;
+      return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
+    });
+
     el.innerHTML = `
       <div class="table-wrap">
         <table>
           <thead><tr><th>#</th><th>สินค้า</th><th>หมดวันที่</th><th class="td-right">ยอดฝากเดิม</th><th class="td-right">ยกเลิกฝาก</th><th>หน่วย</th><th></th></tr></thead>
           <tbody>
-            ${this._items.map((it, idx) => `
+            ${sortedItems.map((it, idx) => `
               <tr>
                 <td>${idx + 1}</td>
                 <td class="td-bold">
@@ -403,7 +410,7 @@ PAGES['cancel-consign'] = {
                 <td class="td-right">${UI.currency(it.maxReturn, 0)}</td>
                 <td class="td-right fw-bold text-primary">${UI.currency(it.qty, 0)}</td>
                 <td>${it.unit}</td>
-                <td class="td-center"><button class="btn btn-danger btn-xs" onclick="PAGES['cancel-consign'].removeItem(${idx})"><span class="material-icons">close</span></button></td>
+                <td class="td-center"><button class="btn btn-danger btn-xs" onclick="PAGES['cancel-consign'].removeItem(${this._items.indexOf(it)})"><span class="material-icons">close</span></button></td>
               </tr>
             `).join('')}
           </tbody>

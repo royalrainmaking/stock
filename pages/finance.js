@@ -1,23 +1,25 @@
 // ============================================================
-// pages/finance.js – Employee Finance Summary
+// pages/finance.js – Branch Finance Summary Pivot Table
 // ============================================================
 
 PAGES['finance'] = {
-  _data: [],
+  _financeData: [],
+  _billingsData: [],
+  _allFinanceData: null,
+  _allBillingsData: null,
   _employees: [],
-  _selectedEmp: '',
-  _viewMode: 'daily', // 'daily' | 'monthly'
-  _filterDate: '',
-  _filterMonth: '',
+  _filterStartDate: '',
+  _filterEndDate: '',
+  _filterEmployee: '', // '' = All
 
   async render() {
     const el = document.getElementById('page-finance');
     
-    // Set default filters to today/this month
-    if (!this._filterDate) {
+    // Set default filters to 1st of month - today
+    if (!this._filterStartDate) {
       const now = new Date();
-      this._filterDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      this._filterMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      this._filterStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      this._filterEndDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     }
 
     el.innerHTML = `
@@ -28,55 +30,49 @@ PAGES['finance'] = {
           </div>
           <div>
             <h2 class="page-title">ระบบบัญชีพนักงาน (Finance)</h2>
-            <p class="page-subtitle">ดูสุขภาพการเงินและประวัติการชำระเงินของพนักงาน</p>
+            <p class="page-subtitle">ดูภาพรวมการเงินและประวัติการชำระเงินของทั้งสาขา</p>
           </div>
         </div>
         <div class="page-actions" style="display:flex; gap:10px;">
-          <button class="btn btn-primary" onclick="PAGES.finance.load()"><span class="material-icons">refresh</span> รีเฟรช</button>
+          <button class="btn btn-primary" onclick="PAGES.finance.load(true)"><span class="material-icons">refresh</span> รีเฟรช</button>
         </div>
       </div>
 
-      <div style="margin-bottom:20px;">
-        <div style="font-weight:bold; margin-bottom:10px; color:var(--text-main);">เลือกพนักงาน:</div>
-        <div id="finance-emp-avatars" style="display:flex; gap:15px; overflow-x:auto; padding-bottom:10px;">
-           ${UI.emptyState('hourglass_empty', 'กำลังโหลดรายชื่อพนักงาน...')}
+      <div style="background:var(--bg-card); border-radius:12px; padding:20px; margin-bottom:20px; box-shadow:0 4px 6px rgba(0,0,0,0.05); display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end; border:1px solid var(--border-light);">
+        
+        <div style="flex:1; min-width:200px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:8px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:text-bottom;">person</span> เลือกพนักงาน
+          </label>
+          <select id="fin-emp" class="input" style="width:100%; border-radius:8px; border:1px solid var(--border-light); padding:10px; font-size:0.95rem; background:#f8fafc; transition:all 0.2s; cursor:pointer;" onchange="PAGES.finance.onFilterChange()">
+            <option value="">ทั้งหมด (สาขา)</option>
+            <!-- populated later -->
+          </select>
         </div>
+
+        <div style="flex:1; min-width:150px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:8px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:text-bottom;">event</span> วันที่เริ่มต้น
+          </label>
+          <input type="date" id="fin-start" class="input" style="width:100%; border-radius:8px; border:1px solid var(--border-light); padding:10px; font-size:0.95rem; background:#fff; transition:all 0.2s; cursor:pointer;" value="${this._filterStartDate}" onchange="PAGES.finance.onFilterChange()" />
+        </div>
+        
+        <div style="flex:1; min-width:150px;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:8px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:text-bottom;">event</span> วันที่สิ้นสุด
+          </label>
+          <input type="date" id="fin-end" class="input" style="width:100%; border-radius:8px; border:1px solid var(--border-light); padding:10px; font-size:0.95rem; background:#fff; transition:all 0.2s; cursor:pointer;" value="${this._filterEndDate}" onchange="PAGES.finance.onFilterChange()" />
+        </div>
+
       </div>
 
-      <div id="finance-prompt-state">
-         ${UI.emptyState('person_search', 'กรุณาเลือกพนักงาน', 'โปรดเลือกพนักงานจากตัวเลือกด้านบนเพื่อดูข้อมูลบัญชีการเงิน')}
-      </div>
-
-      <div id="finance-content-wrap" style="display:none;">
-        <div style="margin-bottom:10px; font-weight:bold; color:var(--text-main); font-size:1.1rem;">
-          <span class="material-icons" style="vertical-align:middle; font-size:1.2rem; margin-right:5px; color:var(--primary)">insights</span> 
-          ภาพรวมสุขภาพการเงิน (สะสมทั้งหมดตั้งแต่เริ่มงาน)
+      <div class="card" style="margin-bottom:20px; overflow:hidden;">
+        <div class="card-title" style="padding:15px 20px; background:#f8fafc; border-bottom:1px solid var(--border-light); display:flex; align-items:center; gap:10px;">
+          <span class="material-icons" style="color:var(--primary);">pivot_table_chart</span> 
+          <span style="font-weight:bold; font-size:1.1rem; color:var(--text-main);">สรุปยอดเงิน</span>
         </div>
-        <div id="finance-summary-cards" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:15px; margin-bottom:30px;">
-          <!-- Loading... -->
-        </div>
-
-        <div class="card" id="finance-table-card">
-          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-            <span><span class="material-icons">list_alt</span> รายละเอียดการรับชำระ</span>
-            <div style="display:flex; gap:10px; align-items:center;">
-              <select id="fin-view-mode" class="input" style="max-width:150px;" onchange="PAGES.finance.onViewModeChange()">
-                <option value="daily" ${this._viewMode === 'daily' ? 'selected' : ''}>ดูแบบรายวัน</option>
-                <option value="monthly" ${this._viewMode === 'monthly' ? 'selected' : ''}>ดูแบบรายเดือน</option>
-              </select>
-              
-              <div id="fin-date-wrap" style="display:${this._viewMode === 'daily' ? 'block' : 'none'}">
-                <input type="date" id="fin-date" class="input" style="max-width:180px;" value="${this._filterDate}" onchange="PAGES.finance.onFilterChange()" />
-              </div>
-              
-              <div id="fin-month-wrap" style="display:${this._viewMode === 'monthly' ? 'block' : 'none'}">
-                <input type="month" id="fin-month" class="input" style="max-width:180px;" value="${this._filterMonth}" onchange="PAGES.finance.onFilterChange()" />
-              </div>
-            </div>
-          </div>
-          <div id="finance-table-wrap">
-             ${UI.emptyState('hourglass_empty', 'กำลังเตรียมข้อมูล...')}
-          </div>
+        <div id="finance-table-wrap" style="padding:0;">
+           ${UI.emptyState('hourglass_empty', 'กำลังเตรียมข้อมูล...')}
         </div>
       </div>
     `;
@@ -87,231 +83,281 @@ PAGES['finance'] = {
 
   async loadEmployees() {
     try {
-      const res = await API.getUsers();
-      this._employees = (res.users || []).filter(u => u.role === 'employee');
-      this.renderAvatars();
+      await MASTER_DATA.load();
+      const empWhs = MASTER_DATA.warehouses.filter(w => w.type === 'employee');
+      this._employees = empWhs.map(w => {
+        return {
+          id: w.employeeId || w.id, // ID used in finance records
+          displayName: w.name,
+          warehouseId: String(w.id)
+        };
+      });
+      
+      const empSelect = document.getElementById('fin-emp');
+      if (empSelect) {
+         let optionsHtml = '<option value="">ทั้งหมด (สาขา)</option>';
+         this._employees.forEach(e => {
+            optionsHtml += `<option value="${e.id}" ${this._filterEmployee === e.id ? 'selected' : ''}>${e.displayName}</option>`;
+         });
+         empSelect.innerHTML = optionsHtml;
+      }
+
     } catch(e) {
-      console.error(e);
-      document.getElementById('finance-emp-avatars').innerHTML = `<div style="color:var(--danger)">ไม่สามารถโหลดรายชื่อพนักงานได้</div>`;
+      console.error('Failed to load employees', e);
     }
-  },
-
-  renderAvatars() {
-    const el = document.getElementById('finance-emp-avatars');
-    if (!el) return;
-    
-    if (this._employees.length === 0) {
-      el.innerHTML = `<div style="color:var(--text-muted)">ไม่มีพนักงานในระบบ</div>`;
-      return;
-    }
-
-    el.innerHTML = this._employees.map(u => {
-      const isSelected = this._selectedEmp === u.id;
-      const bg = isSelected ? 'var(--primary)' : 'var(--bg-card2)';
-      const color = isSelected ? '#fff' : 'var(--text-main)';
-      const border = isSelected ? '2px solid var(--primary-dark)' : '2px solid transparent';
-      const name = u.displayName || u.username;
-      const initial = name.charAt(0).toUpperCase();
-
-      return `
-        <div style="display:flex; flex-direction:column; align-items:center; cursor:pointer; min-width:80px; transition:transform 0.2s;" 
-             onclick="PAGES.finance.selectEmployee('${u.id}')"
-             onmouseover="this.style.transform='scale(1.05)'"
-             onmouseout="this.style.transform='scale(1)'">
-          <div style="width:60px; height:60px; border-radius:50%; background:${bg}; color:${color}; border:${border}; display:flex; align-items:center; justify-content:center; font-size:1.5rem; font-weight:bold; margin-bottom:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-            ${u.avatar ? `<img src="${u.avatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;" />` : initial}
-          </div>
-          <div style="font-size:0.85rem; text-align:center; font-weight:${isSelected ? 'bold' : 'normal'}; color:${isSelected ? 'var(--primary)' : 'var(--text-muted)'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80px;">
-            ${name}
-          </div>
-        </div>
-      `;
-    }).join('');
-  },
-
-  selectEmployee(empId) {
-    this._selectedEmp = empId;
-    this.renderAvatars(); // Re-render to update selected state
-    this.load();
-  },
-
-  onViewModeChange() {
-    this._viewMode = document.getElementById('fin-view-mode').value;
-    document.getElementById('fin-date-wrap').style.display = this._viewMode === 'daily' ? 'block' : 'none';
-    document.getElementById('fin-month-wrap').style.display = this._viewMode === 'monthly' ? 'block' : 'none';
-    this.renderTable();
   },
 
   onFilterChange() {
-    if (this._viewMode === 'daily') {
-      this._filterDate = document.getElementById('fin-date').value;
+    this._filterEmployee = document.getElementById('fin-emp').value;
+    this._filterStartDate = document.getElementById('fin-start').value;
+    this._filterEndDate = document.getElementById('fin-end').value;
+    
+    if (this._allFinanceData) {
+      this.applyFilters();
     } else {
-      this._filterMonth = document.getElementById('fin-month').value;
+      this.load();
     }
-    this.renderTable();
   },
 
-  async load() {
-    if (!this._selectedEmp) {
-      document.getElementById('finance-content-wrap').style.display = 'none';
-      document.getElementById('finance-prompt-state').style.display = 'block';
+  parseDate(val) {
+    if (!val) return '9999-12-31';
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '9999-12-31';
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    } catch (e) {
+      return '9999-12-31';
+    }
+  },
+
+  async load(force = false) {
+    if (!this._filterStartDate || !this._filterEndDate) {
+      document.getElementById('finance-table-wrap').innerHTML = UI.emptyState('calendar_today', `กรุณาเลือกช่วงเวลาให้ครบถ้วน`);
       return;
     }
-    
-    document.getElementById('finance-content-wrap').style.display = 'block';
-    document.getElementById('finance-prompt-state').style.display = 'none';
 
-    try {
-      UI.loading(true);
-      // Pass empty string for month to get ALL TIME data for the employee
-      const res = await API.getEmployeeFinance(this._selectedEmp, '');
-      this._data = res.finance || [];
-      
-      this.renderSummary();
-      this.renderTable();
-    } catch(e) {
-      UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
-    } finally {
-      UI.loading(false);
+    if (force || !this._allFinanceData) {
+      try {
+        document.getElementById('finance-table-wrap').innerHTML = UI.emptyState('hourglass_empty', 'กำลังโหลดข้อมูลทั้งหมด (ครั้งแรก)...');
+        
+        // Fetch branch-wide data with empty parameters to get ALL data once
+        const res = await API.getEmployeeFinance('', '', '');
+        this._allFinanceData = res.finance || [];
+        this._allBillingsData = res.billings || [];
+      } catch(e) {
+        document.getElementById('finance-table-wrap').innerHTML = UI.emptyState('error', 'โหลดข้อมูลไม่สำเร็จ', e.message);
+        UI.toast('โหลดข้อมูลไม่สำเร็จ: ' + e.message, 'error');
+        return;
+      }
     }
+    
+    this.applyFilters();
   },
 
-  renderSummary() {
-    // Default expected categories to 0
-    const categories = {
-      'เงินประกัน': 0,
-      'ชำระหนี้': 0,
-      'ฝากเงิน': 0,
-      'ค่าเช่าซื้อรถ/พ่วง': 0,
-      'ค่าเช่ารถ': 0,
-      'ค่าหลอด': 0,
-      'ค่าถุง': 0,
-      'อื่นๆ': 0
-    };
-    
-    let totalGoods = 0;
-    let totalFees = 0;
-    
-    this._data.forEach(item => {
-      const amt = Number(item.amount) || 0;
-      if (item.category === 'ค่าสินค้า') {
-        totalGoods += amt;
-      } else {
-        if (categories[item.category] === undefined) categories[item.category] = 0;
-        categories[item.category] += amt;
-        totalFees += amt;
+  applyFilters() {
+    const start = this._filterStartDate;
+    const end = this._filterEndDate;
+    const empFilter = this._filterEmployee;
+
+    // Filter Finance Data
+    this._financeData = this._allFinanceData.filter(f => {
+       if (empFilter && String(f.employeeId) !== String(empFilter)) return false;
+       const d = this.parseDate(f.date);
+       return d >= start && d <= end;
+    });
+
+    // Resolve warehouseId for billings if employee is filtered
+    let whFilterId = '';
+    if (empFilter) {
+       const emp = this._employees.find(e => String(e.id) === String(empFilter));
+       if (emp) whFilterId = String(emp.warehouseId);
+    }
+
+    // Filter Billings Data
+    this._billingsData = this._allBillingsData.filter(b => {
+       if (whFilterId && String(b.warehouseId) !== String(whFilterId)) return false;
+       const d = this.parseDate(b.date);
+       return d >= start && d <= end;
+    });
+
+    this.renderPivotTable();
+  },
+
+  renderPivotTable() {
+    const el = document.getElementById('finance-table-wrap');
+    if (!this._financeData.length && !this._billingsData.length) {
+      el.innerHTML = UI.emptyState('receipt_long', `ไม่มีรายการบัญชีในช่วงเวลาที่เลือก`);
+      return;
+    }
+
+    // Prepare Categories (Columns)
+    const predefinedCategories = [
+      'ค่าสินค้า',
+      'เงินประกัน',
+      'ชำระหนี้',
+      'ฝากเงิน',
+      'ค่าเช่าซื้อรถ/พ่วง',
+      'ค่าเช่ารถ',
+      'ค่าหลอด',
+      'ค่าถุง',
+      'อื่นๆ'
+    ];
+
+    // Find all dynamic categories that might exist but are not in predefined list
+    const dynamicCategories = new Set();
+    this._financeData.forEach(item => {
+      const cat = item.category || 'อื่นๆ';
+      if (!predefinedCategories.includes(cat)) {
+        dynamicCategories.add(cat);
       }
     });
-
-    const cardsHtml = `
-      <div class="card" style="background:var(--success-light); border:1px solid var(--success);">
-        <div style="font-size:0.8rem; color:var(--success);">ยอดรวมค่าสินค้า (สะสม)</div>
-        <div style="font-size:1.8rem; font-weight:bold; color:var(--success);">฿${UI.currency(totalGoods)}</div>
-      </div>
-      <div class="card" style="background:var(--warning-light); border:1px solid var(--warning);">
-        <div style="font-size:0.8rem; color:var(--warning);">ยอดรวมค่าธรรมเนียม/อื่นๆ (สะสม)</div>
-        <div style="font-size:1.8rem; font-weight:bold; color:var(--warning);">฿${UI.currency(totalFees)}</div>
-      </div>
-      <div class="card" style="background:var(--primary-light); border:1px solid var(--primary);">
-        <div style="font-size:0.8rem; color:var(--primary);">ยอดรับรวมทั้งสิ้น (สะสม)</div>
-        <div style="font-size:1.8rem; font-weight:bold; color:var(--primary);">฿${UI.currency(totalGoods + totalFees)}</div>
-      </div>
-    `;
-
-    const extraCards = Object.keys(categories)
-      .filter(c => c !== 'ค่าสินค้า')
-      .map(c => `
-        <div class="card" style="padding:15px;">
-          <div style="font-size:0.8rem; color:var(--text-muted);">${c}</div>
-          <div style="font-size:1.4rem; font-weight:bold; color:var(--text-main);">฿${UI.currency(categories[c])}</div>
-        </div>
-      `).join('');
-
-    const el = document.getElementById('finance-summary-cards');
-    if (el) el.innerHTML = cardsHtml + extraCards;
-  },
-
-  renderTable() {
-    const el = document.getElementById('finance-table-wrap');
     
-    const filterValue = this._viewMode === 'daily' ? this._filterDate : this._filterMonth;
+    const categories = [...predefinedCategories, ...Array.from(dynamicCategories)];
 
-    if (!filterValue) {
-      el.innerHTML = UI.emptyState('calendar_today', `กรุณาเลือก${this._viewMode === 'daily' ? 'วันที่' : 'เดือน'}เพื่อดูรายละเอียด`);
-      return;
+    // Determine which employees to show
+    let activeEmployees = this._employees;
+    if (this._filterEmployee) {
+       activeEmployees = this._employees.filter(e => e.id === this._filterEmployee);
     }
 
-    // Filter by the selected date or month
-    const filteredData = this._data.filter(item => {
-      // item.date is usually YYYY-MM-DD
-      return (item.date || '').startsWith(filterValue);
+    // Data Structures
+    // employeeData[empId][category] = amount
+    const employeeData = {};
+    const employeeTotals = {};
+    const cashTotals = {};
+    const transferTotals = {};
+    
+    // Column Totals
+    const categoryTotals = {};
+    categories.forEach(c => categoryTotals[c] = 0);
+    let grandTotal = 0;
+    let grandCash = 0;
+    let grandTransfer = 0;
+
+    activeEmployees.forEach(e => {
+       employeeData[e.id] = {};
+       categories.forEach(c => employeeData[e.id][c] = 0);
+       employeeTotals[e.id] = 0;
+       cashTotals[e.id] = 0;
+       transferTotals[e.id] = 0;
     });
 
-    if (!filteredData.length) {
-      el.innerHTML = UI.emptyState('receipt_long', `ไม่มีรายการบัญชีใน${this._viewMode === 'daily' ? 'วันที่' : 'เดือน'}ที่เลือก`);
-      return;
-    }
+    // Fill Finance Data
+    this._financeData.forEach(item => {
+       const empId = String(item.employeeId);
+       const cat = item.category || 'อื่นๆ';
+       const amt = Number(item.amount) || 0;
+       
+       if (employeeData[empId]) {
+           employeeData[empId][cat] += amt;
+           employeeTotals[empId] += amt;
+           categoryTotals[cat] += amt;
+           grandTotal += amt;
+       } else {
+           // Fallback for ghost employees
+           employeeData[empId] = {};
+           categories.forEach(c => employeeData[empId][c] = 0);
+           employeeTotals[empId] = 0;
+           cashTotals[empId] = 0;
+           transferTotals[empId] = 0;
+           
+           activeEmployees.push({ id: empId, displayName: `ID: ${empId}`, warehouseId: '' });
+           employeeData[empId][cat] += amt;
+           employeeTotals[empId] += amt;
+           categoryTotals[cat] += amt;
+           grandTotal += amt;
+       }
+    });
 
-    // Sort by createdAt DESC
-    const sorted = [...filteredData].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Fill Billings Data (Cash / Transfer)
+    this._billingsData.forEach(b => {
+       const emp = activeEmployees.find(e => e.warehouseId === String(b.warehouseId) || e.id === String(b.warehouseId));
+       if (emp) {
+          const cash = Number(b.cashPaid) || 0;
+          const transfer = Number(b.transferPaid) || 0;
+          cashTotals[emp.id] += cash;
+          transferTotals[emp.id] += transfer;
+          grandCash += cash;
+          grandTransfer += transfer;
+       }
+    });
 
-    let html = `
-      <div class="table-wrap">
-        <table>
+    // Filter categories that have > 0 total across the board to save space (except predefined ones)
+    const activeCategories = categories.filter(c => predefinedCategories.includes(c) || categoryTotals[c] > 0);
+
+    // Generate HTML
+    // THEAD
+    let theadHtml = `<tr>
+      <th style="min-width:140px; width:140px; position:sticky; left:0; z-index:4; background:#f8fafc; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); box-shadow: 1px 0 0 var(--border-light); padding:12px 10px; font-size:0.85rem; white-space:nowrap;">พนักงาน</th>`;
+    activeCategories.forEach(c => {
+      let isBold = c === 'ค่าสินค้า';
+      let color = c === 'ค่าสินค้า' ? 'var(--success)' : 'var(--text-main)';
+      theadHtml += `<th style="text-align:right; min-width:120px; width:120px; padding:12px 10px; font-size:0.85rem; font-weight:${isBold?'bold':'600'}; color:${color}; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); white-space:nowrap;">${c}</th>`;
+    });
+    theadHtml += `<th style="text-align:right; min-width:120px; width:120px; background:#e0f2fe; color:var(--primary); position:sticky; right:0; z-index:3; padding:12px 10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); box-shadow: -1px 0 0 var(--border-light); white-space:nowrap;">รวมยอดสุทธิ</th>`;
+    theadHtml += `<th style="text-align:right; min-width:120px; width:120px; background:#dcfce7; color:var(--success); position:sticky; z-index:3; padding:12px 10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); white-space:nowrap;">เงินสด</th>`;
+    theadHtml += `<th style="text-align:right; min-width:120px; width:120px; background:#e0e7ff; color:#4338ca; position:sticky; z-index:3; padding:12px 10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); white-space:nowrap;">เงินโอน</th>`;
+    theadHtml += `</tr>`;
+
+    // TBODY
+    let tbodyHtml = '';
+    activeEmployees.forEach(e => {
+       let rowHtml = `<tr>
+         <td style="font-weight:600; color:var(--text-main); position:sticky; left:0; background:#fff; z-index:1; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); box-shadow: 1px 0 0 var(--border-light); padding:10px; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${e.displayName}
+         </td>`;
+       
+       activeCategories.forEach(c => {
+          const val = employeeData[e.id][c] || 0;
+          let isGoods = c === 'ค่าสินค้า';
+          let color = isGoods ? 'var(--success)' : 'var(--text-main)';
+          rowHtml += `<td style="text-align:right; color:${val > 0 ? color : 'var(--text-muted)'}; padding:10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light);">${val > 0 ? '฿' + UI.currency(val) : '-'}</td>`;
+       });
+       
+       // Totals
+       const rowTotal = employeeTotals[e.id] || 0;
+       rowHtml += `<td style="text-align:right; font-weight:bold; color:var(--primary); background:#f0f9ff; position:sticky; right:0; z-index:2; padding:10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); box-shadow: -1px 0 0 var(--border-light);">฿${UI.currency(rowTotal)}</td>`;
+       
+       // Cash & Transfer
+       const cash = cashTotals[e.id] || 0;
+       const transfer = transferTotals[e.id] || 0;
+       rowHtml += `<td style="text-align:right; font-weight:bold; color:var(--success); padding:10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light);">${cash > 0 ? '฿' + UI.currency(cash) : '-'}</td>`;
+       rowHtml += `<td style="text-align:right; font-weight:bold; color:#4338ca; padding:10px; font-size:0.85rem; border-bottom: 1px solid var(--border-light);">${transfer > 0 ? '฿' + UI.currency(transfer) : '-'}</td>`;
+       
+       rowHtml += `</tr>`;
+       tbodyHtml += rowHtml;
+    });
+
+    // TFOOT (Grand Totals)
+    let tfootHtml = `<tr style="background:var(--bg-card2);">
+       <td style="font-weight:bold; color:var(--text-main); position:sticky; left:0; background:var(--bg-card2); z-index:3; border-right: 1px solid var(--border-light); box-shadow: 1px 0 0 var(--border-light); padding:12px 10px; font-size:0.9rem;">ยอดรวมทั้งสาขา</td>`;
+    
+    activeCategories.forEach(c => {
+       const val = categoryTotals[c] || 0;
+       let isGoods = c === 'ค่าสินค้า';
+       let color = isGoods ? 'var(--success)' : 'var(--text-main)';
+       tfootHtml += `<td style="text-align:right; font-weight:bold; color:${color}; padding:12px 10px; font-size:0.9rem; border-right: 1px solid var(--border-light); border-top: 1px solid var(--border-light);">฿${UI.currency(val)}</td>`;
+    });
+    
+    tfootHtml += `<td style="text-align:right; font-weight:bold; color:var(--primary); background:#e0f2fe; position:sticky; right:0; z-index:3; padding:12px 10px; font-size:0.9rem; border-right: 1px solid var(--border-light); border-top: 1px solid var(--border-light); box-shadow: -1px 0 0 var(--border-light);">฿${UI.currency(grandTotal)}</td>`;
+    tfootHtml += `<td style="text-align:right; font-weight:bold; color:var(--success); background:#dcfce7; padding:12px 10px; font-size:0.9rem; border-right: 1px solid var(--border-light); border-top: 1px solid var(--border-light);">฿${UI.currency(grandCash)}</td>`;
+    tfootHtml += `<td style="text-align:right; font-weight:bold; color:#4338ca; background:#e0e7ff; padding:12px 10px; font-size:0.9rem; border-top: 1px solid var(--border-light);">฿${UI.currency(grandTransfer)}</td>`;
+    tfootHtml += `</tr>`;
+
+    el.innerHTML = `
+      <div class="table-wrap" style="max-height:70vh; overflow-y:auto; overflow-x:auto; border:1px solid var(--border-light); border-radius:8px;">
+        <table style="width:100%; border-collapse:separate; border-spacing:0; margin:0; table-layout:fixed;">
           <thead>
-            <tr>
-              <th>${this._viewMode === 'daily' ? 'เวลา' : 'วันที่'}</th>
-              <th>พนักงาน</th>
-              <th>รหัสบิลอ้างอิง</th>
-              <th>หมวดหมู่</th>
-              <th class="td-right">จำนวนเงิน</th>
-              <th>หมายเหตุ</th>
-            </tr>
+            ${theadHtml}
           </thead>
           <tbody>
-    `;
-
-    let totalInTable = 0;
-
-    sorted.forEach(item => {
-      totalInTable += Number(item.amount) || 0;
-      const emp = this._employees.find(e => e.id === item.employeeId);
-      const empName = emp ? (emp.displayName || emp.username) : item.employeeId;
-      
-      let catColor = 'var(--text-main)';
-      if (item.category === 'ค่าสินค้า') catColor = 'var(--success)';
-      else if (item.amount > 0) catColor = 'var(--warning)';
-
-      const timeStr = new Date(item.createdAt).toLocaleTimeString();
-      const dateStr = UI.dateStr(item.date);
-      const displayDate = this._viewMode === 'daily' 
-        ? `<span style="font-size:0.85rem; color:var(--text-muted)">${timeStr}</span>`
-        : `${dateStr}<br><span style="font-size:0.75rem; color:var(--text-muted)">${timeStr}</span>`;
-
-      html += `
-        <tr>
-          <td>${displayDate}</td>
-          <td class="fw-bold text-primary">${empName}</td>
-          <td><span style="font-family:monospace; background:var(--bg-card2); padding:2px 6px; border-radius:4px;">${item.billingId || '-'}</span></td>
-          <td><span style="font-weight:bold; color:${catColor}">${item.category}</span></td>
-          <td class="td-right fw-bold">฿${UI.currency(item.amount)}</td>
-          <td><span style="font-size:0.85rem; color:var(--text-muted);">${item.note || '-'}</span></td>
-        </tr>
-      `;
-    });
-
-    html += `
+            ${tbodyHtml}
           </tbody>
-          <tfoot>
-            <tr style="background:var(--bg-card2); font-weight:bold;">
-              <td colspan="4" class="td-right">รวมยอดในตารางนี้:</td>
-              <td class="td-right" style="color:var(--primary)">฿${UI.currency(totalInTable)}</td>
-              <td></td>
-            </tr>
+          <tfoot style="position:sticky; bottom:0; z-index:4; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);">
+            ${tfootHtml}
           </tfoot>
         </table>
       </div>
     `;
-    el.innerHTML = html;
   }
 };

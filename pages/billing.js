@@ -90,8 +90,10 @@ PAGES['billing'] = {
   setDate(d) { this._date = d; this.load(); },
 
   async load() {
+    const container = document.getElementById('billing-body');
+    if (container) container.innerHTML = UI.emptyState('hourglass_empty', 'กำลังโหลดข้อมูล...');
+    
     try {
-      UI.loading(true);
       const res = await API.getBillingList(this._date);
       // แสดงพนักงานทุกคนให้สามารถเลือกได้ใน Dropdown
       this._billings = (res.billings || []).map(b => {
@@ -103,7 +105,10 @@ PAGES['billing'] = {
         };
       });
       this.renderList();
-    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    } catch (e) { 
+      if (container) container.innerHTML = UI.emptyState('error', 'เกิดข้อผิดพลาด', e.message);
+      UI.toast(e.message, 'error'); 
+    }
   },
 
   renderList() {
@@ -159,7 +164,11 @@ PAGES['billing'] = {
       }
       groupedItems[s.productId].sold += sold;
     });
-    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0).sort((a, b) => {
+      const idxA = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === a.product?.id) : -1;
+      const idxB = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === b.product?.id) : -1;
+      return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
+    });
     const totalComm = itemsToBill.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
     
     container.innerHTML = `
@@ -187,7 +196,15 @@ PAGES['billing'] = {
             const setItems = itemsToBill.filter(it => it.product?.isSet);
             let html = '';
 
-            const renderItem = (it) => `
+            const renderItem = (it) => {
+              let displayStr = `${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.isSet || it.product?.category === 'Set' ? 'ชุด' : (it.product?.unit || 'หน่วย')}</span>`;
+              if (it.product?.isSet && it.product?.setItems && it.product.setItems.length > 0) {
+                const itemsPerSet = it.product.setItems.reduce((sum, si) => sum + (Number(si.qty) || 0), 0);
+                if (itemsPerSet > 0) {
+                  displayStr = `${it.sold * itemsPerSet} <span style="font-size:0.65rem; font-weight:400; color:var(--text-muted);">(${it.sold} ชุด)</span>`;
+                }
+              }
+              return `
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
                 <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
                   ${UI.image(it.product?.imageUrl, '', 'width:32px; height:32px; border-radius:4px; object-fit:cover; border:1px solid var(--border-light); box-shadow:0 2px 4px rgba(0,0,0,0.05); flex-shrink:0;')}
@@ -197,12 +214,13 @@ PAGES['billing'] = {
                   </div>
                 </div>
                 <div style="display:flex; gap:12px; align-items:center; text-align:right; font-weight:600; margin-left:8px; flex-shrink:0;">
-                  <div style="width:45px; color:var(--primary);">${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span></div>
+                  <div style="width:65px; color:var(--primary);">${displayStr}</div>
                   <div style="width:65px; color:#BE185D;"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">คอม</span><br/>฿${UI.currency((it.product?.sellCommission || 0) * it.sold)}</div>
                   <div style="width:65px; color:var(--success);"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">ราคา</span><br/>฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
                 </div>
               </div>
-            `;
+              `;
+            };
 
             if (zoneItems.length > 0) {
               const zoneTotal = zoneItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
@@ -241,106 +259,22 @@ PAGES['billing'] = {
         </div>
 
         ${b.billed ? `
-          <button class="btn btn-success btn-block btn-lg" disabled style="opacity:0.8">
-            <span class="material-icons">check_circle</span> คิดเงินเรียบร้อยแล้ว
-          </button>
+          <div style="display:flex; gap:10px; margin-top:10px;">
+            <button class="btn btn-success btn-lg" disabled style="opacity:0.8; flex:1;">
+              <span class="material-icons">check_circle</span> คิดเงินเรียบร้อยแล้ว
+            </button>
+            <button class="btn btn-primary btn-lg" style="flex:1;" onclick="PAGES.billing.openFinanceSettlement(${i})">
+              <span class="material-icons">add_circle</span> คิดเงินเพิ่ม
+            </button>
+          </div>
         ` : `
-          <button class="btn btn-primary btn-block btn-lg" onclick="PAGES.billing.openBilling(${i})">
+          <button class="btn btn-primary btn-block btn-lg" onclick="PAGES.billing.openFinanceSettlement(${i})">
             <span class="material-icons">receipt</span> คิดเงินพนักงาน
           </button>
         `}
       </div>
     `;
   },
-
-  openBilling(idx) {
-    const b = this._billings[idx];
-    const groupedItems = {};
-    b._stock.forEach(s => {
-      const sold = s.qty - (s.consigned || 0);
-      if (!groupedItems[s.productId]) {
-        groupedItems[s.productId] = { product: s.product, sold: 0 };
-      }
-      groupedItems[s.productId].sold += sold;
-    });
-    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
-    const totalComm = itemsToBill.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
-
-    openModal(`คิดเงิน: ${b.employee?.displayName}`, `
-      <div class="receipt-card" style="margin-bottom:16px; border:none; box-shadow:none; padding:12px">
-        <div style="font-size:0.75rem; font-weight:800; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:5px">
-          <span class="material-icons" style="font-size:14px">receipt_long</span> สรุปรายการขาย (ไม่รวมสินค้าฝากคืน)
-        </div>
-        <div style="max-height:350px; overflow-y:auto; padding-right:8px">
-          ${(() => {
-            if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:20px">ไม่มีรายการที่ต้องคิดเงิน</div>';
-            
-            const zoneItems = itemsToBill.filter(it => !it.product?.isSet);
-            const setItems = itemsToBill.filter(it => it.product?.isSet);
-            let html = '';
-
-            const renderModalItem = (it) => {
-              let setDetails = '';
-              if (it.product?.isSet && it.product.setItems && it.product.setItems.length > 0) {
-                setDetails = `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px; padding:4px 8px; background:var(--bg-base); border-radius:4px; border-left:2px solid var(--primary)">
-                  <div style="font-weight:700; margin-bottom:2px">ประกอบด้วย:</div>
-                  ${it.product.setItems.map(setIt => `• ${setIt.name} (${setIt.qty} ${setIt.unit})`).join('<br>')}
-                </div>`;
-              }
-              return `
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--border-light)">
-                  <div style="flex:1; min-width:0;">
-                    <div style="font-weight:700; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.product?.name}</div>
-                    <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:2px;">[${it.product?.code || '-'}]</div>
-                    ${setDetails}
-                  </div>
-                  <div style="display:flex; gap:12px; align-items:center; text-align:right; font-weight:600; margin-left:8px; flex-shrink:0;">
-                    <div style="width:45px; color:var(--primary);">${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span></div>
-                    <div style="width:65px; color:#BE185D;"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">คอม</span><br/>฿${UI.currency((it.product?.sellCommission || 0) * it.sold)}</div>
-                    <div style="width:65px; color:var(--success);"><span style="font-size:0.6rem; font-weight:400; color:var(--text-muted);">ราคา</span><br/>฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
-                  </div>
-                </div>
-              `;
-            };
-
-            if (zoneItems.length > 0) {
-              const zoneTotal = zoneItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
-              const zoneComm = zoneItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
-              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเขต</div>`;
-              html += zoneItems.map(renderModalItem).join('');
-              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
-                         <span>รวมสินค้าเขต</span>
-                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(zoneComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(zoneTotal)}</span></span>
-                       </div>`;
-            }
-            if (setItems.length > 0) {
-              const setTotal = setItems.reduce((sum, it) => sum + (it.product?.sellWholesale || 0) * it.sold, 0);
-              const setComm = setItems.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0);
-              html += `<div style="font-size:0.75rem; font-weight:800; color:var(--primary); margin:10px 0 6px 0; padding-bottom:4px; border-bottom:2px solid var(--primary);">สินค้าเซ็ท</div>`;
-              html += setItems.map(renderModalItem).join('');
-              html += `<div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; font-weight:800; background:rgba(0,0,0,0.02); padding:6px 8px; border-radius:4px; margin-top:4px; margin-bottom:8px; color:var(--text-secondary);">
-                         <span>รวมสินค้าเซ็ท</span>
-                         <span><span style="color:#BE185D;">คอม: ฿${UI.currency(setComm)}</span> | <span style="color:var(--success);">ราคา: ฿${UI.currency(setTotal)}</span></span>
-                       </div>`;
-            }
-            return html;
-          })()}
-        </div>
-      </div>
-      <div class="form-group"><label>หมายเหตุ</label><input type="text" id="bill-note" placeholder="..." /></div>
-      <div style="background:var(--bg-base); padding:15px; border-radius:12px; text-align:center">
-        <div class="text-muted" style="font-size:0.8rem">ยอดเงินสุทธิที่ต้องส่ง</div>
-        <div class="fw-bold" style="font-size:2rem; color:var(--success)">฿${UI.currency(b._totalAmt)}</div>
-        <div style="font-size:0.9rem; font-weight:700; color:#BE185D; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(0,0,0,0.1);">
-          รวมค่าคอมมิชชั่น: ฿${UI.currency(totalComm)}
-        </div>
-      </div>
-    `, `
-      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-success" onclick="PAGES.billing.openFinanceSettlement(${idx})">ดำเนินการชำระเงิน <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_forward</span></button>
-    `, 'max-width:650px');
-  },
-
   openFinanceSettlement(idx) {
     const b = this._billings[idx];
     const note = document.getElementById('bill-note')?.value || '';
@@ -379,18 +313,19 @@ PAGES['billing'] = {
       <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
         <div class="form-group">
           <label>จ่ายเงินสด (บาท)</label>
-          <input type="number" id="fin-cash" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinanceTransfer()" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--success); text-align:center; border:2px solid var(--success)"/>
+          <input type="text" id="fin-cash" value="0" onfocus="this.select()" oninput="PAGES.billing.calcFinanceTransfer('cash')" onblur="this.value = (parseFloat(this.value.replace(/,/g, '')) || 0).toLocaleString('en-US')" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--success); text-align:center; border:2px solid var(--success)"/>
         </div>
         <div class="form-group">
           <label>เงินโอน (บาท)</label>
-          <input type="number" id="fin-transfer" value="${b._totalAmt}" onfocus="this.select()" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--primary); text-align:center; border:2px solid var(--primary)"/>
+          <input type="text" id="fin-transfer" value="${Math.ceil(b._totalAmt).toLocaleString('en-US')}" onfocus="this.select()" oninput="PAGES.billing.calcFinanceTransfer('transfer')" onblur="this.value = (parseFloat(this.value.replace(/,/g, '')) || 0).toLocaleString('en-US')" style="font-size:1.5rem; height:50px; font-weight:bold; color:var(--primary); text-align:center; border:2px solid var(--primary)"/>
         </div>
       </div>
+      <div class="form-group" style="margin-top:15px;"><label>หมายเหตุ</label><input type="text" id="bill-note" placeholder="..." /></div>
     `;
 
     openModal('ชำระเงินและปิดบิล', html, `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="PAGES.billing.confirmBilling(${idx}, '${note}')"><span class="material-icons">payments</span> ยืนยันชำระเงินและออกใบเสร็จ</button>
+      <button class="btn btn-primary" onclick="PAGES.billing.confirmBilling(${idx})"><span class="material-icons">payments</span> ยืนยันชำระเงินและออกใบเสร็จ</button>
     `, 'max-width:600px');
   },
   
@@ -403,22 +338,37 @@ PAGES['billing'] = {
     const grand = goods + totalFee;
     document.getElementById('fin-grand-val').value = grand;
     document.getElementById('fin-grand-total').textContent = '฿' + UI.currency(grand);
-    this.calcFinanceTransfer();
+    this.calcFinanceTransfer('cash');
   },
   
-  calcFinanceTransfer() {
+  calcFinanceTransfer(source) {
     const grand = parseFloat(document.getElementById('fin-grand-val').value) || 0;
-    const cash = parseFloat(document.getElementById('fin-cash').value) || 0;
-    const transfer = grand - cash;
-    document.getElementById('fin-transfer').value = transfer >= 0 ? transfer : 0;
+    const cashEl = document.getElementById('fin-cash');
+    const transferEl = document.getElementById('fin-transfer');
+    
+    let cash = parseFloat(cashEl.value.replace(/,/g, '')) || 0;
+    let transfer = parseFloat(transferEl.value.replace(/,/g, '')) || 0;
+    
+    if (source === 'cash') {
+       transfer = grand - cash;
+       if (transfer < 0) transfer = 0;
+       transfer = Math.ceil(transfer);
+       transferEl.value = transfer.toLocaleString('en-US');
+    } else if (source === 'transfer') {
+       cash = grand - transfer;
+       if (cash < 0) cash = 0;
+       cash = Math.ceil(cash);
+       cashEl.value = cash.toLocaleString('en-US');
+    }
   },
 
-  async confirmBilling(idx, prevNote) {
+  async confirmBilling(idx) {
+    if (!confirm('ยืนยันการบันทึกการคิดเงินใช่หรือไม่?\\n\\n* หากบันทึกแล้ว ระบบจะดำเนินการตัดสต็อกและบันทึกประวัติทันที')) return;
     const b = this._billings[idx];
-    const note = prevNote || '';
+    const note = document.getElementById('bill-note')?.value || '';
     
-    const cashPaid = parseFloat(document.getElementById('fin-cash')?.value) || 0;
-    const transferPaid = parseFloat(document.getElementById('fin-transfer')?.value) || 0;
+    const cashPaid = parseFloat(document.getElementById('fin-cash')?.value.replace(/,/g, '')) || 0;
+    const transferPaid = parseFloat(document.getElementById('fin-transfer')?.value.replace(/,/g, '')) || 0;
     
     const financeItems = [];
     financeItems.push({ category: 'ค่าสินค้า', amount: b._totalAmt });
@@ -466,67 +416,246 @@ PAGES['billing'] = {
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
 
-  showReceipt(data) {
-    const vat = data.totalAmt * (CONFIG.VAT_RATE || 0.07);
-    const subtotal = data.totalAmt - vat;
-    openModal(`ใบเสร็จรับเงินสำเร็จ`, `
-      <div class="receipt-card" id="receipt-print-area">
-        <div class="receipt-header-new">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start">
-            <div><div class="receipt-brand">${CONFIG.APP_NAME}</div><div class="receipt-doc-no">REF: ${data.billId}</div></div>
-            <div class="receipt-status-badge">PAID</div>
+
+
+
+
+
+
+  async showReceipt(data) {
+    let comp = { name: 'ห้างหุ้นส่วนจำกัด เจริญรุ่งเรือง รับทรัพย์ (สำนักงานใหญ่)', address: '', phone: '' };
+    try {
+      const res = await API.getCompanyInfo();
+      if(res.companyInfo) comp = res.companyInfo;
+    } catch(e) {}
+    
+    let financeHtml = '';
+    let financeTotal = 0;
+    
+    // items with sold > 0 only!
+    const activeItems = (data.items || []).filter(it => it.sold > 0);
+    
+    if (data.financeItems && data.financeItems.length > 0) {
+      const extraItems = data.financeItems.filter(f => f.category !== 'ค่าสินค้า');
+      if (extraItems.length > 0) {
+        financeTotal = extraItems.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+        financeHtml = `
+          <div style="margin-top: 10px;">
+            <div style="font-weight:bold; margin-bottom:5px; font-size:0.8rem; border-bottom:1px solid #ddd; padding-bottom:3px;">รายการอื่นๆ เพิ่มเติม</div>
+            <table class="a4-table" style="margin-bottom:10px;">
+              <tbody>
+                ${extraItems.map(f => `
+                  <tr>
+                    <td class="td-center" style="width:40px;">-</td>
+                    <td>
+                      <span class="bold" style="font-size:0.8rem;">${f.category}</span>
+                      ${f.note ? `<span style="font-size:0.7rem; color:#777; margin-left:10px;">(${f.note})</span>` : ''}
+                    </td>
+                    <td class="td-right" style="width:50px;"></td>
+                    <td class="td-right" style="width:70px;"></td>
+                    <td class="td-right bold" style="width:90px;">฿${UI.currency(f.amount)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
           </div>
-          <div class="receipt-meta-grid">
-            <div class="meta-item"><span class="material-icons">event</span> ${UI.dateStr(data.date)}</div>
-            <div class="meta-item"><span class="material-icons">person</span> ${data.employeeName}</div>
-            <div class="meta-item"><span class="material-icons">inventory_2</span> ${data.whName}</div>
+        `;
+      }
+    }
+
+    const grandTotal = data.totalAmt + financeTotal;
+    const subtotal = data.totalAmt;
+    
+    function thaiBahtText(amount) {
+      if (isNaN(amount) || amount === 0) return 'ศูนย์บาทถ้วน';
+      const numToThai = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+      const unitToThai = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+      let [baht, satang] = Number(amount).toFixed(2).split('.');
+      
+      let convert = (numStr) => {
+        let res = '';
+        let len = numStr.length;
+        for (let i = 0; i < len; i++) {
+          let n = parseInt(numStr[i]);
+          if (n !== 0) {
+            if (i === len - 1 && n === 1 && len > 1 && numStr[len - 2] !== '0') {
+              res += 'เอ็ด';
+            } else if (i === len - 2 && n === 2) {
+              res += 'ยี่สิบ';
+            } else if (i === len - 2 && n === 1) {
+              res += 'สิบ';
+            } else {
+              res += numToThai[n] + unitToThai[len - i - 1];
+            }
+          }
+        }
+        return res;
+      };
+      
+      let bahtText = convert(baht);
+      let satangText = convert(satang);
+      
+      return (bahtText ? bahtText + 'บาท' : '') + (satangText ? satangText + 'สตางค์' : 'ถ้วน');
+    }
+
+    const html = `
+      <style>
+        .a4-wrapper { 
+          background: #fff; 
+          color: #333; 
+          font-family: 'Sarabun', 'Prompt', sans-serif; 
+          line-height: 1.2; 
+          max-width: 210mm; /* A4 width */
+          margin: 0 auto; 
+          padding: 10mm; 
+          box-sizing: border-box; 
+        }
+        .a4-header { display: flex; justify-content: space-between; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 10px; }
+        .a4-title { color: var(--primary); font-size: 18px; font-weight: bold; margin: 0; }
+        .a4-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 0.75rem; }
+        .a4-table th { background: #f8f9fa; border: 1px solid #ddd; padding: 4px 6px; text-align: left; font-size: 0.75rem; }
+        .a4-table td { border: 1px solid #ddd; padding: 4px 6px; font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .a4-table .td-right { text-align: right; }
+        .a4-table .td-center { text-align: center; }
+        .a4-summary-box { display: flex; justify-content: flex-end; margin-bottom: 15px; }
+        .a4-summary-table { width: 250px; border-collapse: collapse; font-size:0.75rem; }
+        .a4-summary-table td { padding: 4px 6px; border: 1px solid #ddd; }
+        .a4-summary-table .bold { font-weight: bold; }
+        .a4-signatures { display: flex; justify-content: space-around; margin-top: 30px; text-align: center; font-size:0.8rem; }
+        .a4-sign-line { width: 180px; border-bottom: 1px solid #333; margin-bottom: 5px; height: 25px; }
+        @media print {
+          @page { size: A4 portrait; margin: 0; }
+          body * { visibility: hidden; }
+          #receipt-print-area, #receipt-print-area * { visibility: visible; }
+          #receipt-print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 210mm !important; 
+            height: 297mm !important;
+            margin: 0; 
+            padding: 10mm; 
+            box-shadow: none; 
+            border: none;
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important;
+          }
+          .modal-container { background: none; box-shadow: none; border: none; }
+          .modal-overlay { background: transparent; }
+          .no-print { display: none !important; }
+        }
+      </style>
+
+      <div class="a4-wrapper" id="receipt-print-area">
+        <div class="a4-header">
+          <div style="flex:1;">
+            <h2 style="margin:0; font-size:1.2rem;">${comp.name}</h2>
+            ${comp.address || comp.phone ? `<div style="font-size:0.75rem; color:#444; margin-top:4px;">
+              ${comp.address}<br>
+              ${comp.phone ? 'โทร: ' + comp.phone : ''}
+            </div>` : ''}
+          </div>
+          <div style="text-align:right;">
+            <h1 class="a4-title">ใบเสร็จรับเงิน</h1>
+            <h3 style="margin:0; color:#777; font-weight:normal; font-size:0.9rem;">RECEIPT</h3>
+            <table style="margin-top:5px; width:100%; font-size:0.75rem;">
+              <tr><td style="text-align:right; color:#666; padding-right:5px;">เลขที่ (No):</td><td style="text-align:left; font-weight:bold;">${data.billId}</td></tr>
+              <tr><td style="text-align:right; color:#666; padding-right:5px;">วันที่ (Date):</td><td style="text-align:left; font-weight:bold;">${UI.dateStr(data.date)}</td></tr>
+            </table>
           </div>
         </div>
-        <div class="receipt-content">
-          <table class="receipt-table-new">
-            <thead><tr><th>รายการ</th><th style="text-align:right">จำนวน</th><th style="text-align:right">รวม</th></tr></thead>
-            <tbody>
-              ${data.items.map(it => {
-                let setDetails = '';
-                if (it.isSet && it.setItems && it.setItems.length > 0) {
-                  setDetails = `<div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">
-                    [ชุดประกอบด้วย: ${it.setItems.map(setIt => `${setIt.name} x${setIt.qty}`).join(', ')}]
-                  </div>`;
-                }
-                return `
-                <tr>
-                  <td>
-                    <div class="fw-bold" style="font-size:0.85rem">${it.productName}</div>
-                    <div class="text-muted" style="font-size:0.65rem">[${it.productCode || '-'}] ${it.productCategory || ''} | @ ฿${UI.currency(it.pricePerUnit)}</div>
-                    ${setDetails}
-                  </td>
-                  <td style="text-align:right; white-space:nowrap; vertical-align:top">${it.sold} <small style="color:var(--text-muted)">${it.unit || 'หน่วย'}</small></td>
-                  <td style="text-align:right; font-weight:700; vertical-align:top">฿${UI.currency(it.sold * it.pricePerUnit)}</td>
-                </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-          <div class="receipt-summary">
-            <div class="summary-line"><span>รวมเงิน</span><span>฿${UI.currency(subtotal)}</span></div>
-            <div class="summary-line"><span>ภาษี (7%)</span><span>฿${UI.currency(vat)}</span></div>
-            <div class="summary-line grand-total"><span>ยอดสุทธิ</span><span>฿${UI.currency(data.totalAmt)}</span></div>
+
+        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 6px 10px; margin-bottom: 10px; display:flex;">
+          <div style="flex:1;">
+            <div style="font-size:0.7rem; color:#666; margin-bottom:1px;">ลูกค้า (Customer)</div>
+            <div style="font-size:0.9rem; font-weight:bold;">${data.employeeName || '-'}</div>
           </div>
         </div>
-        <div class="receipt-footer-new">${data.note ? `<div class="receipt-note"><strong>หมายเหตุ:</strong> ${data.note}</div>` : ''}<div style="margin-top:10px">ขอบคุณที่ใช้บริการ ห้างหุ้นส่วนจำกัด เจริญรุ่งเรือง รับทรัพย์ (สำนักงานใหญ่)</div></div>
-        <div class="no-print" style="padding:20px; display:flex; flex-wrap:wrap; gap:8px">
-          <button class="btn btn-primary" style="flex:1; min-width:120px; font-size:0.8rem; padding:8px" onclick="window.print()">
-            <span class="material-icons" style="font-size:16px">print</span> พิมพ์
-          </button>
-          <button class="btn btn-success" style="flex:1; min-width:120px; font-size:0.8rem; padding:8px" onclick="PAGES.billing.saveReceiptImage()">
-            <span class="material-icons" style="font-size:16px">image</span> บันทึกรูป
-          </button>
-          <button class="btn btn-secondary" style="width:100%; font-size:0.8rem; padding:8px; margin-top:4px" onclick="closeModal()">ปิดหน้าต่าง</button>
+
+        <table class="a4-table">
+          <thead>
+            <tr>
+              <th class="td-center" style="width:40px;">ลำดับ<br>No.</th>
+              <th>รายการสินค้า<br>Description</th>
+              <th class="td-right" style="width:50px;">จำนวน<br>Qty</th>
+              <th class="td-right" style="width:70px;">ราคา<br>Price</th>
+              <th class="td-right" style="width:90px;">จำนวนเงิน<br>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activeItems.map((it, idx) => {
+              let setDetails = '';
+              if (it.isSet && it.setItems && it.setItems.length > 0) {
+                setDetails = `<span style="font-size:0.65rem; color:#666; margin-left:8px;">[ชุด: ${it.setItems.map(setIt => `${setIt.name} x${setIt.qty}`).join(', ')}]</span>`;
+              }
+              return `
+              <tr>
+                <td class="td-center">${idx + 1}</td>
+                <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 350px;">
+                  <span class="bold" style="font-size:0.75rem;">${it.productName}</span>
+                  <span style="font-size:0.65rem; color:#777; margin-left:6px;">[${it.productCode || '-'}] ${it.productCategory || ''}</span>
+                  ${setDetails}
+                </td>
+                <td class="td-right">${it.sold} ${it.unit || ''}</td>
+                <td class="td-right">฿${UI.currency(it.pricePerUnit)}</td>
+                <td class="td-right bold">฿${UI.currency(it.sold * it.pricePerUnit)}</td>
+              </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+
+        ${financeHtml}
+
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-top: 10px;">
+          <div style="flex:1; padding-right:15px;">
+            <div style="background:#f1f3f5; padding:8px; border-radius:4px; text-align:center; font-weight:bold; font-style:italic; font-size:0.8rem;">
+              ( ${thaiBahtText(grandTotal)} )
+            </div>
+            ${data.note ? `<div style="margin-top:10px; padding:8px; border:1px dashed #ccc; border-radius:4px; font-size:0.75rem;"><strong>หมายเหตุ:</strong> ${data.note}</div>` : ''}
+          </div>
+          <div class="a4-summary-box">
+            <table class="a4-summary-table">
+              <tr>
+                <td>รวมค่าสินค้า (Subtotal)</td>
+                <td class="td-right bold">฿${UI.currency(subtotal)}</td>
+              </tr>
+              ${financeTotal > 0 ? `
+              <tr>
+                <td>รวมรายการอื่นๆ (Other Items)</td>
+                <td class="td-right bold">฿${UI.currency(financeTotal)}</td>
+              </tr>
+              ` : ''}
+              <tr style="background:#f8f9fa;">
+                <td class="bold" style="font-size:0.9rem; padding:8px 6px;">จำนวนเงินรวมทั้งสิ้น</td>
+                <td class="td-right bold" style="font-size:0.9rem; color:var(--primary); padding:8px 6px;">฿${UI.currency(grandTotal)}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="a4-signatures">
+          <div>
+            <div class="a4-sign-line"></div>
+            <div>ผู้รับเงิน / Receiver</div>
+            <div style="font-size:0.7rem; color:#666; margin-top:2px;">วันที่ / Date: ______/______/______</div>
+          </div>
+          <div>
+            <div class="a4-sign-line"></div>
+            <div>ผู้มีอำนาจลงนาม / Authorized Signature</div>
+            <div style="font-size:0.7rem; color:#666; margin-top:2px;">วันที่ / Date: ______/______/______</div>
+          </div>
+        </div>
+
+        <div class="no-print" style="margin-top: 20px; display:flex; gap:10px; justify-content:center;">
+          <button class="btn btn-primary" onclick="window.print()" style="min-width:130px; padding:8px; font-size:0.85rem;"><span class="material-icons" style="font-size:18px; vertical-align:text-bottom;">print</span> พิมพ์ใบเสร็จ</button>
+          <button class="btn btn-success" onclick="PAGES.billing.saveReceiptImage()" style="min-width:130px; padding:8px; font-size:0.85rem;"><span class="material-icons" style="font-size:18px; vertical-align:text-bottom;">image</span> บันทึกรูป</button>
+          <button class="btn btn-secondary" onclick="closeModal()" style="min-width:130px; padding:8px; font-size:0.85rem;">ปิด</button>
         </div>
       </div>
-    `, ``, 'max-width:550px');
+    `;
+    openModal('ใบเสร็จรับเงินสำเร็จ', html, '', '850px');
   },
-
   async saveReceiptImage() {
     const el = document.getElementById('receipt-print-area');
     if (!el) return;

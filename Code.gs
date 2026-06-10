@@ -23,7 +23,7 @@ function getSpreadsheet() {
 }
 
 // ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'ดอหกห';
+const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9T';
 
 // Sheet names
 const SN = {
@@ -38,6 +38,7 @@ const SN = {
   ORDERS: 'Orders',
   SHOPS: 'Shops',
   SHOP_STOCK: 'ShopStock',
+  STOCK_CHECKS: 'StockChecks',
   SUPPLIERS: 'Suppliers',
   COMPANY_INFO: 'CompanyInfo',
   SETS: 'Sets',
@@ -129,10 +130,13 @@ function handleRequest(e) {
       case 'deleteWarehouse': result = deleteWarehouse(user, body.warehouseId); break;
 
       // Stock
+      case 'getCentralReport': result = getCentralReport(e.parameter); break;
       case 'getCentralStock': result = getCentralStock(e.parameter.warehouseId); break;
       case 'getEmployeeStock': result = getEmployeeStock(e.parameter.employeeId); break;
-      case 'getEmployeeFinance': result = getEmployeeFinance(e.parameter.employeeId, e.parameter.month); break;
+      case 'getEmployeeFinance': result = getEmployeeFinance(body.employeeId || e.parameter.employeeId, body.startDate || e.parameter.startDate, body.endDate || e.parameter.endDate); break;
       case 'getAllEmployeeStocks': result = getAllEmployeeStocks(e.parameter.date); break;
+      case 'saveStockCheck': result = saveStockCheck(user, body); break;
+      case 'getStockChecks': result = getStockChecks(e.parameter.warehouseId, e.parameter.startDate, e.parameter.endDate); break;
       case 'receiveGoods': result = receiveGoods(user, body); break;
        case 'transferToEmployee': result = transferToEmployee(user, body); break;
        case 'moveStock': result = moveStock(user, body); break;
@@ -151,6 +155,7 @@ function handleRequest(e) {
       case 'getBillingList': result = getBillingList(e.parameter.date); break;
       case 'getBillingHistory': result = getBillingHistory(user, e.parameter.startDate, e.parameter.endDate); break;
       case 'getBillingDetail': result = getBillingDetail(e.parameter.billingId); break;
+      case 'updateBillingDate': result = updateBillingDate(user, body); break;
       case 'doBilling': result = doBilling(user, body); break;
       case 'generateTaxInvoice': result = generateTaxInvoice(user, e.parameter.billingId); break;
 
@@ -241,6 +246,7 @@ function getHeaders(name) {
     [SN.ORDERS]: ['id','date','requestedBy','userId','fromWhId','toWhId','status','note','items','createdAt'],
     [SN.SHOPS]: ['id','name','address','lat','lng','ownerName','phone','salesPersonId','active','createdAt','imageUrl'],
     [SN.SHOP_STOCK]: ['shopId','productId','expiryDate','qty','unit','lastUpdated'],
+    [SN.STOCK_CHECKS]: ['id','date','warehouseId','userId','items','note'],
     [SN.SUPPLIERS]: ['id', 'name', 'address', 'phone', 'fax', 'taxId', 'createdAt'],
     [SN.COMPANY_INFO]: ['id', 'name', 'address', 'phone', 'fax', 'taxId'],
     [SN.SETS]: ['id','code','name','items','active','createdAt','imageUrl'],
@@ -1022,6 +1028,42 @@ function getAllEmployeeStocks(date) {
   return { warehouses: result };
 }
 
+// ── STOCK CHECKS ─────────────────────────────────────────────
+function saveStockCheck(user, data) {
+  requireRole(user, 'admin', 'stock', 'cashier');
+  const { warehouseId, items, note } = data;
+  if (!warehouseId || !items || !items.length) throw new Error('ข้อมูลไม่ครบถ้วน');
+
+  appendRow(getSheet(SN.STOCK_CHECKS), {
+    id: generateId('CHK'),
+    date: new Date().toISOString(),
+    warehouseId: warehouseId,
+    userId: user.id,
+    items: JSON.stringify(items),
+    note: note || ''
+  });
+
+  writeLog(user, 'stock_check', `บันทึกยอดนับสต๊อกคลัง [${warehouseId}] จำนวน ${items.length} รายการ`);
+  return { success: true };
+}
+
+function getStockChecks(warehouseId, startDate, endDate) {
+  let checks = sheetData(getSheet(SN.STOCK_CHECKS));
+  if (warehouseId) checks = checks.filter(c => String(c.warehouseId) === String(warehouseId));
+  if (startDate) checks = checks.filter(c => _fmtDate(c.date) >= startDate);
+  if (endDate) checks = checks.filter(c => _fmtDate(c.date) <= endDate);
+
+  // Join with user names for better display
+  const users = sheetData(getSheet(SN.USERS));
+  checks = checks.map(c => {
+    const u = users.find(x => x.id === c.userId);
+    return { ...c, username: u ? u.username : c.userId };
+  });
+
+  checks.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { checks };
+}
+
 function updateCentralStock(warehouseId, productId, deltaQty, unit, expiryDate) {
   const sheet = getSheet(SN.CENTRAL_STOCK);
   const data = sheet.getDataRange().getValues();
@@ -1499,7 +1541,13 @@ function getBillingList(date) {
     });
 
     const totalAmt = myStock.reduce((sum, s) => sum + (s.qty - s.consigned) * (s.product.sellWholesale || 0), 0);
-    const totalUnits = myStock.reduce((sum, s) => sum + (s.qty - s.consigned), 0);
+    const totalUnits = myStock.reduce((sum, s) => {
+      let multiplier = 1;
+      if (s.product && s.product.isSet && s.product.setItems) {
+        multiplier = s.product.setItems.reduce((msum, it) => msum + (Number(it.qty) || 0), 0);
+      }
+      return sum + (s.qty - s.consigned) * multiplier;
+    }, 0);
 
     return {
       billingId: bill?.id || null,
@@ -1517,12 +1565,148 @@ function getBillingList(date) {
   return { billings: result };
 }
 
-function getEmployeeFinance(employeeId, month) {
+function getCentralReport(params) {
+  const { startDate, endDate } = params;
+  
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const centralStock = sheetData(getSheet(SN.CENTRAL_STOCK));
+  
+  // Find central warehouse IDs
+  const centralWhIds = warehouses.filter(w => w.type === 'central' && (w.active === '' || _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE')).map(w => String(w.id));
+  
+  // Get Transactions and filter by date
+  let transactions = sheetData(getSheet(SN.TRANSACTIONS));
+  if (startDate) transactions = transactions.filter(t => _fmtDate(t.createdAt) >= startDate);
+  if (endDate) transactions = transactions.filter(t => _fmtDate(t.createdAt) <= endDate);
+
+  // Accumulate received and withdrawn quantities
+  const summary = {};
+  
+  transactions.forEach(t => {
+    const pId = String(t.productId || t.productid);
+    if (!pId || pId === 'undefined' || pId === '') return;
+
+    if (!summary[pId]) summary[pId] = { received: 0, withdrawn: 0 };
+    const qty = Number(t.qty) || 0;
+    
+    const isToCentral = centralWhIds.includes(String(t.toWarehouseId || t.towarehouseid));
+    const isFromCentral = centralWhIds.includes(String(t.fromWarehouseId || t.fromwarehouseid));
+
+    // รับเข้าคลังกลาง (ทุกอย่างที่เข้ามาคลังกลาง และไม่ได้มาจากคลังกลางด้วยกันเอง)
+    if (isToCentral && !isFromCentral) {
+      summary[pId].received += qty;
+    }
+    
+    // เบิกออกไป (ทุกอย่างที่ออกจากคลังกลาง ไปที่อื่น)
+    if (isFromCentral && !isToCentral) {
+      summary[pId].withdrawn += qty;
+    }
+  });
+
+  // Calculate actual current balances in central stock
+  const currentBalances = {};
+  centralStock.forEach(s => {
+    if (centralWhIds.includes(String(s.warehouseId))) {
+      const pId = String(s.productId);
+      currentBalances[pId] = (currentBalances[pId] || 0) + (Number(s.qty) || 0);
+    }
+  });
+
+  // Build rows combining products and sets
+  const rows = [];
+  
+  const isAllTime = !startDate && !endDate;
+
+  const processProduct = (p, isSet) => {
+    const pId = String(p.id);
+    const sum = summary[pId] || { received: 0, withdrawn: 0 };
+    const balance = currentBalances[pId] || 0;
+    
+    let finalReceived = sum.received;
+    let finalWithdrawn = sum.withdrawn;
+
+    // ถ้าเป็นการดู "สะสมทั้งหมด" ให้คำนวณยอดรับเข้าจาก "ยอดคงเหลือ + เบิกออก"
+    // เพื่อครอบคลุมกรณีที่ผู้ใช้ปรับสต๊อกด้วยมือ (ซึ่งไม่ถูกบันทึกใน Transactions)
+    if (isAllTime) {
+      finalReceived = balance + finalWithdrawn;
+    }
+
+    // Allow all products to show even with 0 balance
+    
+
+    // Only use wholesale price for commission base on sets or normal products
+    let wholesale = Number(p.sellWholesale) || 0;
+    let costVat = Number(p.costVat) || 0;
+    let agentProfit = wholesale - costVat;
+    
+    if (isSet) {
+      // Calculate set price from components
+      wholesale = 0;
+      let cost = 0;
+      let parsedItems = [];
+      try { parsedItems = JSON.parse(p.items || '[]'); } catch(e) {}
+      parsedItems.forEach(it => {
+        let cp = products.find(x => x.category === it.category); // Simplified set calculation
+        if (cp) {
+          wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+          cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+        }
+      });
+      agentProfit = cost - wholesale;
+    }
+
+    rows.push({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      category: p.category || '',
+      image: p.imageUrl || p.imageurl || '',
+      received: finalReceived,
+      withdrawn: finalWithdrawn,
+      balance: balance,
+      sellWholesale: wholesale,
+      agentProfit: agentProfit,
+      order: Number(p.order) || 9999
+    });
+  };
+
+  products.forEach(p => processProduct(p, false));
+
+  // Calculate Total Billing
+  let billings = sheetData(getSheet(SN.BILLING));
+  if (startDate) billings = billings.filter(b => _fmtDate(b.date) >= startDate);
+  if (endDate) billings = billings.filter(b => _fmtDate(b.date) <= endDate);
+  
+  let totalBillingReceived = 0;
+  billings.forEach(b => {
+    totalBillingReceived += (Number(b.totalAmt) || 0);
+  });
+
+  rows.sort((a, b) => a.order - b.order);
+
+  return { rows, totalBillingReceived, centralWhId: centralWhIds[0] || '' };
+}
+
+function getEmployeeFinance(employeeId, startDate, endDate) {
   const finance = sheetData(getSheet(SN.EMPLOYEE_FINANCE));
   let result = finance;
-  if (employeeId) result = result.filter(f => f.employeeId === employeeId);
-  if (month) result = result.filter(f => (f.date || '').startsWith(month));
-  return { finance: result };
+  if (employeeId) result = result.filter(f => String(f.employeeId) === String(employeeId));
+  if (startDate) result = result.filter(f => _fmtDate(f.date) >= startDate);
+  if (endDate) result = result.filter(f => _fmtDate(f.date) <= endDate);
+  
+  const billings = sheetData(getSheet(SN.BILLING));
+  let bResult = billings;
+  if (employeeId) {
+     const warehouses = sheetData(getSheet(SN.WAREHOUSES)).filter(w => String(w.employeeId) === String(employeeId) || String(w.id) === String(employeeId));
+     const whIds = warehouses.map(w => String(w.id));
+     bResult = bResult.filter(b => whIds.includes(String(b.warehouseId)));
+  }
+  if (startDate) bResult = bResult.filter(b => _fmtDate(b.date) >= startDate);
+  if (endDate) bResult = bResult.filter(b => _fmtDate(b.date) <= endDate);
+
+  return { finance: result, billings: bResult };
 }
 
 function doBilling(user, data) {
@@ -1701,7 +1885,7 @@ function getDashboard(user, params) {
   const today = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 
   // Today's billing
-  const todayBills = billings.filter(b => b.date === today);
+  const todayBills = billings.filter(b => _fmtDate(b.date) === today);
   const totalSalesToday = todayBills.reduce((a, b) => a + Number(b.totalAmt), 0);
   const totalUnitsToday = todayBills.reduce((a, b) => a + Number(b.totalUnits), 0);
 
@@ -2745,5 +2929,46 @@ function deleteSet(user, setId) {
   sheet.deleteRow(rowIndex + 2);
   
   writeLog(user, 'delete_set', `ลบเซ็ตสินค้า [${code}]`);
+  return { success: true };
+}
+
+function updateBillingDate(user, data) {
+  requireRole(user, 'admin');
+  const { billingId, newDate } = data;
+  if (!billingId || !newDate) throw new Error('Missing parameters');
+
+  const sheet = getSheet(SN.BILLING);
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  const headers = values[0];
+  const idIdx = headers.indexOf('id');
+  const dateIdx = headers.indexOf('date');
+  
+  let found = false;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idIdx] === billingId) {
+      sheet.getRange(i + 1, dateIdx + 1).setValue(newDate);
+      found = true;
+      break;
+    }
+  }
+  if (!found) throw new Error('Billing not found');
+
+  const finSheet = getSheet(SN.EMPLOYEE_FINANCE);
+  if (finSheet) {
+    const finValues = finSheet.getDataRange().getValues();
+    const fHeaders = finValues[0];
+    const fBillIdx = fHeaders.indexOf('billingId');
+    const fDateIdx = fHeaders.indexOf('date');
+    if (fBillIdx >= 0 && fDateIdx >= 0) {
+      for (let i = 1; i < finValues.length; i++) {
+        if (finValues[i][fBillIdx] === billingId) {
+          finSheet.getRange(i + 1, fDateIdx + 1).setValue(newDate);
+        }
+      }
+    }
+  }
+
+  logAction(user, 'Update Billing Date', billingId + ' -> ' + newDate);
   return { success: true };
 }

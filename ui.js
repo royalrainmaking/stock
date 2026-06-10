@@ -378,6 +378,8 @@ function getSidebarMenu(role) {
       items: [
         { page: 'dashboard', icon: 'dashboard', label: 'แดชบอร์ด', roles: ['admin'] },
         { page: 'sales-report', icon: 'bar_chart', label: 'รายงานยอดขาย', roles: ['admin', 'cashier'] },
+        { page: 'central-report', icon: 'account_balance', label: 'รายงานสรุปคลังกลาง', roles: ['admin', 'stock'] },
+        { page: 'stock-checks', icon: 'fact_check', label: 'ประวัตินับสต๊อก', roles: ['admin', 'stock', 'cashier'] },
       ]
     },
     {

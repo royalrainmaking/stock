@@ -142,7 +142,10 @@ PAGES['billing-history'] = {
             ${data.map((b, idx) => `
               <tr class="animate-in" style="animation-delay: ${idx * 0.03}s; border-bottom:1px solid var(--border-light)">
                 <td style="font-size:0.82rem">
-                  <div class="fw-bold">${UI.dateStr(b.date)}</div>
+                  <div class="fw-bold" style="display:flex; align-items:center; gap:4px">
+                    ${UI.dateStr(b.date)}
+                    ${AUTH.isAdmin() ? `<span class="material-icons text-primary" style="font-size:14px; cursor:pointer;" onclick="PAGES['billing-history'].editDate('${b.id}', '${b.date}')" title="แก้ไขวันที่">edit</span>` : ''}
+                  </div>
                   <div style="font-size:0.75rem;color:var(--text-muted)">${UI.dateTimeParts(b.createdAt).time} น.</div>
                 </td>
                 <td style="font-family:monospace;font-size:0.8rem;color:var(--primary)">${b.id}</td>
@@ -159,8 +162,8 @@ PAGES['billing-history'] = {
                 <td class="td-right text-success fw-bold">฿${UI.currency(b.totalAmt)}</td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
-                    <button class="btn btn-secondary btn-xs" onclick="PAGES['billing-history'].viewDetail('${b.id}')">
-                      <span class="material-icons">visibility</span> รายละเอียด
+                    <button class="btn btn-primary btn-xs" onclick="PAGES['billing-history'].reprintBilling('${b.id}')">
+                      <span class="material-icons">print</span> พิมพ์ใบเสร็จ
                     </button>
                   </div>
                 </td>
@@ -184,7 +187,10 @@ PAGES['billing-history'] = {
           <div>
             <div style="color:var(--text-muted);font-size:0.8rem;margin-bottom:4px">ข้อมูลรายการ</div>
             <div class="fw-bold">เลขอ้างอิง: ${b.id}</div>
-            <div>วันที่: ${UI.dateStr(b.date)}</div>
+            <div style="display:flex; align-items:center; gap:5px">
+              วันที่: ${UI.dateStr(b.date)} 
+              ${AUTH.isAdmin() ? `<button class="btn btn-secondary btn-xs" onclick="PAGES['billing-history'].editDate('${b.id}', '${b.date}')" style="padding:2px; height:20px"><span class="material-icons" style="font-size:14px">edit</span></button>` : ''}
+            </div>
             <div>เวลาบันทึก: ${UI.dateTimeStr(b.createdAt)}</div>
           </div>
           <div>
@@ -205,17 +211,26 @@ PAGES['billing-history'] = {
               </tr>
             </thead>
             <tbody>
-              ${items.map(it => `
+              ${items.map(it => {
+                let displayStr = `${UI.currency(it.sold, 0)} ${it.unit || ''}`;
+                if (it.isSet && it.setItems && it.setItems.length > 0) {
+                  const itemsPerSet = it.setItems.reduce((sum, si) => sum + (Number(si.qty) || 0), 0);
+                  if (itemsPerSet > 0) {
+                    displayStr = `${UI.currency(it.sold * itemsPerSet, 0)} <span style="font-size:0.65rem; color:var(--text-muted);">(${it.sold} ชุด)</span>`;
+                  }
+                }
+                return `
                 <tr>
                   <td>
                     <div class="fw-bold">${it.productName || it.productId}</div>
                     <div class="text-muted" style="font-size:0.65rem">[${it.productCode || '-'}] ${it.productCategory || ''}</div>
                   </td>
-                  <td class="td-right">${UI.currency(it.sold, 0)} ${it.unit || ''}</td>
+                  <td class="td-right">${displayStr}</td>
                   <td class="td-right">฿${UI.currency(it.pricePerUnit)}</td>
                   <td class="td-right text-primary-color fw-bold">฿${UI.currency(it.sold * it.pricePerUnit)}</td>
                 </tr>
-              `).join('')}
+                `;
+              }).join('')}
             </tbody>
             <tfoot>
               <tr>
@@ -254,6 +269,8 @@ PAGES['billing-history'] = {
       const b = res.billing;
       const items = JSON.parse(b.items || '[]');
       
+      let financeItems = b.financeItems || [];
+
       // บังคับโหลด CSS ของใบเสร็จก่อนแสดงผล (สำคัญมากเพื่อให้หน้าตาเหมือนเดิม)
       if (typeof PAGES.billing.injectStyles === 'function') {
         PAGES.billing.injectStyles();
@@ -267,6 +284,7 @@ PAGES['billing-history'] = {
         whName: b.warehouseName || b.warehouseId,
         totalAmt: b.totalAmt,
         items: items,
+        financeItems: financeItems,
         note: b.note
       });
       
@@ -275,5 +293,43 @@ PAGES['billing-history'] = {
       UI.loading(false);
       UI.toast('Reprint ไม่สำเร็จ: ' + e.message, 'error');
     }
+  },
+
+  editDate(id, oldDate) {
+    const body = `
+      <div class="form-group">
+        <label>เลือกวันที่ใหม่สำหรับบิล <b>${id}</b></label>
+        <input type="date" id="bh-edit-date-input" value="${oldDate}" style="font-size:1.1rem; padding:10px; width:100%; border:1px solid var(--border-color); border-radius:8px;" />
+      </div>
+    `;
+
+    const footer = `
+      <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="PAGES['billing-history'].saveEditDate('${id}', '${oldDate}')">บันทึกวันที่</button>
+    `;
+
+    openModal('แก้ไขวันที่', body, footer, '400px');
+  },
+
+  saveEditDate(id, oldDate) {
+    const newDate = document.getElementById('bh-edit-date-input').value;
+    if (!newDate) {
+      UI.toast('กรุณาเลือกวันที่', 'warning');
+      return;
+    }
+    if (newDate === oldDate) {
+      closeModal();
+      return;
+    }
+
+    closeModal();
+    UI.loading(true);
+    API.updateBillingDate(id, newDate).then(() => {
+      UI.toast('แก้ไขวันที่สำเร็จ');
+      this.load();
+    }).catch(e => {
+      UI.loading(false);
+      UI.toast('แก้ไขวันที่ไม่สำเร็จ: ' + e.message, 'error');
+    });
   }
 };

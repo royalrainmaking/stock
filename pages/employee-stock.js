@@ -127,11 +127,13 @@ PAGES['employee-stock'] = {
   async load() {
     this.showWhLoading(true);
     try {
-      const [stockRes] = await Promise.all([
+      const [stockRes, orderRes] = await Promise.all([
         API.getAllEmployeeStocks(),
+        API.getOrders(),
         MASTER_DATA.load()
       ]);
       this._allStock = stockRes.warehouses || [];
+      this._allOrders = orderRes.orders || [];
       this._warehouses = MASTER_DATA.warehouses.filter(w => w.type === 'employee');
       this._products = MASTER_DATA.products || [];
 
@@ -212,38 +214,80 @@ PAGES['employee-stock'] = {
       stock.forEach(s => {
         const pid = s.productId;
         if (!grouped[pid]) {
-          let p = s.product;
-          if (!p || !p.name) {
-             const setObj = MASTER_DATA.sets.find(set => set.id === pid);
-             if (setObj) {
-                let cost = 0;
-                let wholesale = 0;
-                (setObj.items || []).forEach(it => {
-                  let cp = null;
-                  if (it.allowedProducts && it.allowedProducts.length > 0) {
-                    cp = MASTER_DATA.products.find(x => it.allowedProducts.includes(x.id));
-                  }
-                  if (!cp && it.category) {
-                    cp = MASTER_DATA.products.find(x => x.category === it.category);
-                  }
-                  if (cp) {
-                    cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
-                    wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
-                  }
-                });
-                
-                p = {
-                   id: setObj.id,
-                   name: setObj.name,
-                   code: setObj.code,
-                   imageUrl: setObj.imageUrl,
-                   category: 'เซ็ตสินค้า',
-                   unit: 'เซ็ต',
-                   sellWholesale: wholesale,
-                   sellCommission: 100 - wholesale,
-                   isSet: true
-                };
-             }
+          let p = s.product || {};
+          const setObj = MASTER_DATA.sets.find(set => set.id === pid);
+          if (setObj) {
+            let cost = 0;
+            let wholesale = 0;
+            
+            let actualComponents = {};
+            let totalSetsPicked = 0;
+            
+            (this._allOrders || []).forEach(o => {
+               if (o.status === 'completed' && String(o.toWhId).trim() === String(wh.id).trim()) {
+                  (o.items || []).forEach(it => {
+                     if (it.productId === pid && it.pickedComponents) {
+                        totalSetsPicked += (Number(it.qty) || 0);
+                        it.pickedComponents.forEach(pc => {
+                           if (!actualComponents[pc.productId]) actualComponents[pc.productId] = 0;
+                           actualComponents[pc.productId] += (Number(pc.qty) || 0);
+                        });
+                     }
+                  });
+               }
+            });
+            
+            let enrichedSetItems = [];
+            
+            if (totalSetsPicked > 0) {
+               for (const pcPid in actualComponents) {
+                  const cp = MASTER_DATA.products.find(x => x.id === pcPid);
+                  const qtyPerSet = actualComponents[pcPid] / totalSetsPicked;
+                  enrichedSetItems.push({
+                     name: cp ? cp.name : pcPid,
+                     code: cp ? cp.code : '-',
+                     category: cp ? cp.category : '',
+                     qtyPerSet: qtyPerSet,
+                     unit: cp ? cp.unit : 'ชิ้น',
+                     cp: cp
+                  });
+               }
+            } else {
+               enrichedSetItems = (setObj.items || []).map(it => {
+                 let cp = null;
+                 if (it.allowedProducts && it.allowedProducts.length > 0) cp = MASTER_DATA.products.find(x => it.allowedProducts.includes(x.id));
+                 if (!cp && it.category) cp = MASTER_DATA.products.find(x => x.category === it.category);
+                 return {
+                   name: cp ? cp.name : it.category,
+                   code: cp ? cp.code : '-',
+                   category: cp ? cp.category : it.category,
+                   qtyPerSet: Number(it.qty) || 1,
+                   unit: cp ? cp.unit : (it.unit || 'ชิ้น'),
+                   cp: cp
+                 };
+               });
+            }
+            
+            enrichedSetItems.forEach(it => {
+               if (it.cp) {
+                  cost += (Number(it.cp.costVat) || 0) * (Number(it.qtyPerSet) || 0);
+                  wholesale += (Number(it.cp.sellWholesale) || 0) * (Number(it.qtyPerSet) || 0);
+               }
+            });
+            
+            p = {
+               ...p,
+               id: setObj.id,
+               name: setObj.name,
+               code: setObj.code,
+               imageUrl: setObj.imageUrl,
+               category: 'เซ็ตสินค้า',
+               unit: 'เซ็ต',
+               sellWholesale: wholesale,
+               sellCommission: 100 - wholesale,
+               isSet: true,
+               setItems: enrichedSetItems
+            };
           }
           
           grouped[pid] = {
@@ -409,6 +453,26 @@ PAGES['employee-stock'] = {
           </div>
         </div>
 
+        ${p.isSet && p.product?.setItems?.length ? `
+        <div style="margin-top:4px; padding:10px; background:#f0f9ff; border-radius:8px; font-size:0.75rem; color:#0369a1; border: 1px dashed #7dd3fc;">
+          <div style="font-weight:bold; margin-bottom:6px; display:flex; align-items:center; gap:4px">
+            <span class="material-icons" style="font-size:14px">inventory</span> จำนวนสินค้าย่อยในเซ็ต:
+          </div>
+          <div>
+            <div style="color:#0284c7; font-weight:600; margin-bottom:4px">📦 ถือครองรวม</div>
+            ${p.product.setItems.map(it => `
+              <div style="display:flex; justify-content:space-between; margin-bottom:2px; padding-left:8px; border-left:2px solid #bae6fd;">
+                <div>
+                  <span style="font-family:monospace; color:#0369a1">[${it.code}]</span> 
+                  ${it.name} <small style="color:#64748b">(${it.category})</small>
+                </div>
+                <div><b>${UI.currency(qty * it.qtyPerSet, 0)}</b> <small>${it.unit}</small></div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        ` : ''}
+
         <div style="font-size:0.65rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;margin-top:4px;display:flex;align-items:center;gap:4px">
           <span class="material-icons" style="font-size:14px">inventory_2</span> รายละเอียดตามล็อต
         </div>
@@ -455,6 +519,17 @@ PAGES['employee-stock'] = {
                 <td>
                   <div class="td-bold">${p.product?.name || p.productId}</div>
                   <div style="font-size:0.65rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.product?.code || '-'}]</span> ${p.product?.category || ''}</div>
+                  ${p.isSet && p.product?.setItems?.length ? `
+                  <div style="margin-top:6px; padding:6px; background:#f0f9ff; border-radius:6px; font-size:0.7rem; color:#0369a1; border: 1px dashed #7dd3fc; line-height:1.4">
+                    <div style="font-weight:bold; margin-bottom:4px;">📦 จำนวนสินค้าย่อยในเซ็ต (ถือครองรวม):</div>
+                    ${p.product.setItems.map(it => `
+                       <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                          <div><span style="font-family:monospace">[${it.code}]</span> ${it.name} <span style="color:#64748b">(${it.category})</span></div>
+                          <div style="padding-left:12px"><b>${UI.currency(qty * it.qtyPerSet, 0)}</b> ${it.unit}</div>
+                       </div>
+                    `).join('')}
+                  </div>
+                  ` : ''}
                 </td>
                 <td><div style="min-width:160px">${batchHtml}</div></td>
                 <td class="td-right td-bold">${UI.currency(qty, 0)}</td>

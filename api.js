@@ -77,9 +77,10 @@ const API = {
   deleteWarehouse(warehouseId) { return this._post('deleteWarehouse', { warehouseId }); },
 
   // ── Stock Operations ──────────────────
+  getCentralReport(startDate, endDate) { return this._call('getCentralReport', { startDate, endDate }); },
   getCentralStock(warehouseId) { return this._call('getCentralStock', { warehouseId }); },
   getEmployeeStock(employeeId) { return this._call('getEmployeeStock', { employeeId }); },
-  getEmployeeFinance(employeeId, month) { return this._call('getEmployeeFinance', { employeeId, month }); },
+  getEmployeeFinance(employeeId, startDate, endDate) { return this._call('getEmployeeFinance', { employeeId, startDate, endDate }); },
   getAllEmployeeStocks(date) { return this._call('getAllEmployeeStocks', { date }); },
   getMovementHistory(params) { return this._call('getMovementHistory', params); },
 
@@ -101,6 +102,8 @@ const API = {
   moveStock(data) { return this._post('moveStock', data); },
   adjustStock(data) { return this._post('adjustStock', data); },
   adjustCentralStockBatch(data) { return this._post('adjustCentralStockBatch', data); },
+  saveStockCheck(data) { return this._post('saveStockCheck', data); },
+  getStockChecks(warehouseId, startDate, endDate) { return this._get('getStockChecks', { warehouseId, startDate, endDate }); },
   orderRequest(data) { return this._post('orderRequest', data); },
 
   // ── Billing ───────────────────────────
@@ -108,6 +111,7 @@ const API = {
   getBillingHistory(startDate, endDate) { return this._call('getBillingHistory', { startDate, endDate }); },
   doBilling(data) { return this._post('doBilling', data); },
   getBillingDetail(billingId) { return this._call('getBillingDetail', { billingId }); },
+  updateBillingDate(billingId, newDate) { return this._post('updateBillingDate', { billingId, newDate }); },
   generateTaxInvoice(billingId) { return this._call('generateTaxInvoice', { billingId }); },
 
   // ── Reports ───────────────────────────

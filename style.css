@@ -1130,3 +1130,4 @@ input:focus, select:focus, textarea:focus {
   transform: scale(1.1);
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+\n\n/* ── Print Styles ──────────────── */\n@media print {\n  .no-print, .topnav, .sidebar, .sidebar-overlay, #toast-container, #modal-overlay { display: none !important; }\n  .page-content { margin: 0 !important; padding: 0 !important; width: 100% !important; left: 0 !important; top: 0 !important; }\n  .print-only { display: block !important; }\n  body { background: #fff !important; }\n  .card { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; }\n  .table th, .table td { padding: 8px 4px !important; font-size: 14px !important; }\n  .print-header { text-align: center; margin-bottom: 20px; }\n  .print-header h2 { font-size: 20px; margin-bottom: 4px; }\n  .print-header p { margin: 0; color: #555; }\n}\n

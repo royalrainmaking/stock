@@ -308,12 +308,12 @@ PAGES['consign'] = {
         <div class="picker-item" style="cursor:pointer; transition:transform 0.2s;" onclick="PAGES.consign.showQtyInput('${firstBatch.productId}', '${firstBatch.expiryDate || ''}')" onpointerenter="this.style.transform='scale(1.02)'" onpointerleave="this.style.transform='scale(1)'">
           ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9;')}
           <div class="p-info" style="width:100%;">
-            <div class="p-code">${p?.code || '-'}</div>
+            <div class="p-code" style="font-family:monospace">[${p?.code || '-'}] ${p?.category || ''}</div>
             <div class="p-name" style="margin-bottom:8px;">${p?.name || g.product.id}</div>
             
             <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card2); padding:8px; border-radius:8px; border:1px solid var(--border-light)">
                <div style="font-size:0.75rem; color:var(--text-muted)">คงเหลือฝากได้:</div>
-               <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${UI.currency(available, 0)} ${p?.unit || ''}</div>
+               <div style="font-size:0.9rem; font-weight:700; color:var(--primary)">${UI.currency(available, 0)} ${p?.category === 'Set' || p?.isSet ? 'ชุด' : (p?.unit || '')}</div>
             </div>
             ${firstBatch.consigned > 0 ? `<div style="font-size:0.7rem; color:var(--warning); text-align:right; margin-top:4px;">(ฝากอยู่ ${UI.currency(firstBatch.consigned,0)})</div>` : ''}
           </div>
@@ -330,9 +330,9 @@ PAGES['consign'] = {
     document.getElementById('co-pop-pid').value = id;
     document.getElementById('co-pop-expiry-val').value = expiryDate || '';
     document.getElementById('co-pop-title').textContent = p.name;
-    document.getElementById('co-pop-unit-text').textContent = p.unit || 'หน่วย';
+    document.getElementById('co-pop-unit-text').textContent = p.category === 'Set' || p.isSet ? 'ชุด' : (p.unit || 'หน่วย');
     const available = Math.max(0, s.qty - (s.consigned || 0));
-    document.getElementById('co-pop-stock').innerHTML = `EXP: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>คงเหลือฝากได้: <strong>${UI.currency(available, 0)} ${p.unit}</strong>${s.consigned > 0 ? ` (ฝากแล้ว ${UI.currency(s.consigned,0)})` : ''}`;
+    document.getElementById('co-pop-stock').innerHTML = `EXP: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>คงเหลือฝากได้: <strong>${UI.currency(available, 0)} ${p.category === 'Set' || p.isSet ? 'ชุด' : p.unit}</strong>${s.consigned > 0 ? ` (ฝากแล้ว ${UI.currency(s.consigned,0)})` : ''}`;
 
     document.getElementById('co-pop-units').value = '';
     document.getElementById('co-pop-total').textContent = 0;
@@ -372,7 +372,7 @@ PAGES['consign'] = {
       if ((existing.qty + units) > available) return UI.toast(`รวมแล้วเกินสต็อกที่ฝากได้`, 'error');
       existing.qty += units;
     } else {
-      this._items.push({ productId: id, expiryDate, qty: units, unit: p.unit || 'หน่วย', product: p });
+      this._items.push({ productId: id, expiryDate, qty: units, unit: p.category === 'Set' || p.isSet ? 'ชุด' : (p.unit || 'หน่วย'), product: p });
     }
 
     UI.toast(`เพิ่ม ${p.name} เรียบร้อย`, 'success');
@@ -400,11 +400,18 @@ PAGES['consign'] = {
       el.innerHTML = UI.emptyState('undo', 'ยังไม่มีรายการ', 'เลือกสินค้าและจำนวนที่ฝาก');
       return;
     }
+    // Sort _items by productsCache
+    const sortedItems = [...this._items].sort((a, b) => {
+      const idxA = this._productsCache ? this._productsCache.findIndex(p => p.id === a.productId) : -1;
+      const idxB = this._productsCache ? this._productsCache.findIndex(p => p.id === b.productId) : -1;
+      return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
+    });
+
     el.innerHTML = `
       <div class="table-wrap"><table>
         <thead><tr><th>#</th><th>สินค้า</th><th>วันหมดอายุ</th><th class="td-right">จำนวนฝาก</th><th>หน่วย</th><th></th></tr></thead>
         <tbody>
-          ${this._items.map((item, i) => `
+          ${sortedItems.map((item, i) => `
             <tr>
               <td>${i+1}</td>
               <td class="td-bold">
@@ -414,7 +421,7 @@ PAGES['consign'] = {
               <td style="font-size:0.85rem; color:var(--text-secondary)">${UI.dateStr(item.expiryDate) || '-'}</td>
               <td class="td-right text-warning fw-bold">${UI.currency(item.qty,0)}</td>
               <td>${item.unit}</td>
-              <td><button class="btn btn-danger btn-xs" onclick="PAGES.consign.removeItem(${i})"><span class="material-icons">close</span></button></td>
+              <td><button class="btn btn-danger btn-xs" onclick="PAGES.consign.removeItem(${this._items.indexOf(item)})"><span class="material-icons">close</span></button></td>
             </tr>
           `).join('')}
         </tbody>
