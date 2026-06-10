@@ -81,16 +81,19 @@ PAGES['movement-history'] = {
       const startDate = document.getElementById('mh-start-date').value;
       const endDate = document.getElementById('mh-end-date').value;
       
-      const [hRes, wRes, pRes, uRes] = await Promise.all([
+      const [hRes, wRes, pRes, uRes, sRes] = await Promise.all([
         API.getMovementHistory({ startDate, endDate }),
         API.getWarehouses(),
         API.getProducts(),
-        API.getUsers()
+        API.getUsers(),
+        API.getSets()
       ]);
       this._history = hRes.history || [];
       this._warehouses = wRes.warehouses || [];
       this._products = pRes.products || [];
       this._users = uRes.users || [];
+      this._sets = sRes?.sets || [];
+      this._mergedProducts = [...this._products, ...this._sets.map(s => ({...s, isSet: true}))];
       
       const emps = Array.from(new Set(this._history.map(h => h.username))).filter(Boolean).sort();
       const empSelect = document.getElementById('mh-employee');
@@ -122,9 +125,16 @@ PAGES['movement-history'] = {
     let totalValue = 0;
     filtered.forEach(h => {
       (h.items || []).forEach(it => {
-        const p = this._products.find(x => x.id === it.productId) || {};
+        const p = this._mergedProducts.find(x => x.id === it.productId) || {};
         totalUnits += Number(it.qty) || 0;
-        totalValue += (Number(it.qty) || 0) * (p.costVat || 0);
+        let pCost = p.sellWholesale || p.costVat || 0;
+        if (p.isSet && p.items) {
+          pCost = p.items.reduce((sum, subIt) => {
+             const subP = this._products.find(x => x.id === subIt.productId) || {};
+             return sum + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
+          }, 0);
+        }
+        totalValue += (Number(it.qty) || 0) * pCost;
       });
     });
 
@@ -164,8 +174,15 @@ PAGES['movement-history'] = {
               const dt = UI.dateTimeParts(h.createdAt);
               const items = h.items || [];
               const totalVal = items.reduce((sum, item) => {
-                const p = this._products.find(x => x.id === item.productId) || {};
-                return sum + (Number(item.qty) * (p.costVat || 0));
+                const p = this._mergedProducts.find(x => x.id === item.productId) || {};
+                let pCost = p.sellWholesale || p.costVat || 0;
+                if (p.isSet && p.items) {
+                  pCost = p.items.reduce((s, subIt) => {
+                    const subP = this._products.find(x => x.id === subIt.productId) || {};
+                    return s + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
+                  }, 0);
+                }
+                return sum + (Number(item.qty) * pCost);
               }, 0);
               
               return `
@@ -260,8 +277,8 @@ PAGES['movement-history'] = {
           </thead>
           <tbody>
             ${h.items.map(it => {
-              const p = this._products.find(x => x.id === it.productId) || {};
-              return `
+              const p = this._mergedProducts.find(x => x.id === it.productId) || {};
+              let html = `
                 <tr>
                   <td>
                     <div style="display:flex;align-items:center;gap:12px">
@@ -270,7 +287,7 @@ PAGES['movement-history'] = {
                       </div>
                       <div>
                         <div class="fw-bold" style="font-size:0.85rem">${p.name || it.productId}</div>
-                        <div style="font-size:0.75rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || ''}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted)"><span style="font-family:monospace">[${p.code || '-'}]</span> ${p.category || (p.isSet ? 'เซ็ตสินค้า' : '')}</div>
                       </div>
                     </div>
                   </td>
@@ -278,10 +295,39 @@ PAGES['movement-history'] = {
                     ${it.expiryDate && it.expiryDate !== '9999-12-31' ? UI.dateStr(it.expiryDate) : '-'}
                   </td>
                   <td class="td-right fw-bold" style="color:var(--primary);font-size:1rem">
-                    ${UI.currency(it.qty, 0)} ${it.unit}
+                    ${UI.currency(it.qty, 0)} ${it.unit || (p.isSet ? 'เซ็ต' : '')}
                   </td>
                 </tr>
               `;
+              
+              if (p.isSet && p.items && Array.isArray(p.items)) {
+                const setQty = Number(it.qty) || 1;
+                html += p.items.map(subIt => {
+                  const subP = this._products.find(x => x.id === subIt.productId) || {};
+                  return `
+                    <tr style="background:#fcfcfc">
+                      <td style="padding-left: 56px">
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <span class="material-icons" style="font-size:14px;color:var(--text-muted)">subdirectory_arrow_right</span>
+                          <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;background:var(--bg-body);border-radius:4px;flex-shrink:0;">
+                            ${subP.imageUrl ? UI.image(subP.imageUrl, '', 'width:24px;height:24px;object-fit:cover;border-radius:4px;') : '<span class="material-icons" style="font-size:16px;color:var(--text-muted)">inventory_2</span>'}
+                          </div>
+                          <div style="font-size:0.8rem">
+                            <div>${subP.name || subIt.productId}</div>
+                            <div style="font-size:0.7rem;color:var(--text-muted)">[${subP.code || '-'}] ${subIt.qty} ${subP.unit || ''} / เซ็ต</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="td-center">-</td>
+                      <td class="td-right" style="font-size:0.9rem; color:var(--text-secondary)">
+                        ${UI.currency((Number(subIt.qty)||0) * setQty, 0)} ${subP.unit || ''}
+                      </td>
+                    </tr>
+                  `;
+                }).join('');
+              }
+              
+              return html;
             }).join('')}
           </tbody>
         </table>

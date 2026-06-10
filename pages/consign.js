@@ -227,8 +227,9 @@ PAGES['consign'] = {
     if (!this._selectedWh) return UI.toast('กรุณาเลือกคลังพนักงานก่อนค้นหาสินค้า', 'warning');
     if (!this._employeeStock.length) return UI.toast('คลังนี้ไม่มีสินค้าคงเหลือ', 'warning');
 
+    // แสดงเฉพาะสินค้าที่มีสต็อกเหลือ (qty > 0)
     const productsInStock = this._employeeStock.filter(s => Number(s.qty) > 0);
-    if (!productsInStock.length) return UI.toast('คลังนี้ไม่มีสินค้าคงเหลือ', 'warning');
+    if (!productsInStock.length) return UI.toast('คลังนี้ไม่มีสินค้าคงเหลือที่จะฝากได้', 'warning');
 
     const whName = document.getElementById('co-emp-name')?.textContent || 'คลังพนักงาน';
     openModal(`เลือกสินค้าที่จะรับฝากคืน (${whName})`, `
@@ -246,26 +247,20 @@ PAGES['consign'] = {
       <div id="co-qty-popup" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);background:rgba(0,0,0,0.4);animation: fadeIn 0.2s ease">
         <div style="background:#fff;border-radius:var(--radius-lg);padding:24px;width:300px;box-shadow:var(--shadow-lg);border:1px solid var(--border);animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)">
           <div style="text-align:center;margin-bottom:16px">
-            <h3 id="co-pop-title" style="margin:0;font-size:1.1rem;color:var(--primary);font-weight:700">ระบุจำนวนรับฝาก</h3>
-            <p id="co-pop-tray-label" style="margin:4px 0 0;font-size:0.75rem;color:var(--text-muted)">-</p>
-            <div id="co-pop-stock" style="margin-top:8px;font-size:0.85rem;font-weight:700;color:var(--danger)">สต็อก: 0</div>
+            <h3 id="co-pop-title" style="margin:0;font-size:1.1rem;color:var(--primary);font-weight:700">ระบุจำนวนที่จะฝาก</h3>
+            <div id="co-pop-stock" style="margin-top:8px;font-size:0.85rem;font-weight:700;color:var(--danger)">สต็อกคงเหลือ: 0</div>
           </div>
           
           <input type="hidden" id="co-pop-pid" />
           <input type="hidden" id="co-pop-expiry-val" />
           
-          <div class="form-group" style="margin-bottom:12px">
-            <label style="font-size:0.8rem;color:var(--text-secondary)">📦 จำนวน (ถาด)</label>
-            <input type="number" id="co-pop-trays" min="0" placeholder="0" style="font-size:1.2rem;height:45px;text-align:center;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" oninput="PAGES.consign.popCalc()" />
-          </div>
-          
           <div class="form-group" style="margin-bottom:16px">
-            <label style="font-size:0.8rem;color:var(--text-secondary)">🍼 <span id="co-pop-unit-label">จำนวน (เศษ)</span></label>
+            <label style="font-size:0.8rem;color:var(--text-secondary)">ระบุจำนวนรับฝากคืน</label>
             <input type="number" id="co-pop-units" min="0" placeholder="0" style="font-size:1.2rem;height:45px;text-align:center;border-radius:var(--radius-sm);border:1.5px solid var(--border-light)" oninput="PAGES.consign.popCalc()" />
           </div>
           
           <div style="background:var(--bg-card2);padding:10px;border-radius:var(--radius-sm);text-align:center;margin-bottom:20px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">รวมรับคืนทั้งสิ้น</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">จำนวนที่จะฝากทั้งสิ้น</div>
             <div style="font-size:1.4rem;font-weight:800;color:var(--primary)"><span id="co-pop-total">0</span> <span id="co-pop-unit-text" style="font-size:0.9rem;font-weight:400">หน่วย</span></div>
           </div>
           
@@ -296,25 +291,27 @@ PAGES['consign'] = {
     return Object.values(groups).map(g => {
       const p = g.product;
       return `
-        <div class="picker-item no-hover" style="cursor:default; height:auto; min-height:180px">
-          ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9')}
-          <div class="p-info" style="width:100%">
-            <div class="p-code" style="font-family:monospace; color:var(--primary)">${p?.code || '-'}</div>
-            <div class="p-name" style="font-size:0.9rem; font-weight:700; color:var(--text-main)">${p?.name || g.product.id}</div>
-            <div class="p-cat" style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px">${p?.category || '-'}</div>
+        <div class="picker-item no-hover" style="cursor:default;">
+          ${UI.image(p?.imageUrl, 'p-img', 'object-fit:contain; background:#f9f9f9;')}
+          <div class="p-info" style="width:100%;">
+            <div class="p-code">${p?.code || '-'}</div>
+            <div class="p-name">${p?.name || g.product.id}</div>
+            <div class="p-cat" style="margin-bottom:8px;">${p?.category || '-'}</div>
             
-            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; border-bottom:1px solid var(--border-light); padding-bottom:4px">ล็อตสินค้าที่มี:</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px; border-bottom:1px solid var(--border-light); padding-bottom:4px;">ล็อตสินค้าที่มี:</div>
             <div class="batch-selector-container">
-              ${g.batches.sort((a,b) => (a.expiryDate||'9999').localeCompare(b.expiryDate||'9999')).map(s => `
+              ${g.batches.filter(s => Number(s.qty) > 0).sort((a,b) => (a.expiryDate||'9999').localeCompare(b.expiryDate||'9999')).map(s => {
+                const available = Math.max(0, s.qty - (s.consigned || 0));
+                return `
                 <div class="batch-badge" onclick="PAGES.consign.showQtyInput('${s.productId}', '${s.expiryDate || ''}')">
-                   <span class="material-icons" style="font-size:14px; margin-right:4px">event_note</span>
-                   <div style="flex:1">
+                   <span class="material-icons" style="font-size:14px; flex-shrink:0;">event_note</span>
+                   <div style="flex:1; min-width:0; overflow:hidden;">
                      <div class="batch-exp">EXP: ${UI.dateStr(s.expiryDate) || '-'}</div>
-                     <div class="batch-qty">${UI.currency(s.qty, 0)} ${p?.unit || ''}</div>
+                     <div class="batch-qty">คงเหลือ: ${UI.currency(available, 0)} ${p?.unit || ''} ${s.consigned > 0 ? `<span style="color:var(--warning)">(ฝากแล้ว ${UI.currency(s.consigned,0)})</span>` : ''}</div>
                    </div>
-                   <span class="material-icons" style="font-size:16px; color:var(--primary)">add_circle_outline</span>
-                </div>
-              `).join('')}
+                   <span class="material-icons" style="font-size:18px; color:var(--primary); flex-shrink:0;">add_circle</span>
+                </div>`;
+              }).join('')}
             </div>
           </div>
         </div>
@@ -330,17 +327,15 @@ PAGES['consign'] = {
     document.getElementById('co-pop-pid').value = id;
     document.getElementById('co-pop-expiry-val').value = expiryDate || '';
     document.getElementById('co-pop-title').textContent = p.name;
-    document.getElementById('co-pop-tray-label').textContent = `บรรจุ 1 ถาด = ${p.unitsPerTray || 0} ${p.unit}`;
-    document.getElementById('co-pop-unit-label').textContent = `จำนวน (เศษ/${p.unit || 'หน่วย'})`;
     document.getElementById('co-pop-unit-text').textContent = p.unit || 'หน่วย';
-    document.getElementById('co-pop-stock').innerHTML = `ล็อตหมดอายุ: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>สต็อกใคลัง: ${UI.currency(s.qty, 0)} ${p.unit}`;
+    const available = Math.max(0, s.qty - (s.consigned || 0));
+    document.getElementById('co-pop-stock').innerHTML = `EXP: <span style="color:var(--primary)">${UI.dateStr(expiryDate) || '-'}</span><br>คงเหลือฝากได้: <strong>${UI.currency(available, 0)} ${p.unit}</strong>${s.consigned > 0 ? ` (ฝากแล้ว ${UI.currency(s.consigned,0)})` : ''}`;
 
-    document.getElementById('co-pop-trays').value = '';
     document.getElementById('co-pop-units').value = '';
     document.getElementById('co-pop-total').textContent = 0;
 
     document.getElementById('co-qty-popup').classList.remove('hidden');
-    setTimeout(() => document.getElementById('co-pop-trays').focus(), 100);
+    setTimeout(() => document.getElementById('co-pop-units').focus(), 100);
   },
 
   popCalc() {
@@ -348,14 +343,11 @@ PAGES['consign'] = {
     const expiryDate = document.getElementById('co-pop-expiry-val').value;
     const s = this._employeeStock.find(x => x.productId === id && (x.expiryDate || '') === (expiryDate || ''));
     if (!s) return;
-    const p = s.product;
-    const trays = parseInt(document.getElementById('co-pop-trays').value) || 0;
+    const available = Math.max(0, s.qty - (s.consigned || 0));
     const units = parseInt(document.getElementById('co-pop-units').value) || 0;
-    const total = (trays * (p.unitsPerTray || 0)) + units;
-    document.getElementById('co-pop-total').textContent = UI.currency(total, 0);
-
+    document.getElementById('co-pop-total').textContent = UI.currency(units, 0);
     const totEl = document.getElementById('co-pop-total');
-    if (total > s.qty) totEl.style.color = 'var(--danger)';
+    if (units > available) totEl.style.color = 'var(--danger)';
     else totEl.style.color = 'var(--primary)';
   },
 
@@ -366,19 +358,18 @@ PAGES['consign'] = {
     const p = s?.product;
     if (!p) return;
 
-    const trays = parseInt(document.getElementById('co-pop-trays').value) || 0;
     const units = parseInt(document.getElementById('co-pop-units').value) || 0;
-    const total = (trays * (p.unitsPerTray || 0)) + units;
+    const available = Math.max(0, s.qty - (s.consigned || 0));
 
-    if (total <= 0) return UI.toast('กรุณาระบุจำนวน', 'warning');
-    if (total > s.qty) return UI.toast(`สต็อกไม่เพียงพอ (คงเหลือ ${s.qty} ${p.unit})`, 'error');
+    if (units <= 0) return UI.toast('กรุณาระบุจำนวน', 'warning');
+    if (units > available) return UI.toast(`สต็อกไม่เพียงพอ (ฝากได้อีก ${available} ${p.unit})`, 'error');
 
     const existing = this._items.find(i => i.productId === id && (i.expiryDate || '') === (expiryDate || ''));
     if (existing) {
-      if ((existing.qty + total) > s.qty) return UI.toast(`รวมแล้วเกินสต็อกที่มี`, 'error');
-      existing.qty += total;
+      if ((existing.qty + units) > available) return UI.toast(`รวมแล้วเกินสต็อกที่ฝากได้`, 'error');
+      existing.qty += units;
     } else {
-      this._items.push({ productId: id, expiryDate, qty: total, unit: p.unit || 'หน่วย', product: p });
+      this._items.push({ productId: id, expiryDate, qty: units, unit: p.unit || 'หน่วย', product: p });
     }
 
     UI.toast(`เพิ่ม ${p.name} เรียบร้อย`, 'success');

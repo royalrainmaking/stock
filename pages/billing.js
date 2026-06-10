@@ -93,8 +93,8 @@ PAGES['billing'] = {
     try {
       UI.loading(true);
       const res = await API.getBillingList(this._date);
-      // กรองเฉพาะพนักงานที่ยังไม่ได้คิดเงิน และมีสต็อกที่ต้องจ่ายเงิน (totalUnits > 0)
-      this._billings = (res.billings || []).filter(b => !b.billed && b.totalUnits > 0).map(b => {
+      // แสดงพนักงานทุกคนให้สามารถเลือกได้ใน Dropdown
+      this._billings = (res.billings || []).map(b => {
         return {
           ...b,
           _stock: b._stockSummary || [],
@@ -109,90 +109,180 @@ PAGES['billing'] = {
   renderList() {
     const container = document.getElementById('billing-body');
     if (!this._billings.length) {
-      container.innerHTML = UI.emptyState('payments', 'ไม่มีรายการรอคิดเงิน', 'พนักงานทุกคนเคลียร์ยอดครบแล้ว หรือยังไม่มีพนักงานที่มีสินค้าในคลัง');
+      container.innerHTML = UI.emptyState('payments', 'ไม่มีพนักงาน', 'ไม่พบพนักงานในระบบ หรือยังไม่มีคลังสินค้าพนักงาน');
       return;
     }
-    container.innerHTML = `<div class="grid-2">${this._billings.map((b, i) => `
-      <div class="card p-20" style="border-top: 4px solid var(--primary)">
+
+    let optionsHTML = '';
+    this._billings.forEach((b, i) => {
+       const statusIcon = b.billed ? '<span class="material-icons" style="color:var(--success); font-size:20px; position:absolute; bottom:-4px; right:-4px; background:#fff; border-radius:50%;">check_circle</span>' : '';
+       const borderCol = b.billed ? 'var(--success)' : 'transparent';
+       
+       optionsHTML += `
+         <div onclick="PAGES.billing.selectEmployee(${i})" 
+              class="avatar-select-card"
+              style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px; padding:12px; border:2px solid ${borderCol}; border-radius:12px; background:var(--bg-base); position:relative; transition:all 0.2s;">
+           <div style="position:relative;">
+             ${UI.avatar(b.employee?.avatar, b.employee?.displayName, 56)}
+             ${statusIcon}
+           </div>
+           <div style="font-size:0.85rem; font-weight:600; text-align:center;">${b.employee?.displayName}</div>
+         </div>
+       `;
+    });
+
+    container.innerHTML = `
+      <div style="margin-bottom: 24px;">
+        <label style="display:block; margin-bottom:12px; font-weight:600; color:var(--text-secondary);">เลือกพนักงานเพื่อคิดเงิน:</label>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap:16px;">
+          ${optionsHTML}
+        </div>
+      </div>
+      <div id="billing-employee-card"></div>
+    `;
+  },
+
+  selectEmployee(idx) {
+    const container = document.getElementById('billing-employee-card');
+    if (!idx) {
+      container.innerHTML = '';
+      return;
+    }
+    const i = parseInt(idx);
+    const b = this._billings[i];
+    const totalComm = b._stock.reduce((sum, s) => {
+      const sold = s.qty - (s.consigned || 0);
+      return sum + (sold > 0 ? sold * (s.product?.sellCommission || 0) : 0);
+    }, 0);
+    
+    container.innerHTML = `
+      <div class="card p-20" style="border-top: 4px solid ${b.billed ? 'var(--success)' : 'var(--primary)'}; max-width: 600px;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px">
           <div style="display:flex; gap:12px; align-items:center">
             ${UI.avatar(b.employee?.avatar, b.employee?.displayName, 48)}
             <div>
-              <div class="fw-bold" style="font-size:1.1rem">${b.employee?.displayName}</div>
+              <div class="fw-bold" style="font-size:1.1rem; display:flex; align-items:center; gap:4px">
+                ${b.employee?.displayName}
+                ${b.billed ? '<span class="material-icons" style="color:var(--success); font-size:1.2rem;">check_circle</span>' : ''}
+              </div>
               <div class="text-muted" style="font-size:0.8rem">${b.warehouseName}</div>
             </div>
-          </div>
-          <div class="text-end">
-            <div style="font-size:0.7rem; color:var(--text-muted); font-weight:700">ยอดเงินคงค้าง</div>
-            <div class="fw-bold" style="font-size:1.5rem; color:var(--success)">฿${UI.currency(b._totalAmt)}</div>
           </div>
         </div>
         <div style="background:var(--bg-base); border-radius:12px; padding:15px; margin-bottom:20px">
           <div style="font-size:0.75rem; font-weight:800; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:5px">
             <span class="material-icons" style="font-size:14px">inventory</span> สรุปสินค้าคงเหลือ (หักฝากวาง)
           </div>
-          ${b._stock.map(s => {
-      const sold = s.qty - (s.consigned || 0);
-      if (sold <= 0) return '';
-      return `
-              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed rgba(0,0,0,0.05)">
-                <div style="display:flex; align-items:center; gap:8px">
-                  ${UI.image(s.product?.imageUrl, '', 'width:24px; height:24px; border-radius:4px; object-fit:cover; border:1px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,0.05)')}
+          ${(() => {
+            const groupedItems = {};
+            b._stock.forEach(s => {
+              const sold = s.qty - (s.consigned || 0);
+              if (!groupedItems[s.productId]) {
+                groupedItems[s.productId] = { product: s.product, sold: 0 };
+              }
+              groupedItems[s.productId].sold += sold;
+            });
+            const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+            if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:10px; font-size:0.8rem">ไม่มีรายการที่ต้องคิดเงิน</div>';
+            return itemsToBill.map(it => `
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
+                <div style="display:flex; align-items:flex-start; gap:8px; flex:1;">
+                  ${UI.image(it.product?.imageUrl, '', 'width:32px; height:32px; border-radius:4px; object-fit:cover; border:1px solid var(--border-light); box-shadow:0 2px 4px rgba(0,0,0,0.05); margin-top:2px;')}
                   <div style="display:flex; flex-direction:column;">
-                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem">${s.product?.name}</span>
-                    <span style="font-size:0.65rem; color:var(--text-muted)"><span style="font-family:monospace">[${s.product?.code || '-'}]</span> ${s.product?.category || ''}</span>
+                    <span style="font-weight:600; color:var(--text-primary); font-size:0.85rem">${it.product?.name}</span>
+                    <span style="font-size:0.65rem; color:var(--text-muted)"><span style="font-family:monospace">[${it.product?.code || '-'}]</span> ${it.product?.category || ''}</span>
+                    <span style="font-size:0.65rem; color:var(--text-secondary); margin-top:2px;">ราคา: ฿${UI.currency(it.product?.sellWholesale || 0)} | <span style="color:#BE185D;">คอม: ฿${UI.currency(it.product?.sellCommission || 0)}</span></span>
                   </div>
                 </div>
-                <span style="font-weight:800; color:var(--primary)">${sold} <small style="font-weight:400; color:var(--text-muted)">${s.product?.unit || 'ขวด'}</small></span>
+                <div style="text-align:right;">
+                  <span style="font-weight:800; color:var(--primary); font-size:0.95rem;">${it.sold} <small style="font-weight:400; color:var(--text-muted)">${it.product?.unit || 'หน่วย'}</small></span>
+                  <div style="font-size:0.75rem; font-weight:700; color:var(--text-primary); margin-top:2px;">฿${UI.currency((it.product?.sellWholesale || 0) * it.sold)}</div>
+                </div>
               </div>
-            `;
-    }).join('')}
+            `).join('');
+          })()}
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1); color:var(--primary)">
             <span>รวมขายสุทธิ</span>
             <span>${b._totalUnits} ชิ้น</span>
           </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:8px; color:#BE185D">
+            <span>รวมค่าคอมมิชชั่น</span>
+            <span>฿${UI.currency(totalComm)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:1.1rem; font-weight:900; margin-top:12px; padding-top:12px; border-top:2px solid rgba(0,0,0,0.05); color:var(--success)">
+            <span>ยอดเงินคงค้าง</span>
+            <span>฿${UI.currency(b._totalAmt)}</span>
+          </div>
         </div>
 
-        <button class="btn btn-primary btn-block btn-lg" onclick="PAGES.billing.openBilling(${i})">
-          <span class="material-icons">receipt</span> คิดเงินพนักงาน
-        </button>
+        ${b.billed ? `
+          <button class="btn btn-success btn-block btn-lg" disabled style="opacity:0.8">
+            <span class="material-icons">check_circle</span> คิดเงินเรียบร้อยแล้ว
+          </button>
+        ` : `
+          <button class="btn btn-primary btn-block btn-lg" onclick="PAGES.billing.openBilling(${i})">
+            <span class="material-icons">receipt</span> คิดเงินพนักงาน
+          </button>
+        `}
       </div>
-    `).join('')}</div>`;
+    `;
   },
 
   openBilling(idx) {
     const b = this._billings[idx];
-    openModal(`คิดเงิน: ${b.employee?.displayName}`, `
-      <div class="table-wrap" style="max-height:400px; overflow-y:auto; margin-bottom:20px">
-        <table class="table" style="font-size:0.8rem">
-          <thead>
-            <tr><th style="width:50px">รูป</th><th>สินค้า</th><th class="td-right">ในคลัง</th><th class="td-right">ฝาก</th><th class="td-right">ขาย</th><th class="td-right">รวมเงิน</th></tr>
-          </thead>
-          <tbody>
-            ${b._stock.map(s => {
+    const totalComm = b._stock.reduce((sum, s) => {
       const sold = s.qty - (s.consigned || 0);
-      return `
-                <tr>
-                  <td>${UI.image(s.product?.imageUrl, '', 'width:36px; height:36px; border-radius:4px; object-fit:cover')}</td>
-                  <td>
-                    <div class="fw-bold">${s.product?.name}</div>
-                    <div class="text-muted" style="font-size:0.65rem"><span style="font-family:monospace">[${s.product?.code || '-'}]</span> ${s.product?.category || ''}</div>
-                    <div class="text-muted" style="font-size:0.6rem">@ ฿${UI.currency(s.product?.sellWholesale)}</div>
-                  </td>
-                  <td class="td-right">${s.qty}</td>
-                  <td class="td-right text-warning">${s.consigned || 0}</td>
-                  <td class="td-right text-primary fw-bold">${sold}</td>
-                  <td class="td-right fw-bold">฿${UI.currency(sold * (s.product?.sellWholesale || 0))}</td>
-                </tr>
+      return sum + (sold > 0 ? sold * (s.product?.sellCommission || 0) : 0);
+    }, 0);
+    openModal(`คิดเงิน: ${b.employee?.displayName}`, `
+      <div class="receipt-card" style="margin-bottom:16px; border:none; box-shadow:none; padding:12px">
+        <div style="font-size:0.75rem; font-weight:800; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:5px">
+          <span class="material-icons" style="font-size:14px">receipt_long</span> สรุปรายการขาย (ไม่รวมสินค้าฝากคืน)
+        </div>
+        <div style="max-height:350px; overflow-y:auto; padding-right:8px">
+          ${(() => {
+            const groupedItems = {};
+            b._stock.forEach(s => {
+              const sold = s.qty - (s.consigned || 0);
+              if (!groupedItems[s.productId]) {
+                groupedItems[s.productId] = { product: s.product, sold: 0 };
+              }
+              groupedItems[s.productId].sold += sold;
+            });
+            const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+            if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:20px">ไม่มีรายการที่ต้องคิดเงิน</div>';
+            return itemsToBill.map(it => {
+              let setDetails = '';
+              if (it.product?.isSet && it.product.setItems && it.product.setItems.length > 0) {
+                setDetails = `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:4px; padding:4px 8px; background:var(--bg-base); border-radius:4px; border-left:2px solid var(--primary)">
+                  <div style="font-weight:700; margin-bottom:2px">ประกอบด้วย:</div>
+                  ${it.product.setItems.map(setIt => `• ${setIt.name} (${setIt.qty} ${setIt.unit})`).join('<br>')}
+                </div>`;
+              }
+              return `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px dashed var(--border-light)">
+                  <div style="flex:1">
+                    <div style="font-weight:700; font-size:0.85rem">${it.product?.name}</div>
+                    <div style="font-size:0.7rem; color:var(--text-muted)">[${it.product?.code || '-'}] ราคา: ฿${UI.currency(it.product?.sellWholesale || 0)} | <span style="color:#BE185D;">คอม: ฿${UI.currency(it.product?.sellCommission || 0)}</span></div>
+                    ${setDetails}
+                  </div>
+                  <div style="text-align:right; margin-left:12px">
+                    <div style="font-weight:800; color:var(--primary)">${it.sold} <span style="font-size:0.75rem; color:var(--text-muted); font-weight:400">${it.product?.unit || 'หน่วย'}</span></div>
+                    <div style="font-weight:700; font-size:0.9rem">฿${UI.currency(it.sold * (it.product?.sellWholesale || 0))}</div>
+                  </div>
+                </div>
               `;
-    }).join('')}
-          </tbody>
-        </table>
+            }).join('');
+          })()}
+        </div>
       </div>
       <div class="form-group"><label>หมายเหตุ</label><input type="text" id="bill-note" placeholder="..." /></div>
       <div style="background:var(--bg-base); padding:15px; border-radius:12px; text-align:center">
         <div class="text-muted" style="font-size:0.8rem">ยอดเงินสุทธิที่ต้องส่ง</div>
         <div class="fw-bold" style="font-size:2rem; color:var(--success)">฿${UI.currency(b._totalAmt)}</div>
+        <div style="font-size:0.9rem; font-weight:700; color:#BE185D; margin-top:8px; padding-top:8px; border-top:1px dashed rgba(0,0,0,0.1);">
+          รวมค่าคอมมิชชั่น: ฿${UI.currency(totalComm)}
+        </div>
       </div>
     `, `
       <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
@@ -209,11 +299,18 @@ PAGES['billing'] = {
         productId: s.productId, productName: s.product?.name, productCode: s.product?.code, productCategory: s.product?.category, unit: s.product?.unit,
         qty: s.qty, consigned: s.consigned || 0, sold: s.qty - (s.consigned || 0),
         pricePerUnit: s.product?.sellWholesale || 0, imageUrl: s.product?.imageUrl,
-        expiryDate: s.expiryDate
+        expiryDate: s.expiryDate, isSet: s.product?.isSet, setItems: s.product?.setItems
       }));
       const res = await API.doBilling({ warehouseId: b.warehouseId, employeeId: b.employee?.id, date: this._date, totalAmt: b._totalAmt, totalUnits: b._totalUnits, note, items });
       closeModal();
-      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: items.filter(it => it.sold > 0), note });
+      
+      const groupedReceipt = {};
+      items.filter(it => it.sold > 0).forEach(it => {
+         if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
+         groupedReceipt[it.productId].sold += it.sold;
+      });
+      
+      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: Object.values(groupedReceipt), note });
       await this.load();
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
@@ -238,16 +335,25 @@ PAGES['billing'] = {
           <table class="receipt-table-new">
             <thead><tr><th>รายการ</th><th style="text-align:right">จำนวน</th><th style="text-align:right">รวม</th></tr></thead>
             <tbody>
-              ${data.items.map(it => `
+              ${data.items.map(it => {
+                let setDetails = '';
+                if (it.isSet && it.setItems && it.setItems.length > 0) {
+                  setDetails = `<div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">
+                    [ชุดประกอบด้วย: ${it.setItems.map(setIt => `${setIt.name} x${setIt.qty}`).join(', ')}]
+                  </div>`;
+                }
+                return `
                 <tr>
                   <td>
                     <div class="fw-bold" style="font-size:0.85rem">${it.productName}</div>
                     <div class="text-muted" style="font-size:0.65rem">[${it.productCode || '-'}] ${it.productCategory || ''} | @ ฿${UI.currency(it.pricePerUnit)}</div>
+                    ${setDetails}
                   </td>
-                  <td style="text-align:right; white-space:nowrap">${it.sold} <small style="color:var(--text-muted)">${it.unit || 'ขวด'}</small></td>
-                  <td style="text-align:right; font-weight:700">฿${UI.currency(it.sold * it.pricePerUnit)}</td>
+                  <td style="text-align:right; white-space:nowrap; vertical-align:top">${it.sold} <small style="color:var(--text-muted)">${it.unit || 'หน่วย'}</small></td>
+                  <td style="text-align:right; font-weight:700; vertical-align:top">฿${UI.currency(it.sold * it.pricePerUnit)}</td>
                 </tr>
-              `).join('')}
+                `;
+              }).join('')}
             </tbody>
           </table>
           <div class="receipt-summary">

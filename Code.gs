@@ -23,7 +23,7 @@ function getSpreadsheet() {
 }
 
 // ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AQ.Ab8RN6IOHqIQ0AQan5-lG0OU74QOh_QoEujp969qq-geMYOvxQ';
+const GEMINI_API_KEY = 'fgdfgfdgfdgfdgfd';
 
 // Sheet names
 const SN = {
@@ -40,6 +40,7 @@ const SN = {
   SHOP_STOCK: 'ShopStock',
   SUPPLIERS: 'Suppliers',
   COMPANY_INFO: 'CompanyInfo',
+  SETS: 'Sets',
 };
 
 // ── UTILS ───────────────────────────────────────────────────
@@ -99,8 +100,8 @@ function handleRequest(e) {
       case 'requestTransfer': result = requestTransfer(user, body); break;
       case 'getPickingTasks': result = getPickingTasks(user); break;
       case 'confirmPicking':  result = confirmPicking(user, body); break;
-      case 'rejectPicking':   result = rejectPicking(user, body); break;
-      case 'deletePicking':   result = deletePicking(user, body); break;
+      case 'rejectPicking':   result = rejectPicking(user, body.id || e.parameter.id || body); break;
+      case 'deletePicking':   result = deletePicking(user, body.id || e.parameter.id || body); break;
 
       // Auth
       case 'changePassword': result = doChangePassword(user, body.oldPw, body.newPw); break;
@@ -182,6 +183,12 @@ function handleRequest(e) {
       case 'getCompanyInfo': result = getCompanyInfo(); break;
       case 'saveCompanyInfo': result = saveCompanyInfo(user, body); break;
 
+      // Sets
+      case 'getSets': result = getSets(); break;
+      case 'createSet': result = createSet(user, body); break;
+      case 'updateSet': result = updateSet(user, body); break;
+      case 'deleteSet': result = deleteSet(user, body.setId); break;
+
       // Setup (First time only)
       case 'setup': result = setupSheets(); break;
 
@@ -234,6 +241,7 @@ function getHeaders(name) {
     [SN.SHOP_STOCK]: ['shopId','productId','expiryDate','qty','unit','lastUpdated'],
     [SN.SUPPLIERS]: ['id', 'name', 'address', 'phone', 'fax', 'taxId', 'createdAt'],
     [SN.COMPANY_INFO]: ['id', 'name', 'address', 'phone', 'fax', 'taxId'],
+    [SN.SETS]: ['id','code','name','items','active','createdAt','imageUrl'],
   };
   return headers[name] || [];
 }
@@ -637,6 +645,60 @@ function deleteProduct(user, productId) {
   return { success: true };
 }
 
+// ── SETS ─────────────────────────────────────────────────────
+function getSets() {
+  const sets = sheetData(getSheet(SN.SETS))
+    .filter(s => s.active == true || s.active === 'TRUE' || s.active === true || s.active == '')
+    .map(s => {
+      let parsedItems = [];
+      try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+      return {
+        id: s.id, code: s.code, name: s.name, items: parsedItems,
+      };
+    });
+  return { sets };
+}
+
+function createSet(user, data) {
+  requireRole(user, 'admin');
+  const set = { id: generateId('SET'), ...data, items: JSON.stringify(data.items || []), active: true, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.SETS), set);
+  writeLog(user, 'createSet', `สร้างเซ็ตสินค้า ${data.name}`);
+  return { success: true, set: { ...set, items: data.items } };
+}
+
+function updateSet(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบข้อมูลเซ็ตสินค้า');
+  const fields = ['code','name','items'];
+  fields.forEach(k => {
+    if (data[k] !== undefined) {
+      const ci = getColIndex(sheet, k);
+      if (ci > 0) {
+        const range = sheet.getRange(rowNum, ci);
+        if (['code','id'].includes(k)) range.setNumberFormat("@");
+        if (k === 'items') range.setValue(JSON.stringify(data[k]));
+        else range.setValue(data[k]);
+      }
+    }
+  });
+  writeLog(user, 'updateSet', `แก้ไขเซ็ตสินค้า ${data.name}`);
+  return { success: true };
+}
+
+function deleteSet(user, setId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rowNum = findRow(sheet, 'id', setId);
+  if (rowNum < 0) throw new Error('ไม่พบข้อมูลเซ็ตสินค้า');
+  const ci = getColIndex(sheet, 'active');
+  sheet.getRange(rowNum, ci).setValue(false);
+  writeLog(user, 'deleteSet', `ลบเซ็ตสินค้า ${setId}`);
+  return { success: true };
+}
+
 function deleteProducts(user, body) {
   requireRole(user, 'admin');
   const { productIds } = body;
@@ -833,13 +895,38 @@ function getCentralStock(warehouseId) {
   const stock = sheetData(getSheet(SN.CENTRAL_STOCK));
   const products = sheetData(getSheet(SN.PRODUCTS));
   const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
   const result = stock
     .filter(s => !warehouseId || String(s.warehouseId || '').trim() === String(warehouseId).trim())
-    .map(s => ({
-      ...s, qty: Number(s.qty) || 0,
-      product: products.find(p => p.id === s.productId) || {},
-      warehouse: warehouses.find(w => String(w.id || '').trim() === String(s.warehouseId).trim()) || {},
-    }));
+    .map(s => {
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0, wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+            if (!cp && it.category) cp = products.find(x => x.category === it.category);
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+        } else { p = {}; }
+      }
+      return {
+        ...s, qty: Number(s.qty) || 0,
+        product: p,
+        warehouse: warehouses.find(w => String(w.id || '').trim() === String(s.warehouseId).trim()) || {},
+      };
+    });
   return { stock: result };
 }
 
@@ -847,17 +934,42 @@ function getEmployeeStock(employeeId) {
   const stock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
   const products = sheetData(getSheet(SN.PRODUCTS));
   const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
   const result = stock
     .filter(s => {
       if (!employeeId) return Number(s.qty) > 0 || Number(s.consigned) > 0;
       const wh = warehouses.find(w => w.id === s.warehouseId);
       return wh && wh.employeeId === employeeId && (Number(s.qty) > 0 || Number(s.consigned) > 0);
     })
-    .map(s => ({
-      ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
-      product: products.find(p => p.id === s.productId) || {},
-      warehouse: warehouses.find(w => w.id === s.warehouseId) || {},
-    }));
+    .map(s => {
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0, wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+            if (!cp && it.category) cp = products.find(x => x.category === it.category);
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+        } else { p = {}; }
+      }
+      return {
+        ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
+        product: p,
+        warehouse: warehouses.find(w => w.id === s.warehouseId) || {},
+      };
+    });
   return { stock: result };
 }
 
@@ -867,14 +979,38 @@ function getAllEmployeeStocks(date) {
   const products = sheetData(getSheet(SN.PRODUCTS));
   const users = sheetData(getSheet(SN.USERS));
   const billings = date ? sheetData(getSheet(SN.BILLING)).filter(b => b.date === date) : [];
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
 
   const result = empWarehouses.map(wh => {
     const whStock = stock
-      .filter(s => s.warehouseId === wh.id && Number(s.qty) > 0)
-      .map(s => ({
-        ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
-        product: products.find(p => p.id === s.productId) || {},
-      }));
+      .filter(s => String(s.warehouseId).trim() === String(wh.id).trim() && (Number(s.qty) > 0 || Number(s.consigned) > 0))
+      .map(s => {
+        let p = products.find(px => px.id === s.productId);
+        if (!p) {
+          const setObj = sets.find(set => set.id === s.productId);
+          if (setObj) {
+            let cost = 0, wholesale = 0;
+            (setObj.items || []).forEach(it => {
+              let cp = null;
+              if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+              if (!cp && it.category) cp = products.find(x => x.category === it.category);
+              if (cp) {
+                cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+                wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+              }
+            });
+            p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+          } else { p = {}; }
+        }
+        return {
+          ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
+          product: p,
+        };
+      });
     const emp = users.find(u => u.id === wh.employeeId);
     const billed = billings.some(b => b.warehouseId === wh.id);
     return { warehouse: wh, employee: emp, stock: whStock, billed };
@@ -998,6 +1134,7 @@ function requestTransfer(user, data) {
   const centralStock = sheetData(getSheet(SN.CENTRAL_STOCK));
   
   data.items.forEach(item => {
+    if (item.isSet) return;
     const stock = centralStock.filter(s => s.warehouseId === data.fromWarehouseId && s.productId === item.productId)
                               .reduce((sum, s) => sum + Number(s.qty), 0);
     if (stock < item.qty) {
@@ -1006,9 +1143,19 @@ function requestTransfer(user, data) {
     }
   });
 
+  // Create a combined ISO string from data.date and data.time if provided
+  let createdAtTs = new Date().toISOString();
+  if (data.date && data.time) {
+    // Assuming +07:00 for Thailand Time
+    const d = new Date(`${data.date}T${data.time}:00+07:00`);
+    if (!isNaN(d.getTime())) {
+      createdAtTs = d.toISOString();
+    }
+  }
+
   appendRow(orderSheet, {
     id: orderId,
-    date: data.date || finalTs.split('T')[0],
+    date: data.date || createdAtTs.split('T')[0],
     requestedBy: user.displayName || user.username,
     userId: user.id,
     fromWhId: data.fromWarehouseId,
@@ -1016,7 +1163,7 @@ function requestTransfer(user, data) {
     status: 'pending',
     note: data.note || '',
     items: JSON.stringify(data.items),
-    createdAt: finalTs
+    createdAt: createdAtTs
   });
 
   writeLog(user, 'transfer_req', `สร้างรายการเบิกสินค้า [${orderId}] รอจัดของ`);
@@ -1050,7 +1197,7 @@ function confirmPicking(user, data) {
     const originalItems = JSON.parse(order.items || '[]');
     items = updatedItems.map(ui => {
       const orig = originalItems.find(o => o.productId === ui.productId) || {};
-      return { ...orig, productId: ui.productId, qty: Number(ui.qty) };
+      return { ...orig, ...ui, productId: ui.productId, qty: Number(ui.qty), unit: ui.unit || orig.unit };
     });
     
     const hdr = orderSheet.getDataRange().getValues()[0];
@@ -1062,50 +1209,87 @@ function confirmPicking(user, data) {
     items = JSON.parse(order.items || '[]');
   }
   const txSheet = getSheet(SN.TRANSACTIONS);
-  const finalTs = new Date().toISOString();
+  // Use order's createdAt so that backdated transfers have backdated transactions
+  const finalTs = order.createdAt || new Date().toISOString();
 
   const products = sheetData(getSheet(SN.PRODUCTS));
   const centralStockAll = sheetData(getSheet(SN.CENTRAL_STOCK));
 
   // Perform actual stock movement ONLY NOW (FEFO Logic)
   items.forEach(item => {
-    // 1. Get all available batches for this product in the source warehouse
-    const batches = centralStockAll
-      .filter(s => String(s.productId) === String(item.productId) && String(s.warehouseId) === String(order.fromWhId) && Number(s.qty) > 0)
-      .sort((a, b) => {
-        const da = a.expiryDate ? new Date(a.expiryDate).getTime() : 4102444800000;
-        const db = b.expiryDate ? new Date(b.expiryDate).getTime() : 4102444800000;
-        return da - db;
-      });
+    if (item.isSet && item.pickedComponents) {
+      // 1. Deduct components from Central Warehouse
+      item.pickedComponents.forEach(comp => {
+        const batches = centralStockAll
+          .filter(s => String(s.productId) === String(comp.productId) && String(s.warehouseId) === String(order.fromWhId) && Number(s.qty) > 0)
+          .sort((a, b) => {
+            const da = a.expiryDate ? new Date(a.expiryDate).getTime() : 4102444800000;
+            const db = b.expiryDate ? new Date(b.expiryDate).getTime() : 4102444800000;
+            return da - db;
+          });
 
-    let remainingToPick = Number(item.qty);
-    
-    // 2. Deplete batches one by one (FEFO)
-    for (let batch of batches) {
-      if (remainingToPick <= 0) break;
+        let remainingToPick = Number(comp.qty);
+        for (let batch of batches) {
+          if (remainingToPick <= 0) break;
+          const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
+          updateCentralStock(order.fromWhId, comp.productId, -pickFromThisBatch, comp.unit, batch.expiryDate);
+          
+          appendRow(getSheet(SN.TRANSACTIONS), {
+            id: generateId('TR'), type: 'transfer_out', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+            productId: comp.productId, qty: pickFromThisBatch, unit: comp.unit, docNo: order.id,
+            note: 'ตัดสต็อกส่วนประกอบเซ็ต (FEFO)', userId: user.id, username: user.username, 
+            createdAt: finalTs, expiryDate: batch.expiryDate
+          });
+          remainingToPick -= pickFromThisBatch;
+        }
+      });
       
-      const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
-      
-      // Deduct from Central Warehouse (Batch)
-      updateCentralStock(order.fromWhId, item.productId, -pickFromThisBatch, item.unit, batch.expiryDate);
-      
-      // Add to Employee Warehouse (Batch)
-      updateEmployeeStock(order.toWhId, item.productId, pickFromThisBatch, 0, item.unit, batch.expiryDate);
-      
-      // Log Transaction (Batch)
+      // 2. Add Set to Employee Warehouse
+      updateEmployeeStock(order.toWhId, item.productId, item.qty, 0, item.unit, '9999-12-31');
       appendRow(getSheet(SN.TRANSACTIONS), {
-        id: generateId('TR'), type: 'transfer', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
-        productId: item.productId, qty: pickFromThisBatch, unit: item.unit, docNo: order.id,
-        note: order.note || 'จากการเบิกสินค้า (FEFO)', userId: user.id, username: user.username, 
-        createdAt: finalTs, expiryDate: batch.expiryDate
+        id: generateId('TR'), type: 'transfer_in', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+        productId: item.productId, qty: item.qty, unit: item.unit, docNo: order.id,
+        note: order.note || 'รับเข้าเซ็ตสินค้าจากการเบิก', userId: user.id, username: user.username, 
+        createdAt: finalTs, expiryDate: '9999-12-31'
       });
+      
+    } else {
+      // Normal Product Logic
+      const batches = centralStockAll
+        .filter(s => String(s.productId) === String(item.productId) && String(s.warehouseId) === String(order.fromWhId) && Number(s.qty) > 0)
+        .sort((a, b) => {
+          const da = a.expiryDate ? new Date(a.expiryDate).getTime() : 4102444800000;
+          const db = b.expiryDate ? new Date(b.expiryDate).getTime() : 4102444800000;
+          return da - db;
+        });
 
-      remainingToPick -= pickFromThisBatch;
-    }
+      let remainingToPick = Number(item.qty);
+      
+      for (let batch of batches) {
+        if (remainingToPick <= 0) break;
+        
+        const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
+        
+        // Deduct from Central Warehouse (Batch)
+        updateCentralStock(order.fromWhId, item.productId, -pickFromThisBatch, item.unit, batch.expiryDate);
+        
+        // Add to Employee Warehouse (Batch)
+        updateEmployeeStock(order.toWhId, item.productId, pickFromThisBatch, 0, item.unit, batch.expiryDate);
+        
+        // Log Transaction (Batch)
+        appendRow(getSheet(SN.TRANSACTIONS), {
+          id: generateId('TR'), type: 'transfer', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+          productId: item.productId, qty: pickFromThisBatch, unit: item.unit, docNo: order.id,
+          note: order.note || 'จากการเบิกสินค้า (FEFO)', userId: user.id, username: user.username, 
+          createdAt: finalTs, expiryDate: batch.expiryDate
+        });
 
-    // Safety: If somehow central batches were not enough (concurrency), log warning or handle gracefully
-    if (remainingToPick > 0) {
-       console.warn(`FEFO: Batch stock insufficient for product ${item.productId}. Remaining: ${remainingToPick}`);
+        remainingToPick -= pickFromThisBatch;
+      }
+
+      if (remainingToPick > 0) {
+         console.warn(`FEFO: Batch stock insufficient for product ${item.productId}. Remaining: ${remainingToPick}`);
+      }
     }
   });
 
@@ -1160,11 +1344,12 @@ function consignFromEmployee(user, data) {
   const whName = (warehouses.find(w => w.id === data.fromWarehouseId) || {}).name || data.fromWarehouseId;
 
   data.items.forEach(item => {
-    updateEmployeeStock(data.fromWarehouseId, item.productId, 0, item.qty, '');
+    updateEmployeeStock(data.fromWarehouseId, item.productId, 0, item.qty, item.unit || '', item.expiryDate || '');
     appendRow(txSheet, {
       id: generateId('TX'), type: 'consign',
       fromWarehouseId: data.fromWarehouseId, toWarehouseId: '',
-      productId: item.productId, qty: item.qty, unit: '',
+      productId: item.productId, qty: item.qty, unit: item.unit || '',
+      expiryDate: item.expiryDate || '',
       costVat: 0, docNo: '', note: data.note || '',
       userId: user.id, username: user.username, createdAt: new Date().toISOString(),
     });
@@ -1250,13 +1435,63 @@ function getBillingList(date) {
   const products = sheetData(getSheet(SN.PRODUCTS));
   const allStock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
 
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
   const result = empWarehouses.map(wh => {
     const bill = allBillings.find(b => String(b.warehouseId) === String(wh.id) && _fmtDate(b.date) === targetDate);
     const emp = users.find(u => u.id === wh.employeeId);
     
     // ดึงสต็อกของพนักงานคนนี้ทั้งหมดมาเตรียมไว้เลย
     const myStock = allStock.filter(s => String(s.warehouseId) === String(wh.id)).map(s => {
-      const p = products.find(px => px.id === s.productId) || {};
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0;
+          let wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) {
+              cp = products.find(x => it.allowedProducts.includes(x.id));
+            }
+            if (!cp && it.category) {
+              cp = products.find(x => x.category === it.category);
+            }
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = {
+            id: setObj.id,
+            name: setObj.name,
+            code: setObj.code,
+            imageUrl: setObj.imageUrl,
+            category: 'เซ็ตสินค้า',
+            unit: 'เซ็ต',
+            sellWholesale: wholesale,
+            sellCommission: 100 - wholesale,
+            costVat: cost,
+            isSet: true,
+            setItems: (setObj.items || []).map(it => {
+              let cp = null;
+              if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+              if (!cp && it.category) cp = products.find(x => x.category === it.category);
+              return {
+                name: cp ? cp.name : it.category,
+                qty: it.qty,
+                unit: cp ? cp.unit : 'หน่วย'
+              };
+            })
+          };
+        } else {
+          p = {};
+        }
+      }
       return { ...s, product: p, qty: Number(s.qty), consigned: Number(s.consigned || 0) };
     });
 
@@ -2402,5 +2637,78 @@ function getMasterData(user) {
     isEmployee: _isTrue(u.isEmployee),
   }; });
 
-  return { products: products, warehouses: warehouses, suppliers: suppliers, users: users };
+  return { products: products, warehouses: warehouses, suppliers: suppliers, users: users, sets: getSets().sets };
+}
+
+// ── Sets Management ────────────────────────────────────────
+function getSets() {
+  const sheet = getSheet(SN.SETS);
+  if (!sheet) return { sets: [] };
+  const raw = sheetData(sheet);
+  return {
+    sets: raw.map(s => ({
+      ...s,
+      items: JSON.parse(s.items || '[]'),
+      active: _isTrue(s.active)
+    }))
+  };
+}
+
+function createSet(user, data) {
+  requireRole(user, 'admin');
+  if (!data.name || !data.code || !data.items || data.items.length === 0) throw new Error('ข้อมูลไม่ครบถ้วน');
+  
+  const sheet = getSheet(SN.SETS);
+  const existing = sheetData(sheet).find(s => s.code === data.code);
+  if (existing) throw new Error('รหัสเซ็ตซ้ำกับที่มีอยู่แล้ว');
+  
+  const id = generateId('SET');
+  appendRow(sheet, {
+    id: id,
+    code: data.code,
+    name: data.name,
+    items: JSON.stringify(data.items),
+    active: true,
+    createdBy: user.username,
+    createdAt: new Date().toISOString(),
+    imageUrl: data.imageUrl || ''
+  });
+  
+  writeLog(user, 'create_set', `สร้างเซ็ตสินค้าใหม่ [${data.code}] ${data.name}`);
+  return { success: true, id };
+}
+
+function updateSet(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rows = sheetData(sheet);
+  const rowIndex = rows.findIndex(r => r.id === data.id);
+  
+  if (rowIndex === -1) throw new Error('ไม่พบข้อมูลเซ็ต');
+  
+  updateRow(sheet, rowIndex + 2, {
+    code: data.code || rows[rowIndex].code,
+    name: data.name || rows[rowIndex].name,
+    items: data.items ? JSON.stringify(data.items) : rows[rowIndex].items,
+    active: data.active !== undefined ? data.active : rows[rowIndex].active,
+    imageUrl: data.imageUrl !== undefined ? data.imageUrl : rows[rowIndex].imageUrl
+  });
+  
+  writeLog(user, 'update_set', `แก้ไขเซ็ตสินค้า [${data.code}]`);
+  return { success: true };
+}
+
+function deleteSet(user, setId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rows = sheetData(sheet);
+  const rowIndex = rows.findIndex(r => r.id === setId);
+  
+  if (rowIndex === -1) throw new Error('ไม่พบข้อมูลเซ็ต');
+  
+  const code = rows[rowIndex].code;
+  sheet.deleteRow(rowIndex + 2);
+  
+  writeLog(user, 'delete_set', `ลบเซ็ตสินค้า [${code}]`);
+  return { success: true };
 }

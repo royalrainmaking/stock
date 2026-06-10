@@ -91,14 +91,17 @@ PAGES['transfer-history'] = {
 
   async load() {
     try {
-      const [oRes, pRes, wRes] = await Promise.all([
+      const [oRes, pRes, wRes, sRes] = await Promise.all([
         API.getOrders(),
         API.getProducts(),
-        API.getWarehouses()
+        API.getWarehouses(),
+        API.getSets()
       ]);
       this._orders = (oRes.orders || []).filter(o => o.id?.startsWith('REQ') || o.id?.startsWith('TR'));
       this._products = pRes.products || [];
       this._warehouses = wRes.warehouses || [];
+      this._sets = sRes?.sets || [];
+      this._mergedProducts = [...this._products, ...this._sets.map(s => ({...s, isSet: true}))];
 
       // Populate employee dropdown
       const emps = Array.from(new Set(this._orders.map(o => o.requestedBy))).filter(Boolean).sort();
@@ -192,9 +195,24 @@ PAGES['transfer-history'] = {
               const toWh = this._warehouses.find(w => String(w.id).trim() === String(o.toWhId).trim()) || { name: o.toWhId };
               const dt = UI.dateTimeParts(o.createdAt);
               
+              let totalUnits = 0;
               const totalVal = items.reduce((sum, item) => {
-                const p = this._products.find(x => x.id === item.productId) || {};
-                return sum + (Number(item.qty) * (p.costVat || 0));
+                totalUnits += Number(item.qty) || 0;
+                const p = this._mergedProducts.find(x => x.id === item.productId) || {};
+                let pCost = p.sellWholesale || p.costVat || 0;
+                if (p.isSet && item.pickedComponents && item.pickedComponents.length > 0) {
+                  const pickedCost = item.pickedComponents.reduce((s, subIt) => {
+                    const subP = this._products.find(x => x.id === subIt.productId) || {};
+                    return s + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
+                  }, 0);
+                  return sum + pickedCost;
+                } else if (p.isSet && p.items) {
+                  pCost = p.items.reduce((s, subIt) => {
+                    const subP = this._products.find(x => x.id === subIt.productId) || {};
+                    return s + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
+                  }, 0);
+                }
+                return sum + (Number(item.qty) * pCost);
               }, 0);
 
               let statusBadge = '';
@@ -230,7 +248,8 @@ PAGES['transfer-history'] = {
                     </div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--primary)">${items.length} ชนิด</div>
+                    <div class="fw-bold" style="color:var(--primary)">${UI.currency(totalUnits, 0)} ชิ้น</div>
+                    <div style="font-size:0.7rem;color:var(--text-muted)">จาก ${items.length} รายการ</div>
                   </td>
                   <td class="td-right">
                     <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 2)}</div>
@@ -289,28 +308,45 @@ PAGES['transfer-history'] = {
           </thead>
           <tbody>
             ${items.map(it => {
-              const p = this._products.find(x => x.id === it.productId) || {};
-              const setObj = MASTER_DATA.sets?.find(x => x.id === it.productId);
+              const p = this._mergedProducts.find(x => x.id === it.productId) || {};
+              const setObj = p.isSet ? p : null;
               
               const displayName = setObj ? setObj.name : (p.name || it.productId);
               const displayCode = setObj ? setObj.code : (p.code || '-');
-              const displayCat = setObj ? 'สินค้าจัดเซ็ต' : (p.category || '');
+              const displayCat = setObj ? 'เซ็ตสินค้า' : (p.category || '');
               const displayImg = setObj ? setObj.imageUrl : p.imageUrl;
               const unit = setObj ? 'เซ็ต' : (it.unit || p.unit || 'หน่วย');
 
               let subItemsHtml = '';
-              if (setObj && setObj.items) {
-                 subItemsHtml = `
-                    <div style="margin-top:8px; background:var(--bg-base); padding:8px 12px; border-radius:6px; font-size:0.75rem; border:1px solid var(--border-light)">
-                      <div style="color:var(--text-secondary); margin-bottom:4px">📌 ส่วนประกอบในเซ็ต (รวมที่เบิกทั้งหมด):</div>
-                      <ul style="padding-left:16px; margin:0; color:var(--text-muted)">
-                        ${setObj.items.map(subIt => {
-                          const subP = this._products.find(x => x.id === subIt.productId) || {};
-                          return `<li>${subP.name || subIt.productId} : <span style="color:var(--primary);font-weight:bold">${subIt.qty * (Number(it.qty) || 1)}</span> ${subP.unit || 'หน่วย'}</li>`;
-                        }).join('')}
-                      </ul>
-                    </div>
-                 `;
+              if (setObj && (it.pickedComponents || setObj.items)) {
+                 const isPicked = it.pickedComponents && it.pickedComponents.length > 0;
+                 const componentsToRender = isPicked ? it.pickedComponents : (setObj.items || []);
+                 
+                 if (componentsToRender.length > 0) {
+                   subItemsHtml = `
+                      <div style="margin-top:8px; background:var(--bg-base); padding:8px 12px; border-radius:6px; font-size:0.75rem; border:1px solid var(--border-light)">
+                        <div style="color:var(--text-secondary); margin-bottom:4px">📌 ส่วนประกอบในเซ็ต (รวมที่เบิกทั้งหมด):</div>
+                        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                          ${componentsToRender.map(subIt => {
+                            const subP = this._products.find(x => x.id === subIt.productId) || {};
+                            const name = isPicked ? (subP.name || subIt.productId) : (subIt.category ? `สินค้าในหมวด ${subIt.category}` : 'สินค่าย่อย');
+                            const qty = isPicked ? subIt.qty : (subIt.qty * (Number(it.qty) || 1));
+                            const unit = isPicked ? (subIt.unit || subP.unit || 'หน่วย') : (subIt.unit || 'หน่วย');
+                            const imgHtml = (isPicked && subP.imageUrl) ? UI.image(subP.imageUrl, '', 'width:20px;height:20px;object-fit:cover;border-radius:3px;') : '<span class="material-icons" style="font-size:14px;color:var(--text-muted)">inventory_2</span>';
+                            return `
+                              <div style="display:flex; align-items:center; gap:8px;">
+                                <div style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:var(--bg-body);border-radius:3px;flex-shrink:0;">
+                                  ${imgHtml}
+                                </div>
+                                <div style="flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${name}</div>
+                                <div style="color:var(--primary);font-weight:bold">${qty} <span style="font-weight:normal;color:var(--text-muted)">${unit}</span></div>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                   `;
+                 }
               }
 
               return `
