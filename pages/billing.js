@@ -159,10 +159,23 @@ PAGES['billing'] = {
     const groupedItems = {};
     b._stock.forEach(s => {
       const sold = s.qty - (s.consigned || 0);
-      if (!groupedItems[s.productId]) {
-        groupedItems[s.productId] = { product: s.product, sold: 0 };
+      if (s.product?.isSet && s.product.setItems && s.product.setItems.length > 0) {
+        s.product.setItems.forEach(si => {
+          const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
+          const targetProduct = bp || { name: si.name, unit: si.unit, sellWholesale: 0, sellCommission: 0 };
+          const pId = bp ? bp.id : si.name;
+          if (!groupedItems[pId]) {
+            groupedItems[pId] = { product: targetProduct, sold: 0, setSource: 0 };
+          }
+          groupedItems[pId].sold += sold * (Number(si.qty) || 0);
+          groupedItems[pId].setSource += sold;
+        });
+      } else {
+        if (!groupedItems[s.productId]) {
+          groupedItems[s.productId] = { product: s.product, sold: 0, setSource: 0 };
+        }
+        groupedItems[s.productId].sold += sold;
       }
-      groupedItems[s.productId].sold += sold;
     });
     const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0).sort((a, b) => {
       const idxA = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === a.product?.id) : -1;
@@ -197,12 +210,9 @@ PAGES['billing'] = {
             let html = '';
 
             const renderItem = (it) => {
-              let displayStr = `${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.isSet || it.product?.category === 'Set' ? 'ชุด' : (it.product?.unit || 'หน่วย')}</span>`;
-              if (it.product?.isSet && it.product?.setItems && it.product.setItems.length > 0) {
-                const itemsPerSet = it.product.setItems.reduce((sum, si) => sum + (Number(si.qty) || 0), 0);
-                if (itemsPerSet > 0) {
-                  displayStr = `${it.sold * itemsPerSet} <span style="font-size:0.65rem; font-weight:400; color:var(--text-muted);">(${it.sold} ชุด)</span>`;
-                }
+              let displayStr = `${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span>`;
+              if (it.setSource > 0) {
+                 displayStr += ` <span style="font-size:0.65rem; color:var(--text-muted);">(${it.setSource} ชุด)</span>`;
               }
               return `
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
@@ -406,12 +416,30 @@ PAGES['billing'] = {
       closeModal();
       
       const groupedReceipt = {};
-      items.filter(it => it.sold > 0).forEach(it => {
-         if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
-         groupedReceipt[it.productId].sold += it.sold;
+      items.forEach(it => {
+        if (it.isSet && it.setItems && it.setItems.length > 0) {
+           it.setItems.forEach(si => {
+             const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
+             const pId = bp ? bp.id : si.name;
+             if (!groupedReceipt[pId]) {
+               groupedReceipt[pId] = { 
+                 productId: pId, 
+                 productName: bp ? bp.name : si.name, 
+                 unit: bp ? bp.unit : si.unit, 
+                 pricePerUnit: bp ? bp.sellWholesale : 0, 
+                 sold: 0 
+               };
+             }
+             groupedReceipt[pId].sold += it.sold * (Number(si.qty) || 0);
+           });
+        } else {
+           if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
+           groupedReceipt[it.productId].sold += it.sold;
+        }
       });
+      const finalReceiptItems = Object.values(groupedReceipt).filter(it => it.sold > 0);
       
-      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: Object.values(groupedReceipt), note });
+      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: finalReceiptItems, note });
       await this.load();
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },

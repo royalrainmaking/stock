@@ -181,6 +181,33 @@ PAGES['billing-history'] = {
       const res = await API.getBillingDetail(id);
       const b = res.billing;
       const items = JSON.parse(b.items || '[]');
+      const unpackedItems = {};
+      items.forEach(it => {
+        if (it.isSet && it.setItems && it.setItems.length > 0) {
+           it.setItems.forEach(si => {
+             const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
+             const pId = bp ? bp.id : si.name;
+             if (!unpackedItems[pId]) {
+               unpackedItems[pId] = { 
+                 productId: pId, 
+                 productName: bp ? bp.name : si.name, 
+                 productCode: bp ? bp.code : '-',
+                 productCategory: bp ? bp.category : '',
+                 unit: bp ? bp.unit : si.unit, 
+                 pricePerUnit: bp ? bp.sellWholesale : 0, 
+                 sold: 0,
+                 setSource: 0
+               };
+             }
+             unpackedItems[pId].sold += it.sold * (Number(si.qty) || 0);
+             unpackedItems[pId].setSource += it.sold;
+           });
+        } else {
+           if (!unpackedItems[it.productId]) unpackedItems[it.productId] = { ...it, sold: 0, setSource: 0 };
+           unpackedItems[it.productId].sold += it.sold;
+        }
+      });
+      const finalItems = Object.values(unpackedItems).filter(it => it.sold > 0);
       
       const body = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;font-size:0.9rem">
@@ -211,13 +238,10 @@ PAGES['billing-history'] = {
               </tr>
             </thead>
             <tbody>
-              ${items.map(it => {
+              ${finalItems.map(it => {
                 let displayStr = `${UI.currency(it.sold, 0)} ${it.unit || ''}`;
-                if (it.isSet && it.setItems && it.setItems.length > 0) {
-                  const itemsPerSet = it.setItems.reduce((sum, si) => sum + (Number(si.qty) || 0), 0);
-                  if (itemsPerSet > 0) {
-                    displayStr = `${UI.currency(it.sold * itemsPerSet, 0)} <span style="font-size:0.65rem; color:var(--text-muted);">(${it.sold} ชุด)</span>`;
-                  }
+                if (it.setSource > 0) {
+                  displayStr += ` <span style="font-size:0.65rem; color:var(--text-muted);">(${it.setSource} ชุด)</span>`;
                 }
                 return `
                 <tr>
