@@ -165,7 +165,7 @@ PAGES['billing'] = {
 
   selectEmployee(idx) {
     const container = document.getElementById('billing-employee-card');
-    if (!idx) {
+    if (idx === undefined || idx === null || idx === '') {
       container.innerHTML = '';
       return;
     }
@@ -180,7 +180,9 @@ PAGES['billing'] = {
       }
       groupedItems[s.productId].sold += sold;
     });
-    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0).sort((a, b) => {
+    const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0);
+
+    itemsToBill.sort((a, b) => {
       const idxA = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === a.product?.id) : -1;
       const idxB = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === b.product?.id) : -1;
       return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
@@ -203,7 +205,8 @@ PAGES['billing'] = {
         </div>
         <div style="background:var(--bg-base); border-radius:12px; padding:15px; margin-bottom:20px">
           <div style="font-size:0.75rem; font-weight:800; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:5px">
-            <span class="material-icons" style="font-size:14px">inventory</span> สรุปสินค้าคงเหลือ (หักฝากวาง)
+            <span class="material-icons" style="font-size:14px">inventory</span>
+            สรุปสินค้าคงเหลือ (หักฝากวาง)
           </div>
           ${(() => {
             if (!itemsToBill.length) return '<div class="text-center text-muted" style="padding:10px; font-size:0.8rem">ไม่มีรายการที่ต้องคิดเงิน</div>';
@@ -256,7 +259,7 @@ PAGES['billing'] = {
           })()}
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1); color:var(--primary)">
             <span>รวมขายสุทธิ</span>
-            <span>${b._calcTotalUnits} ชิ้น</span>
+            <span>${b._totalUnits} ชิ้น</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:8px; color:#BE185D">
             <span>คอมมิชชั่นเซลล์ (หักออกไปแล้ว)</span>
@@ -373,7 +376,49 @@ PAGES['billing'] = {
   },
 
   async confirmBilling(idx) {
-    if (!confirm('ยืนยันการบันทึกการคิดเงินใช่หรือไม่?\\n\\n* หากบันทึกแล้ว ระบบจะดำเนินการตัดสต็อกและบันทึกประวัติทันที')) return;
+    const isConfirmed = await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);opacity:0;transition:opacity 0.2s;';
+      overlay.innerHTML = `
+        <div style="background:var(--bg-card, #fff);border-radius:20px;padding:32px 24px;max-width:400px;width:90%;text-align:center;box-shadow:0 15px 40px rgba(0,0,0,0.2);transform:translateY(20px) scale(0.95);transition:all 0.3s cubic-bezier(0.175,0.885,0.32,1.275);">
+          <div style="width:72px;height:72px;border-radius:50%;background:#e3f2fd;color:#1a73e8;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+            <span class="material-icons" style="font-size:36px;">payments</span>
+          </div>
+          <h3 style="font-size:1.35rem;font-weight:700;margin-bottom:12px;color:var(--text-main, #202124);">ยืนยันการคิดเงิน</h3>
+          <p style="color:var(--text-secondary, #5f6368);font-size:1rem;margin-bottom:24px;line-height:1.6;">
+            คุณต้องการยืนยันการบันทึกการคิดเงินใช่หรือไม่?<br>
+            <span style="color:#d93025;font-size:0.85rem;background:#fce8e6;padding:6px 10px;border-radius:6px;display:inline-block;margin-top:12px;font-weight:600;">
+              * ระบบจะดำเนินการตัดสต็อกและบันทึกประวัติทันที
+            </span>
+          </p>
+          <div style="display:flex;gap:12px;">
+            <button class="btn btn-secondary" style="flex:1;padding:12px;border-radius:10px;font-size:1rem;font-weight:600;" id="custom-confirm-cancel">ยกเลิก</button>
+            <button class="btn btn-primary" style="flex:1;padding:12px;border-radius:10px;font-size:1rem;font-weight:600;" id="custom-confirm-ok">ยืนยันบันทึก</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        overlay.children[0].style.transform = 'translateY(0) scale(1)';
+      });
+
+      const close = (result) => {
+        overlay.style.opacity = '0';
+        overlay.children[0].style.transform = 'translateY(20px) scale(0.95)';
+        setTimeout(() => {
+          overlay.remove();
+          resolve(result);
+        }, 200);
+      };
+
+      document.getElementById('custom-confirm-cancel').onclick = () => close(false);
+      document.getElementById('custom-confirm-ok').onclick = () => close(true);
+    });
+
+    if (!isConfirmed) return;
+    
     const b = this._billings[idx];
     const note = document.getElementById('bill-note')?.value || '';
     
@@ -438,7 +483,7 @@ PAGES['billing'] = {
       });
       const finalReceiptItems = Object.values(groupedReceipt).filter(it => it.sold > 0);
       
-      this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: finalReceiptItems, note });
+      await this.showReceipt({ billId: res.billId || 'B-' + Date.now(), date: this._date, employeeName: b.employee?.displayName, whName: b.warehouseName, totalAmt: b._totalAmt, items: finalReceiptItems, note });
       await this.load();
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
@@ -451,10 +496,6 @@ PAGES['billing'] = {
 
   async showReceipt(data) {
     let comp = { name: 'ห้างหุ้นส่วนจำกัด เจริญรุ่งเรือง รับทรัพย์ (สำนักงานใหญ่)', address: '', phone: '' };
-    try {
-      const res = await API.getCompanyInfo();
-      if(res.companyInfo) comp = res.companyInfo;
-    } catch(e) {}
     
     let financeHtml = '';
     let financeTotal = 0;
@@ -567,8 +608,10 @@ PAGES['billing'] = {
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important;
           }
-          .modal-container { background: none; box-shadow: none; border: none; }
-          .modal-overlay { background: transparent; }
+          #modal-overlay { display: block !important; position: absolute !important; padding: 0 !important; background: #fff !important; }
+          .modal-box { display: block !important; max-width: none !important; border: none !important; box-shadow: none !important; overflow: visible !important; background: transparent !important; }
+          .modal-header, .modal-footer { display: none !important; }
+          .modal-body { padding: 0 !important; }
           .no-print { display: none !important; }
         }
       </style>

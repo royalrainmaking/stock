@@ -1,7 +1,7 @@
 const CentralReport = {
   _data: [],
   _billingReceived: 0,
-  
+
   async render() {
     // Default to empty dates to show all-time data
     const firstDay = '';
@@ -64,7 +64,7 @@ const CentralReport = {
     const startDate = document.getElementById('cr-start-date').value;
     const endDate = document.getElementById('cr-end-date').value;
     const content = document.getElementById('cr-content');
-    
+
     try {
       UI.loading(true);
       const res = await API.getCentralReport(startDate, endDate);
@@ -73,6 +73,10 @@ const CentralReport = {
       this._billingPieces = Number(res.totalBillingPieces) || 0;
       this._billingCost = Number(res.totalBillingCost) || 0;
       this._billingAgentComm = Number(res.totalBillingAgentComm) || 0;
+      this._totalEmpStockPieces = Number(res.totalEmpStockPieces) || 0;
+      this._totalEmpStockValue = Number(res.totalEmpStockValue) || 0;
+      this._totalEmpStockCost = Number(res.totalEmpStockCost) || 0;
+      this._totalEmpStockComm = Number(res.totalEmpStockComm) || 0;
       this._centralWhId = res.centralWhId;
       this.renderReport();
     } catch (e) {
@@ -108,20 +112,28 @@ const CentralReport = {
     // 1. Calculate Totals FIRST
     let totalReceived = 0;
     let totalWithdrawn = 0;
+    let totalWithdrawnPieces = 0;
     let totalExpectedBalance = 0;
     let totalAmount = 0;
     let totalCommission = 0;
-    
+    let totalWithdrawnCost = 0;
+
     this._data.forEach((item) => {
       const withdrawn = Number(item.withdrawn) || 0;
       const price = Number(item.sellWholesale) || 0;
       const comm = Number(item.agentProfit) || 0;
-      
+      const piecesPerUnit = Number(item.piecesPerUnit) || 1;
+
       totalReceived += Number(item.received) || 0;
       totalWithdrawn += withdrawn;
+      totalWithdrawnPieces += withdrawn * piecesPerUnit;
+
       totalExpectedBalance += Number(item.balance) || 0;
-      totalAmount += (item.txnAmount !== undefined ? Number(item.txnAmount) : withdrawn * price);
-      totalCommission += (item.txnCommission !== undefined ? Number(item.txnCommission) : withdrawn * comm);
+      const amount = (item.txnAmount !== undefined ? Number(item.txnAmount) : withdrawn * price);
+      const commission = (item.txnCommission !== undefined ? Number(item.txnCommission) : withdrawn * comm);
+      totalAmount += amount;
+      totalCommission += commission;
+      totalWithdrawnCost += (amount - commission);
     });
 
     // 2. Generate HTML
@@ -145,6 +157,20 @@ const CentralReport = {
           <div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div>
           <div class="stat-label">มูลค่าสินค้าเบิกออก (จากตาราง)</div>
           <div class="stat-value">฿${UI.currency(totalAmount, 2)}</div>
+          <div class="stat-sub" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">เบิกออกสุทธิ:</span>
+              <span style="font-weight:700; color:var(--text-primary)">${UI.currency(totalWithdrawnPieces, 0)} ชิ้น</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">ค่าคอมเอเจนซี่:</span>
+              <span style="font-weight:600; color:#BE185D">฿${UI.currency(totalCommission, 2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="color:var(--text-secondary)">รวมราคาส่ง:</span>
+              <span style="font-weight:700; color:var(--text-primary)">฿${UI.currency(totalAmount + totalCommission, 2)}</span>
+            </div>
+          </div>
         </div>
         <div class="stat-card green">
           <div class="stat-bg-icon"><span class="material-icons">payments</span></div>
@@ -167,9 +193,41 @@ const CentralReport = {
         </div>
         <div class="stat-card ${this._billingReceived - totalAmount !== 0 ? 'pink' : 'purple'}">
           <div class="stat-bg-icon"><span class="material-icons">account_balance_wallet</span></div>
-          <div class="stat-label">ผลต่าง (เงินเข้า - เบิกออก)</div>
+          <div class="stat-label">รวมค่าคอมเอเจนซี่</div>
           <div class="stat-value" style="${this._billingReceived - totalAmount < 0 ? 'color: var(--danger)' : ''}">฿${UI.currency(this._billingReceived - totalAmount, 2)}</div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; position: relative; z-index: 1;">*เงินเข้าอาจน้อยกว่ายอดเบิก หากพนักงานขายของไม่หมด</div>
+          <div class="stat-sub" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">เบิกสุทธิ - ขายสุทธิ (จำนวน):</span>
+              <span style="font-weight:700; color:var(--text-primary)">${UI.currency(totalWithdrawnPieces - this._billingPieces, 0)} ชิ้น</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">เบิกสุทธิ - ขายสุทธิ (มูลค่า):</span>
+              <span style="font-weight:600; color:var(--text-primary)">฿${UI.currency((totalAmount + totalCommission) - (this._billingCost + this._billingAgentComm), 2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="color:var(--text-secondary)">เบิกสุทธิ - ขายสุทธิ (ค่าคอม):</span>
+              <span style="font-weight:600; color:#BE185D">฿${UI.currency(totalCommission - this._billingAgentComm, 2)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card orange" style="background:#FFF3E0; border:1px solid #FFE0B2;">
+          <div class="stat-bg-icon"><span class="material-icons" style="color:rgba(255,152,0,0.2);">group</span></div>
+          <div class="stat-label" style="color:#E65100">คลังพนักงานรวม</div>
+          <div class="stat-value" style="color:#E65100">฿${UI.currency(this._totalEmpStockValue, 2)}</div>
+          <div class="stat-sub" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(230,81,0,0.1); display: flex; flex-direction: column; gap: 4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:#E65100; opacity:0.8;">จำนวนสุทธิ:</span>
+              <span style="font-weight:700; color:#E65100">${UI.currency(this._totalEmpStockPieces, 0)} ชิ้น</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:#E65100; opacity:0.8;">ต้นทุนรวม:</span>
+              <span style="font-weight:600; color:#E65100">฿${UI.currency(this._totalEmpStockCost, 2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="color:#E65100; opacity:0.8;">คอมฯ เอเจนซี่:</span>
+              <span style="font-weight:600; color:#BE185D">฿${UI.currency(this._totalEmpStockComm, 2)}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -217,10 +275,10 @@ const CentralReport = {
         const received = Number(item.received) || 0;
         const withdrawn = Number(item.withdrawn) || 0;
         const balance = Number(item.balance) || 0;
-        
+
         const price = Number(item.sellWholesale) || 0;
         const comm = Number(item.agentProfit) || 0;
-        
+
         const amount = item.txnAmount !== undefined ? Number(item.txnAmount) : withdrawn * price;
         const commission = item.txnCommission !== undefined ? Number(item.txnCommission) : withdrawn * comm;
 
@@ -286,15 +344,15 @@ const CentralReport = {
 
     const inputs = document.querySelectorAll('.cr-actual-qty');
     const adjustments = [];
-    
+
     inputs.forEach(input => {
       const val = input.value;
       if (val === '') return; // Skip empty
-      
+
       const newQty = Number(val);
       const balance = Number(input.dataset.balance);
       const pid = input.dataset.pid;
-      
+
       const diff = newQty - balance;
       adjustments.push({ productId: pid, expected: balance, actual: newQty, diff });
     });

@@ -331,12 +331,26 @@ PAGES['employee-stock'] = {
       const renderSection = (title, items, icon, sectionWholesale, sectionCommission) => {
         if (!items.length) return '';
         const maxQty = Math.max(...items.map(p => p.totalQty), 1);
+        const totalQty = items.reduce((sum, p) => sum + p.totalQty, 0);
+        const unitLabel = title.includes('เซ็ต') ? 'เซ็ต' : 'ชิ้น';
+        
+        let qtyLabel = `${UI.currency(totalQty, 0)} ${unitLabel}`;
+        if (title.includes('เซ็ต')) {
+          const totalSubQty = items.reduce((sum, p) => {
+            const multiplier = p.product?.setItems?.reduce((msum, it) => msum + (Number(it.qtyPerSet) || 0), 0) || 0;
+            return sum + (p.totalQty * multiplier);
+          }, 0);
+          if (totalSubQty > 0) {
+            qtyLabel += ` / รวม ${UI.currency(totalSubQty, 0)} ขวด`;
+          }
+        }
+        
         return `
           <div style="margin-bottom:20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--border);flex-wrap:wrap;gap:8px">
               <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.1rem;color:var(--text-primary);">
                 <span class="material-icons" style="color:var(--primary)">${icon}</span>
-                ${title} <span class="badge badge-gray" style="font-size:0.8rem">${items.length} รายการ</span>
+                ${title} <span class="badge badge-gray" style="font-size:0.8rem">${items.length} รายการ (${qtyLabel})</span>
               </div>
               <div style="display:flex;gap:12px;font-size:0.9rem;font-weight:bold;background:var(--bg-card2);padding:4px 12px;border-radius:20px;">
                 <span class="text-primary">ส่งเงิน: ฿${UI.currency(sectionWholesale, 2)}</span>

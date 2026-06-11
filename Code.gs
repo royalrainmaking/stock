@@ -23,7 +23,7 @@ function getSpreadsheet() {
 }
 
 // ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9TPTLTPrnTxlMd5';
+const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9TPTLTPrnTxlMd5Y';
 
 // Sheet names
 const SN = {
@@ -154,6 +154,14 @@ function handleRequest(e) {
       case 'getDashboard': result = getDashboard(user, e.parameter); break;
       case 'getSalesReport': result = getSalesReport(e.parameter); break;
       case 'getLogs': result = getLogs(e.parameter); break;
+      case 'debugData':
+        result = {
+          stock: sheetData(getSheet(SN.EMPLOYEE_STOCK)),
+          warehouses: sheetData(getSheet(SN.WAREHOUSES)),
+          billing: sheetData(getSheet(SN.BILLING)),
+          products: sheetData(getSheet(SN.PRODUCTS))
+        };
+        break;
 
       // Orders
       case 'getOrders': result = getOrders(); break;
@@ -1590,7 +1598,6 @@ function getBillingList(date) {
       }
       return sum + (s.qty - s.consigned) * multiplier;
     }, 0);
-
     return {
       billingId: bill?.id || null,
       warehouseId: wh.id, warehouseName: wh.name,
@@ -1598,8 +1605,9 @@ function getBillingList(date) {
       date: targetDate, 
       billed: !!bill,
       billedAt: bill?.createdAt || null,
-      totalAmt: bill ? Number(bill.totalAmt) : totalAmt,
-      totalUnits: bill ? Number(bill.totalUnits) : totalUnits,
+      totalAmt: totalAmt,
+      totalUnits: totalUnits,
+      items: bill ? (typeof bill.items === 'string' ? JSON.parse(bill.items || '[]') : bill.items) : null,
       _stockSummary: myStock // ส่งสรุปสต็อกไปให้หน้าบ้านใช้ได้ทันทีไม่ต้องโหลดเพิ่ม
     };
   });
@@ -1686,11 +1694,13 @@ function getCentralReport(params) {
     let wholesale = Number(p.sellWholesale) || 0;
     let costVat = Number(p.costVat) || 0;
     let agentProfit = Number(p.agentProfit) || 0;
+    let piecesPerUnit = 1;
     
     if (isSet) {
       // Calculate set price from components
       wholesale = 0;
       let cost = 0;
+      piecesPerUnit = 0;
       let parsedItems = [];
       try { parsedItems = JSON.parse(p.items || '[]'); } catch(e) {}
       parsedItems.forEach(it => {
@@ -1701,9 +1711,11 @@ function getCentralReport(params) {
         if (!cp && it.category) {
           cp = products.find(x => x.category === it.category);
         }
+        const subQty = Number(it.qty) || 0;
+        piecesPerUnit += subQty;
         if (cp) {
-          wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
-          cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+          wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+          cost += (Number(cp.costVat) || 0) * subQty;
         }
       });
       agentProfit = wholesale - cost; // For sets, agent profit is the sum of components' wholesale - cost
@@ -1741,6 +1753,7 @@ function getCentralReport(params) {
       agentProfit: agentProfit,
       txnAmount: txnAmount,
       txnCommission: txnCommission,
+      piecesPerUnit: piecesPerUnit,
       order: Number(p.order) || 9999
     });
   };
@@ -1817,6 +1830,58 @@ function getCentralReport(params) {
 
   rows.sort((a, b) => a.order - b.order);
 
+  let totalEmpStockPieces = 0;
+  let totalEmpStockValue = 0;
+  let totalEmpStockCost = 0;
+  let totalEmpStockComm = 0;
+  
+  const employeeStock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
+  employeeStock.forEach(s => {
+    const qty = Number(s.qty) || 0;
+    if (qty > 0) {
+      const pId = String(s.productId);
+      const isSet = setMap[pId] !== undefined;
+      
+      if (isSet) {
+        const setInfo = setMap[pId];
+        let sItems = [];
+        try { sItems = JSON.parse(setInfo.items || '[]'); } catch(e) {}
+        
+        let wholesale = 0;
+        let cost = 0;
+        let pieces = 0;
+        sItems.forEach(subIt => {
+           let cp = null;
+           if (subIt.allowedProducts && subIt.allowedProducts.length > 0) {
+             cp = products.find(x => subIt.allowedProducts.includes(String(x.id)));
+           }
+           if (!cp && subIt.category) {
+             cp = products.find(x => x.category === subIt.category);
+           }
+           const subQty = Number(subIt.qty) || 0;
+           pieces += subQty;
+           if (cp) {
+             wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+             cost += (Number(cp.costVat) || 0) * subQty;
+           }
+        });
+        
+        totalEmpStockPieces += pieces * qty;
+        totalEmpStockValue += wholesale * qty;
+        totalEmpStockCost += cost * qty;
+        totalEmpStockComm += (wholesale - cost) * qty;
+      } else {
+        const p = productMap[pId] || {};
+        const wholesale = Number(p.sellWholesale) || 0;
+        const cost = Number(p.costVat) || 0;
+        totalEmpStockPieces += qty;
+        totalEmpStockValue += wholesale * qty;
+        totalEmpStockCost += cost * qty;
+        totalEmpStockComm += (wholesale - cost) * qty;
+      }
+    }
+  });
+
   return { 
     rows, 
     totalBillingReceived, 
@@ -1824,6 +1889,10 @@ function getCentralReport(params) {
     totalBillingCost,
     totalBillingAgentComm,
     totalBillingSaleComm,
+    totalEmpStockPieces,
+    totalEmpStockValue,
+    totalEmpStockCost,
+    totalEmpStockComm,
     centralWhId: centralWhIds[0] || '' 
   };
 }
@@ -1853,9 +1922,7 @@ function doBilling(user, data) {
   const { warehouseId, date, totalAmt, totalUnits, note, items } = data;
   const today = date || new Date().toISOString().split('T')[0];
 
-  // Check duplicate
-  const existing = sheetData(getSheet(SN.BILLING)).find(b => b.warehouseId === warehouseId && b.date === today);
-  if (existing) throw new Error('คิดเงินพนักงานนี้ไปแล้ววันนี้');
+  // Removed duplicate bill check to allow multiple bills per day
 
   const billingId = generateId('B');
   const cashPaid = Number(data.cashPaid) || 0;
@@ -2108,7 +2175,11 @@ function getDashboard(user, params) {
 function getSalesReport(params) {
   const { startDate, endDate, warehouseId } = params;
   const billings = sheetData(getSheet(SN.BILLING))
-    .filter(b => b.date >= (startDate||'') && b.date <= (endDate||'9999'));
+    .filter(b => {
+      if (!b.date) return false;
+      const ds = _fmtDate(b.date);
+      return (!startDate || ds >= startDate) && (!endDate || ds <= endDate);
+    });
   const products = sheetData(getSheet(SN.PRODUCTS));
   const warehouses = sheetData(getSheet(SN.WAREHOUSES));
   const rows = [];
@@ -2119,7 +2190,7 @@ function getSalesReport(params) {
     items.forEach(item => {
       const prod = products.find(p => p.id === item.productId);
       rows.push({
-        date: b.date, product: prod?.name || item.productId,
+        date: _fmtDate(b.date), product: prod?.name || item.productId,
         warehouseName: wh?.name || b.warehouseId,
         units: Number(item.sold) || 0,
         revenue: (Number(item.sold) || 0) * (Number(item.pricePerUnit) || 0),
