@@ -4,7 +4,7 @@
 
 const CONFIG = {
   // ── Google Apps Script URL (Copy URL ที่ได้จากการ Deploy Web App มาวางที่นี่) ───
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbyxir8Swpw61bakd6t4JKnUpmWK63kP_DCdGBpxVHnWgBTV7YqGEq4aR8Au8EO6cXcSIw/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbyXREN42WFBxfsWMLjhODQcwdl7RuaAPndiH5qzt-ZAzTnTb7c2pBuYO_6cQ2OiNQvm4w/exec',
 
   // ── Gemini API Key ────────────────────────────────────────
   // ย้ายไปไว้ที่ Code.gs ฝั่ง Backend เพื่อความปลอดภัยแล้ว
@@ -38,6 +38,7 @@ const SHEETS = {
   EMPLOYEE_STOCK: 'EmployeeStock',
   TRANSACTIONS: 'Transactions',
   BILLING: 'Billing',
+  EMPLOYEE_FINANCE: 'EmployeeFinance',
   LOGS: 'Logs',
   ORDERS: 'Orders',
   SHOPS: 'Shops',

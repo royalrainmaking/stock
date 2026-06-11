@@ -70,6 +70,9 @@ const CentralReport = {
       const res = await API.getCentralReport(startDate, endDate);
       this._data = res.rows || [];
       this._billingReceived = Number(res.totalBillingReceived) || 0;
+      this._billingPieces = Number(res.totalBillingPieces) || 0;
+      this._billingCost = Number(res.totalBillingCost) || 0;
+      this._billingAgentComm = Number(res.totalBillingAgentComm) || 0;
       this._centralWhId = res.centralWhId;
       this.renderReport();
     } catch (e) {
@@ -117,8 +120,8 @@ const CentralReport = {
       totalReceived += Number(item.received) || 0;
       totalWithdrawn += withdrawn;
       totalExpectedBalance += Number(item.balance) || 0;
-      totalAmount += (withdrawn * price);
-      totalCommission += (withdrawn * comm);
+      totalAmount += (item.txnAmount !== undefined ? Number(item.txnAmount) : withdrawn * price);
+      totalCommission += (item.txnCommission !== undefined ? Number(item.txnCommission) : withdrawn * comm);
     });
 
     // 2. Generate HTML
@@ -147,6 +150,20 @@ const CentralReport = {
           <div class="stat-bg-icon"><span class="material-icons">payments</span></div>
           <div class="stat-label">ยอดเงินเข้า (จากประวัติคิดเงิน)</div>
           <div class="stat-value">฿${UI.currency(this._billingReceived, 2)}</div>
+          <div class="stat-sub" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 4px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">ขายสุทธิ:</span>
+              <span style="font-weight:700; color:var(--text-primary)">${UI.currency(this._billingPieces, 0)} ชิ้น</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="color:var(--text-secondary)">ต้นทุนรวม:</span>
+              <span style="font-weight:600; color:var(--text-primary)">฿${UI.currency(this._billingCost, 2)}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="color:var(--text-secondary)">คอมฯ เอเจนซี่:</span>
+              <span style="font-weight:600; color:#BE185D">฿${UI.currency(this._billingAgentComm, 2)}</span>
+            </div>
+          </div>
         </div>
         <div class="stat-card ${this._billingReceived - totalAmount !== 0 ? 'pink' : 'purple'}">
           <div class="stat-bg-icon"><span class="material-icons">account_balance_wallet</span></div>
@@ -204,8 +221,8 @@ const CentralReport = {
         const price = Number(item.sellWholesale) || 0;
         const comm = Number(item.agentProfit) || 0;
         
-        const amount = withdrawn * price;
-        const commission = withdrawn * comm;
+        const amount = item.txnAmount !== undefined ? Number(item.txnAmount) : withdrawn * price;
+        const commission = item.txnCommission !== undefined ? Number(item.txnCommission) : withdrawn * comm;
 
         const codeStr = item.code ? `<span style="color: var(--text-muted); font-size: 12px;">[${item.code}]</span> ` : '';
         const nameStr = item.name || 'ไม่ทราบชื่อสินค้า';

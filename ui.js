@@ -196,17 +196,16 @@ const UI = {
 
   // ── Spinner / Skeleton inline ───────────────────────────
   spinner() {
-    return `<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:48px; gap:12px; color:var(--text-muted)">
-      <span class="material-icons rotating" style="font-size:36px; color:var(--primary)">sync</span>
-      <span style="font-size:0.9rem; font-weight:600">กำลังโหลดข้อมูล...</span>
+    return `<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; padding:48px; gap:16px; color:var(--primary)">
+      <div class="spinner-ring primary" style="margin:0"></div>
+      <span style="font-size:0.95rem; font-weight:600; letter-spacing:0.5px">กำลังโหลดข้อมูล...</span>
     </div>`;
   },
 
   skeletonTable(cols = 5, rows = 5) {
-    const hd = Array(cols).fill('<th><div class="skeleton skel-row w100"></div></th>').join('');
-    const td = Array(cols).fill('<td><div class="skeleton skel-row w70"></div></td>').join('');
-    const tr = Array(rows).fill(`<tr>${td}</tr>`).join('');
-    return `<div class="table-wrap card" style="padding:0"><table><thead><tr>${hd}</tr></thead><tbody>${tr}</tbody></table></div>`;
+    return `<div class="card" style="min-height: 320px; display:flex; align-items:center; justify-content:center; box-shadow:none; border:none; background:transparent;">
+      ${this.spinner('กำลังโหลดข้อมูล...')}
+    </div>`;
   },
 
   // ── Simple paginator ─────────────────────────────────────

@@ -97,11 +97,27 @@ PAGES['billing'] = {
       const res = await API.getBillingList(this._date);
       // แสดงพนักงานทุกคนให้สามารถเลือกได้ใน Dropdown
       this._billings = (res.billings || []).map(b => {
+        const stock = b._stockSummary || [];
+        let calcTotalUnits = 0;
+        stock.forEach(s => {
+          const sold = s.qty - (s.consigned || 0);
+          if (sold > 0) {
+            let multiplier = 1;
+            if (s.product?.isSet && s.product?.setItems) {
+               multiplier = s.product.setItems.reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
+               // Fallback if multiplier is 0 for some reason
+               if (multiplier === 0) multiplier = 1;
+            }
+            calcTotalUnits += sold * multiplier;
+          }
+        });
+
         return {
           ...b,
-          _stock: b._stockSummary || [],
+          _stock: stock,
           _totalAmt: b.totalAmt,
-          _totalUnits: b.totalUnits
+          _totalUnits: b.billed ? b.totalUnits : calcTotalUnits,
+          _calcTotalUnits: calcTotalUnits // Always keep the accurate calculation
         };
       });
       this.renderList();
@@ -159,23 +175,10 @@ PAGES['billing'] = {
     const groupedItems = {};
     b._stock.forEach(s => {
       const sold = s.qty - (s.consigned || 0);
-      if (s.product?.isSet && s.product.setItems && s.product.setItems.length > 0) {
-        s.product.setItems.forEach(si => {
-          const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
-          const targetProduct = bp || { name: si.name, unit: si.unit, sellWholesale: 0, sellCommission: 0 };
-          const pId = bp ? bp.id : si.name;
-          if (!groupedItems[pId]) {
-            groupedItems[pId] = { product: targetProduct, sold: 0, setSource: 0 };
-          }
-          groupedItems[pId].sold += sold * (Number(si.qty) || 0);
-          groupedItems[pId].setSource += sold;
-        });
-      } else {
-        if (!groupedItems[s.productId]) {
-          groupedItems[s.productId] = { product: s.product, sold: 0, setSource: 0 };
-        }
-        groupedItems[s.productId].sold += sold;
+      if (!groupedItems[s.productId]) {
+        groupedItems[s.productId] = { product: s.product, sold: 0, setSource: 0 };
       }
+      groupedItems[s.productId].sold += sold;
     });
     const itemsToBill = Object.values(groupedItems).filter(it => it.sold > 0).sort((a, b) => {
       const idxA = MASTER_DATA.products ? MASTER_DATA.products.findIndex(p => p.id === a.product?.id) : -1;
@@ -211,9 +214,6 @@ PAGES['billing'] = {
 
             const renderItem = (it) => {
               let displayStr = `${it.sold} <span style="font-size:0.65rem; font-weight:400;">${it.product?.unit || 'หน่วย'}</span>`;
-              if (it.setSource > 0) {
-                 displayStr += ` <span style="font-size:0.65rem; color:var(--text-muted);">(${it.setSource} ชุด)</span>`;
-              }
               return `
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed rgba(0,0,0,0.05)">
                 <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
@@ -256,11 +256,11 @@ PAGES['billing'] = {
           })()}
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:12px; padding-top:8px; border-top:1px solid rgba(0,0,0,0.1); color:var(--primary)">
             <span>รวมขายสุทธิ</span>
-            <span>${b._totalUnits} ชิ้น</span>
+            <span>${b._calcTotalUnits} ชิ้น</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85rem; font-weight:900; margin-top:8px; color:#BE185D">
-            <span>รวมค่าคอมมิชชั่น</span>
-            <span>฿${UI.currency(totalComm)}</span>
+            <span>คอมมิชชั่นเซลล์ (หักออกไปแล้ว)</span>
+            <span>฿${UI.currency(itemsToBill.reduce((sum, it) => sum + (it.product?.sellCommission || 0) * it.sold, 0))}</span>
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:1.1rem; font-weight:900; margin-top:12px; padding-top:12px; border-top:2px solid rgba(0,0,0,0.05); color:var(--success)">
             <span>ยอดเงินคงค้าง</span>
@@ -402,40 +402,39 @@ PAGES['billing'] = {
 
     try {
       UI.loading(true);
-      const items = b._stock.map(s => ({
-        productId: s.productId, productName: s.product?.name, productCode: s.product?.code, productCategory: s.product?.category, unit: s.product?.unit,
-        qty: s.qty, consigned: s.consigned || 0, sold: s.qty - (s.consigned || 0),
-        pricePerUnit: s.product?.sellWholesale || 0, imageUrl: s.product?.imageUrl,
-        expiryDate: s.expiryDate, isSet: s.product?.isSet, setItems: s.product?.setItems
-      }));
+      const items = b._stock.map(s => {
+        let enhancedSetItems = s.product?.setItems;
+        if (s.product?.isSet && enhancedSetItems) {
+          enhancedSetItems = enhancedSetItems.map(si => {
+             const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
+             return {
+               ...si,
+               productId: bp ? bp.id : si.name,
+               productCode: bp ? bp.code : '-',
+               productCategory: bp ? bp.category : '',
+               unit: bp ? bp.unit : si.unit,
+               pricePerUnit: bp ? bp.sellWholesale : 0
+             };
+          });
+        }
+        return {
+          productId: s.productId, productName: s.product?.name, productCode: s.product?.code, productCategory: s.product?.category, unit: s.product?.unit,
+          qty: s.qty, consigned: s.consigned || 0, sold: s.qty - (s.consigned || 0),
+          pricePerUnit: s.product?.sellWholesale || 0, imageUrl: s.product?.imageUrl,
+          expiryDate: s.expiryDate, isSet: s.product?.isSet, setItems: enhancedSetItems
+        };
+      });
       const res = await API.doBilling({ 
         warehouseId: b.warehouseId, employeeId: b.employee?.id, date: this._date, 
-        totalAmt: b._totalAmt, totalUnits: b._totalUnits, note, items,
+        totalAmt: b._totalAmt, totalUnits: b._calcTotalUnits, note, items,
         cashPaid, transferPaid, financeItems
       });
       closeModal();
       
       const groupedReceipt = {};
       items.forEach(it => {
-        if (it.isSet && it.setItems && it.setItems.length > 0) {
-           it.setItems.forEach(si => {
-             const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
-             const pId = bp ? bp.id : si.name;
-             if (!groupedReceipt[pId]) {
-               groupedReceipt[pId] = { 
-                 productId: pId, 
-                 productName: bp ? bp.name : si.name, 
-                 unit: bp ? bp.unit : si.unit, 
-                 pricePerUnit: bp ? bp.sellWholesale : 0, 
-                 sold: 0 
-               };
-             }
-             groupedReceipt[pId].sold += it.sold * (Number(si.qty) || 0);
-           });
-        } else {
-           if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
-           groupedReceipt[it.productId].sold += it.sold;
-        }
+         if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
+         groupedReceipt[it.productId].sold += it.sold;
       });
       const finalReceiptItems = Object.values(groupedReceipt).filter(it => it.sold > 0);
       

@@ -34,10 +34,12 @@ PAGES['billing-history'] = {
         </div>
       </div>
 
-      <div id="bh-summary-ribbon" class="grid-3 mb-16">
-        <div class="stat-card blue"><div class="stat-bg-icon"><span class="material-icons">receipt_long</span></div><div class="stat-label">จำนวนบิลทั้งหมด</div><div id="bh-sum-count" class="stat-value">0</div></div>
-        <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">shopping_bag</span></div><div class="stat-label">จำนวนสินค้าที่ขาย</div><div id="bh-sum-units" class="stat-value">0</div></div>
-        <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมยอดขายสุทธิ</div><div id="bh-sum-value" class="stat-value">฿0</div></div>
+      <div id="bh-summary-ribbon" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div class="stat-card blue" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">receipt_long</span></div><div class="stat-label" style="font-size:0.75rem">จำนวนบิลทั้งหมด</div><div id="bh-sum-count" class="stat-value" style="font-size:1.1rem">0</div></div>
+        <div class="stat-card green" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label" style="font-size:0.75rem">รวมจำนวนชิ้น</div><div id="bh-sum-pieces" class="stat-value" style="font-size:1.1rem">0</div></div>
+        <div class="stat-card orange" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">shopping_cart</span></div><div class="stat-label" style="font-size:0.75rem">ต้นทุนรวม (VAT)</div><div id="bh-sum-cost" class="stat-value" style="font-size:1.1rem">฿0</div></div>
+        <div class="stat-card purple" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">monetization_on</span></div><div class="stat-label" style="font-size:0.75rem">คอมเอเจนซี่</div><div id="bh-sum-agent" class="stat-value" style="font-size:1.1rem">฿0</div></div>
+        <div class="stat-card dark" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label" style="font-size:0.75rem">ยอดขายสุทธิ</div><div id="bh-sum-value" class="stat-value" style="font-size:1.1rem">฿0</div></div>
       </div>
 
       <div class="filter-card">
@@ -78,8 +80,15 @@ PAGES['billing-history'] = {
     if (container) container.innerHTML = UI.skeletonTable(5, 8);
 
     try {
-      const res = await API.getBillingHistory(this._filters.startDate, this._filters.endDate);
+      const [res, pRes, sRes] = await Promise.all([
+        API.getBillingHistory(this._filters.startDate, this._filters.endDate),
+        API.getProducts(),
+        API.getSets()
+      ]);
       this._billings = res.billings || [];
+      this._products = pRes.products || [];
+      this._sets = sRes?.sets || [];
+      this._mergedProducts = [...this._products, ...this._sets.map(s => ({...s, isSet: true}))];
       
       const emps = Array.from(new Set(this._billings.map(b => b.employee?.displayName))).filter(Boolean).sort();
       const empSelect = document.getElementById('bh-employee');
@@ -108,12 +117,60 @@ PAGES['billing-history'] = {
 
     // Update stats
     const totalCount = filtered.length;
-    const totalUnits = filtered.reduce((a, b) => a + (Number(b.totalUnits) || 0), 0);
-    const totalAmt = filtered.reduce((a, b) => a + (Number(b.totalAmt) || 0), 0);
+    let sumPieces = 0;
+    let sumCost = 0;
+    let sumWholesale = 0;
+    let sumAgentComm = 0;
+    let sumSaleComm = 0;
 
-    document.getElementById('bh-sum-count').textContent = totalCount;
-    document.getElementById('bh-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('bh-sum-value').textContent = `฿${UI.currency(totalAmt, 2)}`;
+    filtered.forEach(b => {
+      const items = JSON.parse(b.items || '[]');
+      items.forEach(it => {
+        const qty = Number(it.sold) || 0;
+        const p = this._mergedProducts.find(x => x.id === it.productId) || {};
+        let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+
+        if (p.isSet && p.items) {
+          p.items.forEach(subIt => {
+            let subP = null;
+            if (subIt.allowedProducts?.length) subP = this._products.find(x => subIt.allowedProducts.includes(x.id));
+            if (!subP && subIt.category) subP = this._products.find(x => x.category === subIt.category);
+            const subQty = Number(subIt.qty) || 0;
+            pieces += subQty;
+            if (subP) {
+              cost += (Number(subP.costVat) || 0) * subQty;
+              wholesale += (Number(subP.sellWholesale) || 0) * subQty;
+            }
+          });
+          const billedPrice = Number(it.pricePerUnit) || wholesale;
+          sumCost += cost * qty;
+          sumWholesale += billedPrice * qty; // Use billed price or fallback
+          sumAgentComm += (wholesale - cost) * qty;
+          sumPieces += pieces * qty;
+        } else {
+          sumCost += (Number(p.costVat) || 0) * qty;
+          sumWholesale += (Number(it.pricePerUnit) || Number(p.sellWholesale) || 0) * qty;
+          sumAgentComm += ((Number(it.pricePerUnit) || Number(p.sellWholesale) || 0) - (Number(p.costVat) || 0)) * qty;
+          sumPieces += qty;
+        }
+      });
+    });
+
+    const animateStat = (id, val, isCurrency = true) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('animate-in');
+        void el.offsetWidth;
+        el.textContent = isCurrency ? `฿${UI.currency(val, 2)}` : UI.currency(val, 0);
+        el.classList.add('animate-in');
+      }
+    };
+
+    animateStat('bh-sum-count', totalCount, false);
+    animateStat('bh-sum-pieces', sumPieces, false);
+    animateStat('bh-sum-cost', sumCost);
+    animateStat('bh-sum-agent', sumAgentComm);
+    animateStat('bh-sum-value', sumWholesale);
 
     this.renderList(filtered);
   },
@@ -133,13 +190,51 @@ PAGES['billing-history'] = {
               <th>วัน/เวลา</th>
               <th>เลขอ้างอิง</th>
               <th>พนักงาน / คลัง</th>
-              <th class="td-right">หน่วยขาย</th>
-              <th class="td-right">ยอดเงินรวม</th>
+              <th class="td-right">สินค้า</th>
+              <th class="td-right">รายละเอียดเงินรวม</th>
               <th class="td-center">การจัดการ</th>
             </tr>
           </thead>
           <tbody>
-            ${data.map((b, idx) => `
+            ${data.map((b, idx) => {
+              const items = JSON.parse(b.items || '[]');
+              let tCost = 0, tWholesale = 0, tSaleComm = 0, tAgentComm = 0, totalPieces = 0, setQty = 0;
+              
+              items.forEach(it => {
+                const qty = Number(it.sold) || 0;
+                const p = this._mergedProducts?.find(x => x.id === it.productId) || {};
+                let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+
+                if (p.isSet && p.items) {
+                  setQty += qty;
+                  p.items.forEach(subIt => {
+                    let subP = null;
+                    if (subIt.allowedProducts?.length) subP = this._products?.find(x => subIt.allowedProducts.includes(x.id));
+                    if (!subP && subIt.category) subP = this._products?.find(x => x.category === subIt.category);
+                    const subQty = Number(subIt.qty) || 0;
+                    pieces += subQty;
+                    if (subP) {
+                      cost += (Number(subP.costVat) || 0) * subQty;
+                      wholesale += (Number(subP.sellWholesale) || 0) * subQty;
+                      saleComm += (Number(subP.sellCommission) || 0) * subQty;
+                    }
+                  });
+                  const billedPrice = Number(it.pricePerUnit) || wholesale;
+                  tCost += cost * qty;
+                  tWholesale += billedPrice * qty;
+                  tAgentComm += (billedPrice - cost) * qty; // Ensure mathematically correct
+                  totalPieces += pieces * qty;
+                } else {
+                  const billedPrice = Number(it.pricePerUnit) || Number(p.sellWholesale) || 0;
+                  const cost = Number(p.costVat) || 0;
+                  tCost += cost * qty;
+                  tWholesale += billedPrice * qty;
+                  tAgentComm += (billedPrice - cost) * qty; // Ensure mathematically correct
+                  totalPieces += qty;
+                }
+              });
+
+              return `
               <tr class="animate-in" style="animation-delay: ${idx * 0.03}s; border-bottom:1px solid var(--border-light)">
                 <td style="font-size:0.82rem">
                   <div class="fw-bold" style="display:flex; align-items:center; gap:4px">
@@ -158,8 +253,27 @@ PAGES['billing-history'] = {
                     </div>
                   </div>
                 </td>
-                <td class="td-right fw-bold">${UI.currency(b.totalUnits, 0)}</td>
-                <td class="td-right text-success fw-bold">฿${UI.currency(b.totalAmt)}</td>
+                <td class="td-right">
+                  <div class="fw-bold" style="color:var(--primary)">${UI.currency(totalPieces, 0)} ชิ้น</div>
+                  ${setQty > 0 ? `<div style="font-size:0.75rem;color:var(--info);margin-top:2px;font-weight:600;"><span class="material-icons" style="font-size:12px;vertical-align:middle;">inventory_2</span> (มีเซ็ต ${UI.currency(setQty, 0)} เซ็ต)</div>` : ''}
+                  <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">จาก ${items.length} รายการ</div>
+                </td>
+                <td class="td-right">
+                  <div style="display:flex;flex-direction:column;gap:2px;font-size:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;">
+                      <span style="color:var(--text-muted)">ต้นทุน:</span>
+                      <span>฿${UI.currency(tCost, 2)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;">
+                      <span style="color:var(--text-muted)">คอมเอเจนซี่:</span>
+                      <span style="color:var(--pink)">฿${UI.currency(tAgentComm, 2)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;border-top:1px dashed var(--border-light);padding-top:2px;margin-top:2px;">
+                      <span style="color:var(--text-muted)">รวม:</span>
+                      <span class="fw-bold" style="color:var(--success)">฿${UI.currency(b.totalAmt, 2)}</span>
+                    </div>
+                  </div>
+                </td>
                 <td class="td-center">
                   <div style="display:flex;gap:6px;justify-content:center">
                     <button class="btn btn-primary btn-xs" onclick="PAGES['billing-history'].reprintBilling('${b.id}')">
@@ -168,7 +282,8 @@ PAGES['billing-history'] = {
                   </div>
                 </td>
               </tr>
-            `).join('')}
+              `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -183,29 +298,8 @@ PAGES['billing-history'] = {
       const items = JSON.parse(b.items || '[]');
       const unpackedItems = {};
       items.forEach(it => {
-        if (it.isSet && it.setItems && it.setItems.length > 0) {
-           it.setItems.forEach(si => {
-             const bp = MASTER_DATA.products ? MASTER_DATA.products.find(p => p.name === si.name) : null;
-             const pId = bp ? bp.id : si.name;
-             if (!unpackedItems[pId]) {
-               unpackedItems[pId] = { 
-                 productId: pId, 
-                 productName: bp ? bp.name : si.name, 
-                 productCode: bp ? bp.code : '-',
-                 productCategory: bp ? bp.category : '',
-                 unit: bp ? bp.unit : si.unit, 
-                 pricePerUnit: bp ? bp.sellWholesale : 0, 
-                 sold: 0,
-                 setSource: 0
-               };
-             }
-             unpackedItems[pId].sold += it.sold * (Number(si.qty) || 0);
-             unpackedItems[pId].setSource += it.sold;
-           });
-        } else {
-           if (!unpackedItems[it.productId]) unpackedItems[it.productId] = { ...it, sold: 0, setSource: 0 };
-           unpackedItems[it.productId].sold += it.sold;
-        }
+         if (!unpackedItems[it.productId]) unpackedItems[it.productId] = { ...it, sold: 0, setSource: 0 };
+         unpackedItems[it.productId].sold += it.sold;
       });
       const finalItems = Object.values(unpackedItems).filter(it => it.sold > 0);
       
@@ -240,9 +334,6 @@ PAGES['billing-history'] = {
             <tbody>
               ${finalItems.map(it => {
                 let displayStr = `${UI.currency(it.sold, 0)} ${it.unit || ''}`;
-                if (it.setSource > 0) {
-                  displayStr += ` <span style="font-size:0.65rem; color:var(--text-muted);">(${it.setSource} ชุด)</span>`;
-                }
                 return `
                 <tr>
                   <td>
@@ -292,8 +383,15 @@ PAGES['billing-history'] = {
       const res = await API.getBillingDetail(id);
       const b = res.billing;
       const items = JSON.parse(b.items || '[]');
-      
       let financeItems = b.financeItems || [];
+
+      // Unpack items for receipt exactly like doBilling did
+      const groupedReceipt = {};
+      items.forEach(it => {
+         if (!groupedReceipt[it.productId]) groupedReceipt[it.productId] = { ...it, sold: 0 };
+         groupedReceipt[it.productId].sold += it.sold;
+      });
+      const finalReceiptItems = Object.values(groupedReceipt).filter(it => it.sold > 0);
 
       // บังคับโหลด CSS ของใบเสร็จก่อนแสดงผล (สำคัญมากเพื่อให้หน้าตาเหมือนเดิม)
       if (typeof PAGES.billing.injectStyles === 'function') {
@@ -307,7 +405,7 @@ PAGES['billing-history'] = {
         employeeName: b.employee?.displayName || b.employeeId,
         whName: b.warehouseName || b.warehouseId,
         totalAmt: b.totalAmt,
-        items: items,
+        items: finalReceiptItems,
         financeItems: financeItems,
         note: b.note
       });

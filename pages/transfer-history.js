@@ -28,10 +28,13 @@ PAGES['transfer-history'] = {
       </div>
 
 
-      <div id="th-summary-ribbon" class="grid-3 mb-16">
-        <div class="stat-card blue"><div class="stat-bg-icon"><span class="material-icons">local_shipping</span></div><div class="stat-label">จำนวนใบเบิกทั้งหมด</div><div id="th-sum-count" class="stat-value">0</div></div>
-        <div class="stat-card green"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label">รวมสินค้าที่เบิก</div><div id="th-sum-units" class="stat-value">0</div></div>
-        <div class="stat-card purple"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label">รวมมูลค่าสินค้า (EST)</div><div id="th-sum-value" class="stat-value">฿0</div></div>
+      <div id="th-summary-ribbon" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px;">
+        <div class="stat-card blue" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">local_shipping</span></div><div class="stat-label" style="font-size:0.75rem">ใบเบิกทั้งหมด</div><div id="th-sum-count" class="stat-value" style="font-size:1.1rem">0</div></div>
+        <div class="stat-card green" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">inventory_2</span></div><div class="stat-label" style="font-size:0.75rem">รวมจำนวนชิ้น</div><div id="th-sum-pieces" class="stat-value" style="font-size:1.1rem">0</div></div>
+        <div class="stat-card orange" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">shopping_cart</span></div><div class="stat-label" style="font-size:0.75rem">ต้นทุนรวม (VAT)</div><div id="th-sum-cost" class="stat-value" style="font-size:1.1rem">฿0</div></div>
+        <div class="stat-card purple" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">monetization_on</span></div><div class="stat-label" style="font-size:0.75rem">คอมเอเจนซี่</div><div id="th-sum-agent" class="stat-value" style="font-size:1.1rem">฿0</div></div>
+        <div class="stat-card pink" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">card_giftcard</span></div><div class="stat-label" style="font-size:0.75rem">คอมเซลล์</div><div id="th-sum-sale" class="stat-value" style="font-size:1.1rem">฿0</div></div>
+        <div class="stat-card dark" style="padding:12px 16px;"><div class="stat-bg-icon"><span class="material-icons">payments</span></div><div class="stat-label" style="font-size:0.75rem">มูลค่ารวม (เบิกออก)</div><div id="th-sum-value" class="stat-value" style="font-size:1.1rem">฿0</div></div>
       </div>
 
       <div class="filter-card">
@@ -150,19 +153,74 @@ PAGES['transfer-history'] = {
 
     // Update summary stats
     const totalCount = filtered.length;
-    let totalUnits = 0;
-    let totalValue = 0;
+    let sumPieces = 0;
+    let sumCost = 0;
+    let sumWholesale = 0;
+    let sumAgentComm = 0;
+    let sumSaleComm = 0;
+
     filtered.forEach(o => {
       (o.items || []).forEach(it => {
-        const p = this._products.find(x => x.id === it.productId) || {};
-        totalUnits += Number(it.qty) || 0;
-        totalValue += (Number(it.qty) || 0) * (p.costVat || 0);
+        const p = this._mergedProducts.find(x => x.id === it.productId) || {};
+        let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+        const qty = Number(it.qty) || 0;
+
+        if (p.isSet) {
+          if (it.pickedComponents && it.pickedComponents.length > 0) {
+            it.pickedComponents.forEach(subIt => {
+              const subP = this._products.find(x => x.id === subIt.productId) || {};
+              sumCost += (Number(subP.costVat) || 0) * (Number(subIt.qty) || 0);
+              sumWholesale += (Number(subP.sellWholesale) || 0) * (Number(subIt.qty) || 0);
+              sumSaleComm += (Number(subP.sellCommission) || 0) * (Number(subIt.qty) || 0);
+              sumAgentComm += ((Number(subP.sellWholesale) || 0) - (Number(subP.costVat) || 0)) * (Number(subIt.qty) || 0);
+              sumPieces += (Number(subIt.qty) || 0);
+            });
+          } else if (p.items) {
+            let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+            p.items.forEach(subIt => {
+              let subP = null;
+              if (subIt.allowedProducts?.length) subP = this._products.find(x => subIt.allowedProducts.includes(x.id));
+              if (!subP && subIt.category) subP = this._products.find(x => x.category === subIt.category);
+              if (subP) {
+                cost += (Number(subP.costVat) || 0) * (Number(subIt.qty) || 0);
+                wholesale += (Number(subP.sellWholesale) || 0) * (Number(subIt.qty) || 0);
+              }
+              pieces += (Number(subIt.qty) || 0);
+            });
+            sumCost += cost * qty;
+            sumWholesale += wholesale * qty;
+            sumSaleComm += 0 * qty; // Salesperson gets no component commission from sets
+            sumAgentComm += (wholesale - cost) * qty;
+            sumPieces += pieces * qty;
+          }
+        } else {
+          sumCost += (Number(p.costVat) || 0) * qty;
+          sumWholesale += (Number(p.sellWholesale) || 0) * qty;
+          const sComm = (Number(p.sellCommission) || 0) * qty;
+          sumSaleComm += sComm;
+          sumAgentComm += (((Number(p.sellWholesale) || 0) - (Number(p.costVat) || 0)) * qty) - sComm;
+          sumPieces += qty;
+        }
       });
     });
 
-    document.getElementById('th-sum-count').textContent = totalCount;
-    document.getElementById('th-sum-units').textContent = UI.currency(totalUnits, 0);
-    document.getElementById('th-sum-value').textContent = `฿${UI.currency(totalValue, 2)}`;
+    // Animate summary updates
+    const animateStat = (id, val, isCurrency = true) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('animate-in');
+        void el.offsetWidth; // trigger reflow
+        el.textContent = isCurrency ? `฿${UI.currency(val, 2)}` : UI.currency(val, 0);
+        el.classList.add('animate-in');
+      }
+    };
+
+    animateStat('th-sum-count', totalCount, false);
+    animateStat('th-sum-pieces', sumPieces, false);
+    animateStat('th-sum-cost', sumCost);
+    animateStat('th-sum-agent', sumAgentComm);
+    animateStat('th-sum-sale', sumSaleComm);
+    animateStat('th-sum-value', sumWholesale);
 
     this.renderList(filtered);
   },
@@ -195,25 +253,54 @@ PAGES['transfer-history'] = {
               const toWh = this._warehouses.find(w => String(w.id).trim() === String(o.toWhId).trim()) || { name: o.toWhId };
               const dt = UI.dateTimeParts(o.createdAt);
               
-              let totalUnits = 0;
-              const totalVal = items.reduce((sum, item) => {
-                totalUnits += Number(item.qty) || 0;
+              let totalPieces = 0;
+              let setQty = 0;
+              let tCost = 0, tWholesale = 0, tSaleComm = 0, tAgentComm = 0;
+
+              items.forEach(item => {
+                const qty = Number(item.qty) || 0;
                 const p = this._mergedProducts.find(x => x.id === item.productId) || {};
-                let pCost = p.sellWholesale || p.costVat || 0;
-                if (p.isSet && item.pickedComponents && item.pickedComponents.length > 0) {
-                  const pickedCost = item.pickedComponents.reduce((s, subIt) => {
-                    const subP = this._products.find(x => x.id === subIt.productId) || {};
-                    return s + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
-                  }, 0);
-                  return sum + pickedCost;
-                } else if (p.isSet && p.items) {
-                  pCost = p.items.reduce((s, subIt) => {
-                    const subP = this._products.find(x => x.id === subIt.productId) || {};
-                    return s + ((subP.sellWholesale || subP.costVat || 0) * (Number(subIt.qty) || 0));
-                  }, 0);
+                
+                if (p.isSet) {
+                  setQty += qty;
+                  if (item.pickedComponents && item.pickedComponents.length > 0) {
+                    item.pickedComponents.forEach(subIt => {
+                      const subP = this._products.find(x => x.id === subIt.productId) || {};
+                      const subQty = Number(subIt.qty) || 0;
+                      totalPieces += subQty;
+                      tCost += (Number(subP.costVat) || 0) * subQty;
+                      tWholesale += (Number(subP.sellWholesale) || 0) * subQty;
+                      tSaleComm += (Number(subP.sellCommission) || 0) * subQty;
+                      tAgentComm += ((Number(subP.sellWholesale) || 0) - (Number(subP.costVat) || 0)) * subQty;
+                    });
+                  } else if (p.items) {
+                    let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+                    p.items.forEach(subIt => {
+                      let subP = null;
+                      if (subIt.allowedProducts?.length) subP = this._products.find(x => subIt.allowedProducts.includes(x.id));
+                      if (!subP && subIt.category) subP = this._products.find(x => x.category === subIt.category);
+                      const subQty = Number(subIt.qty) || 0;
+                      pieces += subQty;
+                      if (subP) {
+                        cost += (Number(subP.costVat) || 0) * subQty;
+                        wholesale += (Number(subP.sellWholesale) || 0) * subQty;
+                        saleComm += (Number(subP.sellCommission) || 0) * subQty;
+                      }
+                    });
+                    tCost += cost * qty;
+                    tWholesale += wholesale * qty;
+                    tSaleComm += saleComm * qty;
+                    tAgentComm += (wholesale - cost) * qty;
+                    totalPieces += pieces * qty;
+                  }
+                } else {
+                  totalPieces += qty;
+                  tCost += (Number(p.costVat) || 0) * qty;
+                  tWholesale += (Number(p.sellWholesale) || 0) * qty;
+                  tSaleComm += (Number(p.sellCommission) || 0) * qty;
+                  tAgentComm += ((Number(p.sellWholesale) || 0) - (Number(p.costVat) || 0)) * qty;
                 }
-                return sum + (Number(item.qty) * pCost);
-              }, 0);
+              });
 
               let statusBadge = '';
               if (o.status === 'pending') statusBadge = '<span class="badge badge-yellow">รอจัดสินค้า</span>';
@@ -248,11 +335,29 @@ PAGES['transfer-history'] = {
                     </div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--primary)">${UI.currency(totalUnits, 0)} ชิ้น</div>
-                    <div style="font-size:0.7rem;color:var(--text-muted)">จาก ${items.length} รายการ</div>
+                    <div class="fw-bold" style="color:var(--primary)">${UI.currency(totalPieces, 0)} ชิ้น</div>
+                    ${setQty > 0 ? `<div style="font-size:0.75rem;color:var(--info);margin-top:2px;font-weight:600;"><span class="material-icons" style="font-size:12px;vertical-align:middle;">inventory_2</span> (มีเซ็ต ${UI.currency(setQty, 0)} เซ็ต)</div>` : ''}
+                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">จาก ${items.length} รายการ</div>
                   </td>
                   <td class="td-right">
-                    <div class="fw-bold" style="color:var(--success)">฿${UI.currency(totalVal, 2)}</div>
+                    <div style="display:flex;flex-direction:column;gap:2px;font-size:0.75rem;">
+                      <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;">
+                        <span style="color:var(--text-muted)">ต้นทุน:</span>
+                        <span>฿${UI.currency(tCost, 2)}</span>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;">
+                        <span style="color:var(--text-muted)">คอมเอเจนซี่:</span>
+                        <span style="color:var(--pink)">฿${UI.currency(tAgentComm, 2)}</span>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;">
+                        <span style="color:var(--text-muted)">คอมเซลล์:</span>
+                        <span style="color:var(--pink)">฿${UI.currency(tSaleComm, 2)}</span>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;width:140px;margin-left:auto;border-top:1px dashed var(--border-light);padding-top:2px;margin-top:2px;">
+                        <span style="color:var(--text-muted)">รวม:</span>
+                        <span class="fw-bold" style="color:var(--success)">฿${UI.currency(tWholesale, 2)}</span>
+                      </div>
+                    </div>
                   </td>
                   <td class="td-center">${statusBadge}</td>
                   <td class="td-center">

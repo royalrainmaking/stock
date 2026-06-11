@@ -208,7 +208,7 @@ PAGES['transfer'] = {
       if (pickerBtn) {
         pickerBtn.disabled = true;
         pickerBtn.classList.add('btn-picker-disabled');
-        pickerBtn.innerHTML = '<span class="material-icons rotating" style="font-size:24px; margin-right:8px">sync</span> กำลังโหลดสต็อก...';
+        pickerBtn.innerHTML = '<div class="spinner-ring sm primary" style="margin-right:8px"></div> กำลังโหลดสต็อก...';
       }
       
       if (fromThumb) {

@@ -23,7 +23,7 @@ function getSpreadsheet() {
 }
 
 // ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9T';
+const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9TPTLTPrnTxlMd5';
 
 // Sheet names
 const SN = {
@@ -46,15 +46,6 @@ const SN = {
 };
 
 // ── UTILS ───────────────────────────────────────────────────
-function _fmtDate(val) {
-  if (!val) return '9999-12-31';
-  try {
-    const d = (val instanceof Date) ? val : new Date(val);
-    if (isNaN(d.getTime())) return '9999-12-31';
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  } catch(e) { return '9999-12-31'; }
-}
-
 function _safeTime(val) {
   if (!val) return '';
   const d = new Date(val);
@@ -211,15 +202,38 @@ function handleRequest(e) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
-function getSheet(name) {
+function getSheet(sheetName) {
   const ss = getSpreadsheet();
-  let sheet = ss.getSheetByName(name);
+  let sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
-    sheet = ss.insertSheet(name);
-    initSheet(sheet, name);
+    sheet = ss.insertSheet(sheetName);
+    // Auto-initialize headers if known
+    const headers = {
+      [SN.USERS]: ['id','username','password','role','displayName','active','avatar','employeeCode','department','phone'],
+      [SN.PRODUCTS]: ['id','code','name','category','costVat','sellWholesale','sellCommission','agentProfit','stock','minStock','unit','active','imageUrl','isSet','items'],
+      [SN.WAREHOUSES]: ['id','name','type','employeeId','active','location'],
+      [SN.CENTRAL_STOCK]: ['id','productId','qty','unit','expiryDate','lastUpdated'],
+      [SN.EMPLOYEE_STOCK]: ['id','warehouseId','productId','qty','consigned','expiryDate','unit','lastUpdated'],
+      [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','expiryDate','costVat','docNo','note','userId','username','createdAt','txnCostVat','txnSellWholesale'],
+      [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','cashPaid','transferPaid','userId','createdAt','items'],
+      [SN.EMPLOYEE_FINANCE]: ['id','date','employeeId','warehouseId','billingId','category','amount','note','createdAt'],
+      [SN.LOGS]: ['id','timestamp','userId','username','action','detail'],
+      [SN.ORDERS]: ['id','customerId','date','status','totalAmount','items','note','createdAt'],
+      [SN.SHOPS]: ['id','name','contact','address','active'],
+      [SN.SHOP_STOCK]: ['id','shopId','productId','qty','expiryDate','unit','lastUpdated'],
+      [SN.STOCK_CHECKS]: ['id','warehouseId','date','status','checkerId','note','items','createdAt'],
+      [SN.SUPPLIERS]: ['id','name','contact','address','active'],
+      [SN.COMPANY_INFO]: ['key','value'],
+      [SN.SETS]: ['id','code','name','items','sellWholesale','active','imageUrl']
+    };
+    if (headers[sheetName]) {
+      sheet.appendRow(headers[sheetName]);
+      sheet.getRange(1, 1, 1, headers[sheetName].length).setFontWeight('bold').setBackground('#f3f4f6');
+      sheet.setFrozenRows(1);
+    }
   } else {
     // Sync headers if columns were added
-    const expected = getHeaders(name);
+    const expected = getHeaders(sheetName);
     if (expected.length > 0) {
       const currentRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
       const current = currentRange.getValues()[0];
@@ -1085,8 +1099,12 @@ function updateCentralStock(warehouseId, productId, deltaQty, unit, expiryDate) 
     if (rowPid === String(productId).trim() && 
         rowWh === String(warehouseId).trim() && 
         rowExp === expVal) {
-      const newQty = (Number(data[i][qtyIdx]) || 0) + deltaQty;
-      sheet.getRange(i+1, qtyIdx+1).setValue(Math.max(0, newQty));
+      const currentQty = Number(data[i][qtyIdx]) || 0;
+      const newQty = currentQty + deltaQty;
+      if (newQty < 0) {
+        throw new Error(`สต็อกส่วนกลางไม่พอ: พยายามเบิก ${Math.abs(deltaQty)} แต่มีเพียง ${currentQty}`);
+      }
+      sheet.getRange(i+1, qtyIdx+1).setValue(newQty);
       sheet.getRange(i+1, updatedIdx+1).setValue(new Date().toISOString());
       found = true;
       break;
@@ -1123,8 +1141,22 @@ function updateEmployeeStock(warehouseId, productId, deltaQty, deltaConsigned, u
     if (rowPid === String(productId).trim() && 
         rowWh === String(warehouseId).trim() && 
         rowExp === expVal) {
-      const newQty = Math.max(0, (Number(data[i][qtyIdx]) || 0) + deltaQty);
-      const newCons = Math.max(0, (Number(data[i][consIdx]) || 0) + (deltaConsigned || 0));
+      const currentQty = Number(data[i][qtyIdx]) || 0;
+      const currentCons = Number(data[i][consIdx]) || 0;
+      
+      const newQty = currentQty + deltaQty;
+      const newCons = currentCons + (deltaConsigned || 0);
+
+      if (newQty < 0) {
+        throw new Error(`สต็อกพนักงานไม่พอ: พยายามตัด ${Math.abs(deltaQty)} แต่มีเพียง ${currentQty}`);
+      }
+      if (newCons > newQty) {
+        throw new Error(`เกินจำนวนที่ฝากได้: มีสต็อกทั้งหมด ${newQty} พยายามฝากรวม ${newCons}`);
+      }
+      if (newCons < 0) {
+        throw new Error(`ดึงฝากคืนเกินจำนวนที่ฝากไว้: ฝากไว้ ${currentCons} ดึงคืน ${Math.abs(deltaConsigned)}`);
+      }
+
       sheet.getRange(i+1, qtyIdx+1).setValue(newQty);
       sheet.getRange(i+1, consIdx+1).setValue(newCons);
       sheet.getRange(i+1, updatedIdx+1).setValue(new Date().toISOString());
@@ -1279,11 +1311,13 @@ function confirmPicking(user, data) {
           const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
           updateCentralStock(order.fromWhId, comp.productId, -pickFromThisBatch, comp.unit, batch.expiryDate);
           
+          const prices = getProductPrices(comp.productId);
           appendRow(getSheet(SN.TRANSACTIONS), {
             id: generateId('TR'), type: 'transfer_out', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
             productId: comp.productId, qty: pickFromThisBatch, unit: comp.unit, docNo: order.id,
             note: 'ตัดสต็อกส่วนประกอบเซ็ต (FEFO)', userId: user.id, username: user.username, 
-            createdAt: finalTs, expiryDate: batch.expiryDate
+            createdAt: finalTs, expiryDate: batch.expiryDate,
+            txnCostVat: prices.costVat, txnSellWholesale: prices.sellWholesale
           });
           remainingToPick -= pickFromThisBatch;
         }
@@ -1291,11 +1325,13 @@ function confirmPicking(user, data) {
       
       // 2. Add Set to Employee Warehouse
       updateEmployeeStock(order.toWhId, item.productId, item.qty, 0, item.unit, '9999-12-31');
+      const setPrices = getProductPrices(item.productId);
       appendRow(getSheet(SN.TRANSACTIONS), {
         id: generateId('TR'), type: 'transfer_in', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
         productId: item.productId, qty: item.qty, unit: item.unit, docNo: order.id,
         note: order.note || 'รับเข้าเซ็ตสินค้าจากการเบิก', userId: user.id, username: user.username, 
-        createdAt: finalTs, expiryDate: '9999-12-31'
+        createdAt: finalTs, expiryDate: '9999-12-31',
+        txnCostVat: setPrices.costVat, txnSellWholesale: setPrices.sellWholesale
       });
       
     } else {
@@ -1322,11 +1358,13 @@ function confirmPicking(user, data) {
         updateEmployeeStock(order.toWhId, item.productId, pickFromThisBatch, 0, item.unit, batch.expiryDate);
         
         // Log Transaction (Batch)
+        const normPrices = getProductPrices(item.productId);
         appendRow(getSheet(SN.TRANSACTIONS), {
           id: generateId('TR'), type: 'transfer', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
           productId: item.productId, qty: pickFromThisBatch, unit: item.unit, docNo: order.id,
           note: order.note || 'จากการเบิกสินค้า (FEFO)', userId: user.id, username: user.username, 
-          createdAt: finalTs, expiryDate: batch.expiryDate
+          createdAt: finalTs, expiryDate: batch.expiryDate,
+          txnCostVat: normPrices.costVat, txnSellWholesale: normPrices.sellWholesale
         });
 
         remainingToPick -= pickFromThisBatch;
@@ -1390,6 +1428,7 @@ function consignFromEmployee(user, data) {
 
   data.items.forEach(item => {
     updateEmployeeStock(data.fromWarehouseId, item.productId, 0, item.qty, item.unit || '', item.expiryDate || '');
+    const consignPrices = getProductPrices(item.productId);
     appendRow(txSheet, {
       id: generateId('TX'), type: 'consign',
       fromWarehouseId: data.fromWarehouseId, toWarehouseId: '',
@@ -1397,6 +1436,7 @@ function consignFromEmployee(user, data) {
       expiryDate: item.expiryDate || '',
       costVat: 0, docNo: '', note: data.note || '',
       userId: user.id, username: user.username, createdAt: new Date().toISOString(),
+      txnCostVat: consignPrices.costVat, txnSellWholesale: consignPrices.sellWholesale
     });
   });
 
@@ -1442,12 +1482,14 @@ function moveStock(user, data) {
     }
 
     // Log Transaction
+    const movePrices = getProductPrices(item.productId);
     appendRow(txSheet, {
       id: generateId('TR'), type: 'movement',
       fromWarehouseId: fromWhId, toWarehouseId: toWhId,
       productId: item.productId, qty: qty, unit: item.unit || '',
       docNo: '', note: note || 'ย้ายคลังสินค้า',
-      userId: user.id, username: user.username, createdAt: nowTs, expiryDate: exp
+      userId: user.id, username: user.username, createdAt: nowTs, expiryDate: exp,
+      txnCostVat: movePrices.costVat, txnSellWholesale: movePrices.sellWholesale
     });
   });
 
@@ -1588,7 +1630,7 @@ function getCentralReport(params) {
     const pId = String(t.productId || t.productid);
     if (!pId || pId === 'undefined' || pId === '') return;
 
-    if (!summary[pId]) summary[pId] = { received: 0, withdrawn: 0 };
+    if (!summary[pId]) summary[pId] = { received: 0, withdrawn: 0, txns: [] };
     const qty = Number(t.qty) || 0;
     
     const isToCentral = centralWhIds.includes(String(t.toWarehouseId || t.towarehouseid));
@@ -1602,6 +1644,11 @@ function getCentralReport(params) {
     // เบิกออกไป (ทุกอย่างที่ออกจากคลังกลาง ไปที่อื่น)
     if (isFromCentral && !isToCentral) {
       summary[pId].withdrawn += qty;
+      summary[pId].txns.push({
+        qty: qty,
+        txnCostVat: t.txnCostVat !== undefined ? Number(t.txnCostVat) : null,
+        txnSellWholesale: t.txnSellWholesale !== undefined ? Number(t.txnSellWholesale) : null
+      });
     }
   });
 
@@ -1636,10 +1683,9 @@ function getCentralReport(params) {
     // Allow all products to show even with 0 balance
     
 
-    // Only use wholesale price for commission base on sets or normal products
     let wholesale = Number(p.sellWholesale) || 0;
     let costVat = Number(p.costVat) || 0;
-    let agentProfit = wholesale - costVat;
+    let agentProfit = Number(p.agentProfit) || 0;
     
     if (isSet) {
       // Calculate set price from components
@@ -1648,13 +1694,38 @@ function getCentralReport(params) {
       let parsedItems = [];
       try { parsedItems = JSON.parse(p.items || '[]'); } catch(e) {}
       parsedItems.forEach(it => {
-        let cp = products.find(x => x.category === it.category); // Simplified set calculation
+        let cp = null;
+        if (it.allowedProducts && it.allowedProducts.length > 0) {
+          cp = products.find(x => it.allowedProducts.includes(x.id));
+        }
+        if (!cp && it.category) {
+          cp = products.find(x => x.category === it.category);
+        }
         if (cp) {
           wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
           cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
         }
       });
-      agentProfit = cost - wholesale;
+      agentProfit = wholesale - cost; // For sets, agent profit is the sum of components' wholesale - cost
+      costVat = cost;
+    }
+
+    let txnAmount = 0;
+    let txnCommission = 0;
+    
+    if (sum.txns && sum.txns.length > 0) {
+      sum.txns.forEach(tx => {
+        const cPrice = tx.txnCostVat !== null && !isNaN(tx.txnCostVat) ? tx.txnCostVat : costVat;
+        txnAmount += tx.qty * cPrice;
+        if (isSet) {
+          txnCommission += tx.qty * agentProfit;
+        } else {
+          txnCommission += tx.qty * agentProfit; // Use explicit agent profit
+        }
+      });
+    } else {
+      txnAmount = finalWithdrawn * costVat;
+      txnCommission = finalWithdrawn * agentProfit;
     }
 
     rows.push({
@@ -1668,6 +1739,8 @@ function getCentralReport(params) {
       balance: balance,
       sellWholesale: wholesale,
       agentProfit: agentProfit,
+      txnAmount: txnAmount,
+      txnCommission: txnCommission,
       order: Number(p.order) || 9999
     });
   };
@@ -1680,13 +1753,79 @@ function getCentralReport(params) {
   if (endDate) billings = billings.filter(b => _fmtDate(b.date) <= endDate);
   
   let totalBillingReceived = 0;
+  let totalBillingPieces = 0;
+  let totalBillingCost = 0;
+  let totalBillingAgentComm = 0;
+  let totalBillingSaleComm = 0;
+
+  const productMap = {};
+  products.forEach(p => productMap[String(p.id)] = p);
+  const setMap = {};
+  sets.forEach(s => setMap[String(s.id)] = s);
+
   billings.forEach(b => {
     totalBillingReceived += (Number(b.totalAmt) || 0);
+    
+    let items = [];
+    try { items = JSON.parse(b.items || '[]'); } catch(e) {}
+    
+    items.forEach(it => {
+      const qty = Number(it.sold) || 0;
+      if (qty <= 0) return;
+      
+      const pId = String(it.productId);
+      const isSet = setMap[pId] !== undefined;
+
+      if (isSet) {
+        const s = setMap[pId];
+        let sItems = [];
+        try { sItems = JSON.parse(s.items || '[]'); } catch(e) {}
+        
+        let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+        
+        sItems.forEach(subIt => {
+          let cp = null;
+          if (subIt.allowedProducts && subIt.allowedProducts.length > 0) {
+            cp = products.find(x => subIt.allowedProducts.includes(String(x.id)));
+          }
+          if (!cp && subIt.category) {
+            cp = products.find(x => x.category === subIt.category);
+          }
+          
+          const subQty = Number(subIt.qty) || 0;
+          pieces += subQty;
+          if (cp) {
+            cost += (Number(cp.costVat) || 0) * subQty;
+            wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+          }
+        });
+        
+        const billedPrice = Number(it.pricePerUnit) || wholesale;
+        totalBillingPieces += pieces * qty;
+        totalBillingCost += cost * qty;
+        totalBillingAgentComm += (billedPrice - cost) * qty;
+      } else {
+        const p = productMap[pId] || {};
+        const billedPrice = Number(it.pricePerUnit) || Number(p.sellWholesale) || 0;
+        const cost = Number(p.costVat) || 0;
+        totalBillingPieces += qty;
+        totalBillingCost += cost * qty;
+        totalBillingAgentComm += (billedPrice - cost) * qty;
+      }
+    });
   });
 
   rows.sort((a, b) => a.order - b.order);
 
-  return { rows, totalBillingReceived, centralWhId: centralWhIds[0] || '' };
+  return { 
+    rows, 
+    totalBillingReceived, 
+    totalBillingPieces,
+    totalBillingCost,
+    totalBillingAgentComm,
+    totalBillingSaleComm,
+    centralWhId: centralWhIds[0] || '' 
+  };
 }
 
 function getEmployeeFinance(employeeId, startDate, endDate) {
@@ -2315,6 +2454,7 @@ function cancelConsign(user, data) {
       updateEmployeeStock(warehouseId, it.productId, 0, -Number(it.qty), '', it.expiryDate);
 
       // บันทึก Transaction
+      const cancelPrices = getProductPrices(it.productId);
       appendRow(getSheet(SN.TRANSACTIONS), {
         id: generateId('TR'), 
         type: 'cancel_consign', 
@@ -2327,7 +2467,8 @@ function cancelConsign(user, data) {
         userId: user.id, 
         username: user.username, 
         createdAt: ts, 
-        expiryDate: it.expiryDate || ''
+        expiryDate: it.expiryDate || '',
+        txnCostVat: cancelPrices.costVat, txnSellWholesale: cancelPrices.sellWholesale
       });
     });
 
@@ -2677,6 +2818,39 @@ function adjustShopInventory(shopId, productId, expiryDate, qty) {
   }
 }
 
+function getProductPrices(productId) {
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  
+  let p = products.find(x => String(x.id) === String(productId));
+  if (p) {
+    return { 
+      costVat: Number(p.costVat) || 0, 
+      sellWholesale: Number(p.sellWholesale) || 0 
+    };
+  }
+  
+  const setObj = sets.find(x => String(x.id) === String(productId));
+  if (setObj) {
+    let cost = 0;
+    let wholesale = 0;
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(setObj.items || '[]'); } catch(e) {}
+    parsedItems.forEach(it => {
+      let cp = null;
+      if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+      if (!cp && it.category) cp = products.find(x => x.category === it.category);
+      if (cp) {
+        cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+        wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+      }
+    });
+    return { costVat: cost, sellWholesale: wholesale };
+  }
+  
+  return { costVat: 0, sellWholesale: 0 };
+}
+
 /**
  * _fmtDate: จัดรูปแบบวันที่ให้อยู่ในรูป YYYY-MM-DD (String) เพื่อความสม่ำเสมอในการค้นหา
  */
@@ -2692,16 +2866,19 @@ function _fmtDate(d) {
   // ถ้าเป็น String และอยู่ในรูปแบบ YYYY-MM-DD อยู่แล้วให้คืนค่าเลย
   const s = String(d).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
 
   // กรณีอื่นๆ พยายามแปลงเป็น Date ก่อน
   try {
     const dt = new Date(d);
-    if (isNaN(dt.getTime())) return s.split(' ')[0]; // Fallback string split
-    return Utilities.formatDate(dt, "GMT+7", "yyyy-MM-dd");
-  } catch(e) {
-    return s.split(' ')[0];
-  }
+    // ถ้าแปลงเป็น Date ได้ ให้ใช้ timezone GMT+7
+    if (!isNaN(dt.getTime())) {
+      return Utilities.formatDate(dt, "GMT+7", "yyyy-MM-dd");
+    }
+  } catch(e) { /* fallback */ }
+  
+  // Fallback สำหรับกรณีเป็น string ที่มี T (แต่แปลงเป็น Date ไม่ได้) หรือ string รูปแบบอื่นๆ
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
+  return s.split(' ')[0];
 }
 
 function getSuppliers() {
@@ -2971,4 +3148,83 @@ function updateBillingDate(user, data) {
 
   logAction(user, 'Update Billing Date', billingId + ' -> ' + newDate);
   return { success: true };
+}
+
+function backfillTransactionPrices() {
+  const sheet = getSheet(SN.TRANSACTIONS);
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return 'No data';
+  
+  let headers = data[0];
+  let costIdx = headers.indexOf('txnCostVat');
+  let wholeIdx = headers.indexOf('txnSellWholesale');
+  
+  // Create columns if missing
+  if (costIdx === -1) {
+    costIdx = headers.length;
+    sheet.getRange(1, costIdx + 1).setValue('txnCostVat');
+    headers.push('txnCostVat');
+    data[0].push('txnCostVat');
+  }
+  
+  if (wholeIdx === -1) {
+    wholeIdx = headers.length;
+    sheet.getRange(1, wholeIdx + 1).setValue('txnSellWholesale');
+    headers.push('txnSellWholesale');
+    data[0].push('txnSellWholesale');
+  }
+  
+  const pidIdx = headers.indexOf('productId');
+  if (pidIdx === -1) return 'No productId column';
+  
+  const numRows = data.length - 1;
+  const updatesCost = [];
+  const updatesWhole = [];
+  
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  
+  const getPrices = (pId) => {
+    let p = products.find(x => String(x.id) === String(pId));
+    if (p) return { c: Number(p.costVat) || 0, w: Number(p.sellWholesale) || 0 };
+    
+    let setObj = sets.find(x => String(x.id) === String(pId));
+    if (setObj) {
+      let c = 0, w = 0;
+      let parsed = [];
+      try { parsed = JSON.parse(setObj.items || '[]'); } catch(e){}
+      parsed.forEach(it => {
+        let cp = null;
+        if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+        if (!cp && it.category) cp = products.find(x => x.category === it.category);
+        if (cp) {
+          c += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+          w += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+        }
+      });
+      return { c, w };
+    }
+    return { c: 0, w: 0 };
+  };
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    while (row.length < headers.length) row.push('');
+    
+    const pId = row[pidIdx];
+    let existingWhole = row[wholeIdx];
+    
+    if (existingWhole === '' || existingWhole === undefined || existingWhole === null) {
+      const prices = getPrices(pId);
+      row[costIdx] = prices.c;
+      row[wholeIdx] = prices.w;
+    }
+    updatesCost.push([row[costIdx]]);
+    updatesWhole.push([row[wholeIdx]]);
+  }
+  
+  sheet.getRange(2, costIdx + 1, numRows, 1).setValues(updatesCost);
+  sheet.getRange(2, wholeIdx + 1, numRows, 1).setValues(updatesWhole);
+  
+  return 'Backfill complete!';
 }
