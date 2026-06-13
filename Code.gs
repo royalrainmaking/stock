@@ -3344,6 +3344,32 @@ function backupDatabase(user) {
   }
 }
 
+// ── AUTO BACKUP (สำหรับตั้งเวลาให้ทำงานอัตโนมัติ) ───────────────
+function autoBackup() {
+  try {
+    const ss = getSpreadsheet();
+    const driveFile = DriveApp.getFileById(ss.getId());
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    
+    const now = new Date();
+    const ts = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd_HH-mm");
+    const newName = `AutoBackup_${ts}`;
+    
+    driveFile.makeCopy(newName, backupFolder);
+    
+    // บันทึก Log โดยใช้ชื่อผู้ทำเป็น System
+    const logSheet = ss.getSheetByName(SN.LOGS);
+    if (logSheet) {
+      const dateStr = Utilities.formatDate(now, "Asia/Bangkok", "dd/MM/yyyy HH:mm:ss");
+      const uuid = Utilities.getUuid();
+      logSheet.appendRow([uuid, dateStr, 'System', 'ระบบอัตโนมัติ', 'admin', 'backup', `สร้างไฟล์สำรองข้อมูลอัตโนมัติ: ${newName}`]);
+    }
+    console.log(`✅ Auto backup success: ${newName}`);
+  } catch (error) {
+    console.log(`❌ Auto backup failed: ${error.toString()}`);
+  }
+}
+
 // ── RESTORE ──────────────────────────────────────────────────
 function getBackupList(user) {
   requireRole(user, 'admin');
