@@ -440,6 +440,7 @@ function getSidebarMenu(role) {
         { page: 'logs', icon: 'history', label: 'บันทึกระบบ', roles: ['admin'] },
         { page: 'suppliers', icon: 'local_shipping', label: 'จัดการผู้จำหน่าย', roles: ['admin'] },
         { page: 'company-info', icon: 'business', label: 'ข้อมูลบริษัท', roles: ['admin'] },
+        { page: 'backup', icon: 'cloud_sync', label: 'สำรองและกู้คืนข้อมูล', roles: ['admin'] },
       ]
     },
     {

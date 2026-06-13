@@ -139,6 +139,11 @@ const API = {
   // ── Company Info ───────────────────────
   getCompanyInfo() { return this._call('getCompanyInfo'); },
   saveCompanyInfo(data) { return this._post('saveCompanyInfo', data); },
+
+  // ── Database ───────────────────────────
+  backupDatabase() { return this._post('backupDatabase'); },
+  getBackupList() { return this._call('getBackupList'); },
+  restoreDatabase(fileId) { return this._post('restoreDatabase', { fileId }); },
 };
 
 // ── Master Data Store ────────────────────────────────────────
@@ -495,6 +500,9 @@ if (IS_DEMO) {
     DEMO_DATA.companyInfo = { ...DEMO_DATA.companyInfo, ...data };
     return Promise.resolve({ success: true, companyInfo: DEMO_DATA.companyInfo });
   };
+  API.backupDatabase = () => new Promise(resolve => setTimeout(() => resolve({ success: true, url: 'https://docs.google.com/spreadsheets/d/demo' }), 2000));
+  API.getBackupList = () => Promise.resolve({ success: true, backups: [] });
+  API.restoreDatabase = (fileId) => new Promise(resolve => setTimeout(() => resolve({ success: true }), 2000));
 }
 
 // Helpers

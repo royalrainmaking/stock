@@ -42,6 +42,14 @@ const APP = {
     roleBadge.textContent = UI.roleLabel(user.role).toUpperCase();
     roleBadge.className = `nav-badge badge-${user.role}`;
 
+    // Show Backup button only for admin
+    const btnBackup = document.getElementById('nav-btn-backup');
+    if (btnBackup) {
+      btnBackup.style.display = user.role === 'admin' ? 'flex' : 'none';
+      btnBackup.style.gap = '8px';
+      btnBackup.style.alignItems = 'center';
+    }
+
     // Build sidebar
     buildSidebar();
 
@@ -81,3 +89,21 @@ document.addEventListener('focusin', (e) => {
     }
   }
 });
+
+// ── Global Actions ─────────────────────────────────────────
+async function doBackupDatabase() {
+  const confirm = await UI.confirm('สำรองข้อมูล (Backup)', 'คุณต้องการสำรองข้อมูลฐานข้อมูลทั้งหมดไปยัง Google Drive ใช่หรือไม่?', 'ยืนยันการสำรองข้อมูล');
+  if (!confirm) return;
+  
+  closeUserMenu();
+  UI.loading(true);
+  try {
+    const res = await API.backupDatabase();
+    UI.toast('สร้างไฟล์สำรองข้อมูลสำเร็จ!', 'success');
+    // ไม่ต้องเด้งเปิดไฟล์ตามที่ user ต้องการ
+  } catch (err) {
+    UI.toast(err.message || 'ไม่สามารถสำรองข้อมูลได้', 'error');
+  } finally {
+    UI.loading(false);
+  }
+}

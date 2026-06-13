@@ -22,6 +22,14 @@ function getSpreadsheet() {
   return _SS;
 }
 
+// ── ฟังก์ชันสำหรับกดยืนยันสิทธิ์ (Run เพื่อเปิดสิทธิ์ครั้งแรก) ───
+function setupPermissions() {
+  SpreadsheetApp.openById(SPREADSHEET_ID);
+  var folder = DriveApp.createFolder("Test_Permission_Temp");
+  folder.setTrashed(true); // ลบทิ้งทันที แค่เอาไว้หลอกให้ Google ขอสิทธิ์เต็มรูปแบบ
+  console.log("✅ ยืนยันสิทธิ์สำเร็จ! ระบบพร้อมใช้งานแล้ว");
+}
+
 // ── Gemini API Key ───────────────────────────────────────────────────
 const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9TPTLTPrnTxlMd5Y';
 
@@ -197,6 +205,15 @@ function handleRequest(e) {
 
       // Setup (First time only)
       case 'setup': result = setupSheets(); break;
+
+      // Backup & Restore
+      case 'backupDatabase': result = backupDatabase(user); break;
+      case 'getBackupList': result = getBackupList(user); break;
+      case 'restoreDatabase': 
+        if (!e.postData || !e.postData.contents) throw new Error("No data");
+        const rData = JSON.parse(e.postData.contents);
+        result = restoreDatabase(user, rData.fileId); 
+        break;
 
       default: result = { error: 'Unknown action: ' + action };
     }
@@ -3298,4 +3315,94 @@ function backfillTransactionPrices() {
   sheet.getRange(2, wholeIdx + 1, numRows, 1).setValues(updatesWhole);
   
   return 'Backfill complete!';
+}
+
+// ── BACKUP ───────────────────────────────────────────────────
+function backupDatabase(user) {
+  requireRole(user, 'admin');
+  
+  try {
+    const ss = getSpreadsheet();
+    const driveFile = DriveApp.getFileById(ss.getId());
+    
+    // Save directly to the specific Backup folder ID provided by user
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    
+    // Create a timestamped copy
+    const now = new Date();
+    // In Thailand time +0700
+    const ts = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd_HH-mm");
+    const newName = `Backup_StockFanggie_${ts}`;
+    
+    const copy = driveFile.makeCopy(newName, backupFolder);
+    writeLog(user, 'backup', `สำรองข้อมูลสำเร็จ: ${newName}`);
+    
+    return { success: true, url: copy.getUrl() };
+  } catch (error) {
+    writeLog(user, 'backup', `ล้มเหลว: ${error.toString()}`);
+    throw new Error('ไม่สามารถสำรองข้อมูลได้: ' + error.toString());
+  }
+}
+
+// ── RESTORE ──────────────────────────────────────────────────
+function getBackupList(user) {
+  requireRole(user, 'admin');
+  
+  try {
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    const files = backupFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+    const list = [];
+    
+    while (files.hasNext()) {
+      const file = files.next();
+      list.push({
+        id: file.getId(),
+        name: file.getName(),
+        date: file.getDateCreated().getTime(),
+        dateStr: Utilities.formatDate(file.getDateCreated(), "Asia/Bangkok", "dd/MM/yyyy HH:mm:ss"),
+        url: file.getUrl()
+      });
+    }
+    
+    // Sort by date descending (newest first)
+    list.sort((a, b) => b.date - a.date);
+    
+    // Return only top 20
+    return { success: true, backups: list.slice(0, 20) };
+  } catch (error) {
+    throw new Error('ไม่สามารถดึงรายชื่อไฟล์สำรองได้: ' + error.toString());
+  }
+}
+
+function restoreDatabase(user, fileId) {
+  requireRole(user, 'admin');
+  if (!fileId) throw new Error('ไม่พบ File ID');
+  
+  try {
+    const backupSS = SpreadsheetApp.openById(fileId);
+    const targetSS = getSpreadsheet();
+    const backupSheets = backupSS.getSheets();
+    
+    // Skip Logs sheet if you want to keep current logs, but full restore usually means full restore.
+    // We will restore everything.
+    for (let i = 0; i < backupSheets.length; i++) {
+      const bs = backupSheets[i];
+      const targetSheet = targetSS.getSheetByName(bs.getName());
+      
+      if (targetSheet) {
+        // Clear all values
+        targetSheet.clearContents();
+        const data = bs.getDataRange().getValues();
+        if (data.length > 0 && data[0].length > 0) {
+          targetSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+        }
+      }
+    }
+    
+    writeLog(user, 'restore', `กู้คืนข้อมูลสำเร็จจากไฟล์: ${backupSS.getName()}`);
+    return { success: true, message: 'กู้คืนข้อมูลสำเร็จเรียบร้อย' };
+  } catch (error) {
+    writeLog(user, 'restore', `กู้คืนล้มเหลว: ${error.toString()}`);
+    throw new Error('ไม่สามารถกู้คืนข้อมูลได้: ' + error.toString());
+  }
 }
