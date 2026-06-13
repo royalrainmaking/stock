@@ -3,8 +3,11 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>บีทาเก้น (Betagen) ระบบคลังสินค้า</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e40af">
+  <link rel="apple-touch-icon" href="logo.png">
   <link rel="icon" type="image/svg+xml"
     href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23D93025'/><path d='M30 42h40v28H30zM50 22L22 42h56z' fill='none' stroke='%23ffffff' stroke-width='8'/><circle cx='50' cy='56' r='6' fill='%23ffffff'/></svg>">
   <meta name="description" content="ระบบคลังสินค้าออนไลน์ – สินค้าไม่หาย คิดเงินครบ ตรวจสอบย้อนหลังได้" />
@@ -209,6 +212,17 @@
   <script src="pages/shop-stock.js"></script>
   <script src="pages/shop-map.js"></script>
   <script src="app.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('ServiceWorker registered'))
+          .catch(err => console.log('ServiceWorker registration failed', err));
+      });
+    }
+  </script>
 </body>
 
 </html>
