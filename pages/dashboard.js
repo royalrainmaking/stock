@@ -32,59 +32,46 @@ PAGES['dashboard'] = {
     }
 
     el.innerHTML = `
-      <div class="page-header no-print">
-        <div class="page-title-wrap">
-          <div class="page-title-icon" style="background:#E8F0FE;color:var(--primary)">
-            <span class="material-icons">dashboard</span>
-          </div>
-          <div>
-            <h2 class="page-title">แดชบอร์ดอัจฉริยะ</h2>
-            <p class="page-subtitle">วิเคราะห์ข้อมูล ยอดขาย สุขภาพคลัง และการพยากรณ์สั่งของ</p>
+      <div class="apple-theme no-print">
+        <div class="page-header">
+          <h2 class="apple-display-md" style="font-size:34px; margin-bottom:8px;">แดชบอร์ดอัจฉริยะ</h2>
+          <p class="apple-body" style="color:var(--apple-ink-muted-80)">วิเคราะห์ข้อมูล ยอดขาย สุขภาพคลัง และการพยากรณ์สั่งของ</p>
+          <div style="margin-top:24px; display:flex; gap:12px;">
+            <button class="apple-button-secondary" onclick="window.print()">
+              <span class="material-icons" style="font-size:18px;">print</span> พิมพ์รายงาน
+            </button>
+            <button class="apple-button-primary" onclick="PAGES.dashboard.load(true)">
+              <span class="material-icons" style="font-size:18px;">refresh</span> รีเฟรชข้อมูล
+            </button>
           </div>
         </div>
-        <div class="page-actions">
-          <button class="btn btn-secondary" onclick="window.print()">
-            <span class="material-icons">print</span> พิมพ์รายงาน
-          </button>
-          <button class="btn btn-primary" onclick="PAGES.dashboard.load(true)">
-            <span class="material-icons">refresh</span> รีเฟรชข้อมูล
-          </button>
+
+        <!-- Filters Panel -->
+        <div class="apple-sub-nav">
+          <div style="font-weight:600; font-size:17px; margin-right:8px; display:flex; align-items:center; gap:4px;">
+            <span class="material-icons" style="font-size:18px;">date_range</span> ช่วงเวลา
+          </div>
+          <button class="apple-quick-btn ${this._period==='day'?'active':''}" onclick="PAGES.dashboard.setPeriod('day')">วันนี้</button>
+          <button class="apple-quick-btn ${this._period==='week'?'active':''}" onclick="PAGES.dashboard.setPeriod('week')">7 วันล่าสุด</button>
+          <button class="apple-quick-btn ${this._period==='month'?'active':''}" onclick="PAGES.dashboard.setPeriod('month')">เดือนนี้</button>
+          <button class="apple-quick-btn ${this._period==='year'?'active':''}" onclick="PAGES.dashboard.setPeriod('year')">ปีนี้</button>
+          <button class="apple-quick-btn ${this._period==='custom'?'active':''}" onclick="PAGES.dashboard.setPeriod('custom')">กำหนดเอง</button>
+          
+          <input type="date" id="db-start-date" class="apple-input" style="width:160px; margin-left:auto;" value="${this._filterStartDate}" ${this._period!=='custom'?'disabled':''} onchange="PAGES.dashboard.onDateChange()" />
+          <span style="color:var(--apple-ink-muted-80)">-</span>
+          <input type="date" id="db-end-date" class="apple-input" style="width:160px;" value="${this._filterEndDate}" ${this._period!=='custom'?'disabled':''} onchange="PAGES.dashboard.onDateChange()" />
+          
+          <div style="margin-left:16px; display:flex; align-items:center; gap:8px;">
+            <span class="material-icons" style="color:var(--apple-ink-muted-80); font-size:20px;">person</span>
+            <select id="db-employee-select" class="apple-input" style="width:200px;" onchange="PAGES.dashboard.onEmployeeChange()">
+              <option value="">ทั้งหมด (ทุกสาขา/พนักงาน)</option>
+            </select>
+          </div>
         </div>
+
+        <!-- Dashboard Content Body -->
+        <div id="dashboard-body-content">${UI.spinner()}</div>
       </div>
-
-      <!-- Filters Panel -->
-      <div class="db-filter-bar no-print">
-        <div class="db-filter-item">
-          <label><span class="material-icons" style="font-size:16px;">date_range</span> ช่วงเวลา</label>
-          <div class="db-quick-ranges">
-            <button class="db-quick-btn ${this._period==='day'?'active':''}" onclick="PAGES.dashboard.setPeriod('day')">วันนี้</button>
-            <button class="db-quick-btn ${this._period==='week'?'active':''}" onclick="PAGES.dashboard.setPeriod('week')">7 วันล่าสุด</button>
-            <button class="db-quick-btn ${this._period==='month'?'active':''}" onclick="PAGES.dashboard.setPeriod('month')">เดือนนี้</button>
-            <button class="db-quick-btn ${this._period==='year'?'active':''}" onclick="PAGES.dashboard.setPeriod('year')">ปีนี้</button>
-            <button class="db-quick-btn ${this._period==='custom'?'active':''}" onclick="PAGES.dashboard.setPeriod('custom')">กำหนดเอง</button>
-          </div>
-        </div>
-        
-        <div class="db-filter-item" style="max-width:200px;">
-          <label>วันที่เริ่มต้น</label>
-          <input type="date" id="db-start-date" class="db-filter-input" value="${this._filterStartDate}" ${this._period!=='custom'?'disabled':''} onchange="PAGES.dashboard.onDateChange()" />
-        </div>
-        
-        <div class="db-filter-item" style="max-width:200px;">
-          <label>วันที่สิ้นสุด</label>
-          <input type="date" id="db-end-date" class="db-filter-input" value="${this._filterEndDate}" ${this._period!=='custom'?'disabled':''} onchange="PAGES.dashboard.onDateChange()" />
-        </div>
-
-        <div class="db-filter-item">
-          <label><span class="material-icons" style="font-size:16px;">person</span> กรองรายคน (พนักงาน)</label>
-          <select id="db-employee-select" class="db-filter-input" onchange="PAGES.dashboard.onEmployeeChange()">
-            <option value="">ทั้งหมด (ทุกสาขา/พนักงาน)</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Dashboard Content Body -->
-      <div id="dashboard-body-content">${UI.spinner()}</div>
     `;
 
     await this.load();
@@ -127,7 +114,7 @@ PAGES['dashboard'] = {
     }
     
     // Highlight active range button
-    document.querySelectorAll('.db-quick-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.apple-quick-btn').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
     
     await this.load(true);
@@ -243,85 +230,81 @@ PAGES['dashboard'] = {
     const bodyEl = document.getElementById('dashboard-body-content');
     bodyEl.innerHTML = `
       <!-- Stats Summary -->
-      <div class="db-grid">
-        <div class="db-card blue">
-          <div class="db-card-icon"><span class="material-icons">payments</span></div>
-          <div class="db-card-title">ยอดขายรวม</div>
-          <div class="db-card-value">฿${UI.currency(totalSales, 2)}</div>
-          <div class="db-card-sub">
-            <span class="material-icons" style="font-size:14px;">arrow_forward</span>
-            <span>คิดเงินแล้ว ${this._filteredBillings.length} บิล</span>
+      <div class="db-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:24px; margin-bottom:32px; display:grid;">
+        <div class="apple-store-utility-card" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div class="apple-caption" style="text-transform:uppercase; font-weight:600; color:var(--apple-ink-muted-80)">ยอดขายรวม</div>
+            <span class="material-icons" style="color:var(--apple-primary)">payments</span>
           </div>
+          <div class="apple-display-md" style="font-size:32px;">฿${UI.currency(totalSales, 2)}</div>
+          <div class="apple-caption" style="color:var(--apple-ink-muted-80); margin-top:auto;">คิดเงินแล้ว ${this._filteredBillings.length} บิล</div>
         </div>
 
-        <div class="db-card green">
-          <div class="db-card-icon"><span class="material-icons">shopping_bag</span></div>
-          <div class="db-card-title">ปริมาณขายสะสม</div>
-          <div class="db-card-value">${UI.currency(totalUnits, 0)} <span style="font-size:1rem; font-weight:normal;">หน่วย</span></div>
-          <div class="db-card-sub">
-            <span class="material-icons" style="font-size:14px;">trending_up</span>
-            <span>เฉลี่ย ${totalUnits ? Math.round(totalSales/totalUnits) : 0} ฿ / หน่วย</span>
+        <div class="apple-store-utility-card" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div class="apple-caption" style="text-transform:uppercase; font-weight:600; color:var(--apple-ink-muted-80)">ปริมาณขายสะสม</div>
+            <span class="material-icons" style="color:var(--apple-primary)">shopping_bag</span>
           </div>
+          <div class="apple-display-md" style="font-size:32px;">${UI.currency(totalUnits, 0)} <span style="font-size:17px; font-weight:400">หน่วย</span></div>
+          <div class="apple-caption" style="color:var(--apple-ink-muted-80); margin-top:auto;">เฉลี่ย ${totalUnits ? Math.round(totalSales/totalUnits) : 0} ฿ / หน่วย</div>
         </div>
 
-        <div class="db-card orange">
-          <div class="db-card-icon"><span class="material-icons">account_balance_wallet</span></div>
-          <div class="db-card-title">เงินโอนผ่านบัญชี</div>
-          <div class="db-card-value">฿${UI.currency(totalTransfer, 2)}</div>
-          <div class="db-card-sub">
-            <span class="material-icons" style="font-size:14px;">savings</span>
-            <span>คิดเป็น ${totalSales ? Math.round((totalTransfer/totalSales)*100) : 0}% ของยอดขาย</span>
+        <div class="apple-store-utility-card" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div class="apple-caption" style="text-transform:uppercase; font-weight:600; color:var(--apple-ink-muted-80)">เงินโอนผ่านบัญชี</div>
+            <span class="material-icons" style="color:var(--apple-primary)">account_balance_wallet</span>
           </div>
+          <div class="apple-display-md" style="font-size:32px;">฿${UI.currency(totalTransfer, 2)}</div>
+          <div class="apple-caption" style="color:var(--apple-ink-muted-80); margin-top:auto;">คิดเป็น ${totalSales ? Math.round((totalTransfer/totalSales)*100) : 0}% ของยอดขาย</div>
         </div>
 
-        <div class="db-card purple">
-          <div class="db-card-icon"><span class="material-icons">monetization_on</span></div>
-          <div class="db-card-title">เงินสดหน้าร้าน</div>
-          <div class="db-card-value">฿${UI.currency(totalCash, 2)}</div>
-          <div class="db-card-sub">
-            <span class="material-icons" style="font-size:14px;">price_check</span>
-            <span>คิดเป็น ${totalSales ? Math.round((totalCash/totalSales)*100) : 0}% ของยอดขาย</span>
+        <div class="apple-store-utility-card" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div class="apple-caption" style="text-transform:uppercase; font-weight:600; color:var(--apple-ink-muted-80)">เงินสดหน้าร้าน</div>
+            <span class="material-icons" style="color:var(--apple-primary)">monetization_on</span>
           </div>
+          <div class="apple-display-md" style="font-size:32px;">฿${UI.currency(totalCash, 2)}</div>
+          <div class="apple-caption" style="color:var(--apple-ink-muted-80); margin-top:auto;">คิดเป็น ${totalSales ? Math.round((totalCash/totalSales)*100) : 0}% ของยอดขาย</div>
         </div>
       </div>
 
       <!-- Charts grid -->
-      <div class="grid-2 mb-24">
-        <div class="db-chart-card">
-          <div class="db-chart-title">แนวโน้มยอดขายสะสม</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:24px; margin-bottom:32px;">
+        <div class="apple-store-utility-card">
+          <div class="apple-body-strong" style="margin-bottom:20px;">แนวโน้มยอดขายสะสม</div>
           <div id="sales-trend-chart" style="min-height: 250px;"></div>
         </div>
         
-        <div class="db-chart-card">
-          <div class="db-chart-title">สัดส่วนพนักงานขาย (Revenue Contribution)</div>
+        <div class="apple-store-utility-card">
+          <div class="apple-body-strong" style="margin-bottom:20px;">สัดส่วนพนักงานขาย (Revenue Contribution)</div>
           <div id="sales-contribution-chart" style="min-height: 250px;"></div>
         </div>
       </div>
 
       <!-- Financial Split & Expense Breakdown -->
-      <div class="db-chart-card mb-24">
-        <div class="db-chart-title">
+      <div class="apple-store-utility-card" style="margin-bottom:32px;">
+        <div class="apple-body-strong" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
           <span>การหารเงินและค่าใช้จ่าย (Sales Revenue Split & Deductions)</span>
-          <span class="db-badge-pill" style="background:#E8F0FE;color:var(--primary);">สุทธิ ฿${UI.currency(netEarning, 2)}</span>
+          <span style="font-size:14px; color:var(--apple-primary); font-weight:600; background:rgba(0,102,204,0.1); padding:4px 12px; border-radius:9999px;">สุทธิ ฿${UI.currency(netEarning, 2)}</span>
         </div>
-        <div class="grid-2">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:24px;">
           <div id="sales-split-chart" style="min-height: 250px;"></div>
-          <div class="table-wrap">
+          <div class="apple-table-wrap">
             <table>
               <thead>
-                <tr><th>รายการการเงิน</th><th class="td-right">จำนวนเงิน</th><th>สัดส่วน</th></tr>
+                <tr><th>รายการการเงิน</th><th style="text-align:right;">จำนวนเงิน</th><th>สัดส่วน</th></tr>
               </thead>
               <tbody>
-                <tr><td>ยอดขายสินค้าทั้งหมด</td><td class="td-right td-bold">฿${UI.currency(totalSales, 2)}</td><td>100%</td></tr>
-                <tr style="color:var(--danger)"><td>- ค่าหลอด</td><td class="td-right">-฿${UI.currency(strawCost, 2)}</td><td>${totalSales ? Math.round(strawCost/totalSales*100) : 0}%</td></tr>
-                <tr style="color:var(--danger)"><td>- ค่าถุง</td><td class="td-right">-฿${UI.currency(bagCost, 2)}</td><td>${totalSales ? Math.round(bagCost/totalSales*100) : 0}%</td></tr>
-                <tr style="color:var(--danger)"><td>- เงินสะสม / เงินประกัน</td><td class="td-right">-฿${UI.currency(savings, 2)}</td><td>${totalSales ? Math.round(savings/totalSales*100) : 0}%</td></tr>
-                <tr style="color:var(--danger)"><td>- ค่าเช่ารถ / เช่าซื้อรถพ่วง</td><td class="td-right">-฿${UI.currency(vehicleLease, 2)}</td><td>${totalSales ? Math.round(vehicleLease/totalSales*100) : 0}%</td></tr>
-                <tr style="color:var(--danger)"><td>- ค่าใช้จ่ายอื่นๆ หักบัญชี</td><td class="td-right">-฿${UI.currency(otherExpenses, 2)}</td><td>${totalSales ? Math.round(otherExpenses/totalSales*100) : 0}%</td></tr>
-                <tr style="background:var(--bg-hover); font-weight:bold; color:var(--success);">
-                  <td>คงเหลือสุทธิ (Net Earnings)</td>
-                  <td class="td-right">฿${UI.currency(netEarning, 2)}</td>
-                  <td>${totalSales ? Math.round(netEarning/totalSales*100) : 0}%</td>
+                <tr><td>ยอดขายสินค้าทั้งหมด</td><td class="apple-body-strong" style="text-align:right;">฿${UI.currency(totalSales, 2)}</td><td>100%</td></tr>
+                <tr><td>- ค่าหลอด</td><td style="text-align:right;">-฿${UI.currency(strawCost, 2)}</td><td>${totalSales ? Math.round(strawCost/totalSales*100) : 0}%</td></tr>
+                <tr><td>- ค่าถุง</td><td style="text-align:right;">-฿${UI.currency(bagCost, 2)}</td><td>${totalSales ? Math.round(bagCost/totalSales*100) : 0}%</td></tr>
+                <tr><td>- เงินสะสม / เงินประกัน</td><td style="text-align:right;">-฿${UI.currency(savings, 2)}</td><td>${totalSales ? Math.round(savings/totalSales*100) : 0}%</td></tr>
+                <tr><td>- ค่าเช่ารถ / เช่าซื้อรถพ่วง</td><td style="text-align:right;">-฿${UI.currency(vehicleLease, 2)}</td><td>${totalSales ? Math.round(vehicleLease/totalSales*100) : 0}%</td></tr>
+                <tr><td>- ค่าใช้จ่ายอื่นๆ หักบัญชี</td><td style="text-align:right;">-฿${UI.currency(otherExpenses, 2)}</td><td>${totalSales ? Math.round(otherExpenses/totalSales*100) : 0}%</td></tr>
+                <tr>
+                  <td class="apple-body-strong">คงเหลือสุทธิ (Net Earnings)</td>
+                  <td class="apple-body-strong" style="text-align:right; color:var(--apple-primary);">฿${UI.currency(netEarning, 2)}</td>
+                  <td class="apple-body-strong">${totalSales ? Math.round(netEarning/totalSales*100) : 0}%</td>
                 </tr>
               </tbody>
             </table>
@@ -330,45 +313,47 @@ PAGES['dashboard'] = {
       </div>
 
       <!-- Inventory Health Section -->
-      <div class="db-chart-card mb-24">
-        <div class="db-chart-title">
-          <span><span class="material-icons" style="vertical-align:bottom;margin-right:6px">health_and_safety</span>ระบบตรวจสอบสุขภาพคลังสินค้า (Inventory Health)</span>
-          <div class="tabs" style="margin-bottom:0; border-bottom:none;">
-            <button class="tab ${this._activeHealthTab==='central'?'active':''}" onclick="PAGES.dashboard.setHealthTab('central')">คลังสินค้ากลาง</button>
-            <button class="tab ${this._activeHealthTab==='employee'?'active':''}" onclick="PAGES.dashboard.setHealthTab('employee')">คลังพนักงาน</button>
+      <div class="apple-store-utility-card" style="margin-bottom:32px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:16px;">
+          <div class="apple-body-strong" style="display:flex; align-items:center; gap:8px;">
+            <span class="material-icons" style="color:var(--apple-ink-muted-48)">health_and_safety</span>ระบบตรวจสอบสุขภาพคลังสินค้า
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="apple-tab ${this._activeHealthTab==='central'?'active':''}" onclick="PAGES.dashboard.setHealthTab('central')">คลังสินค้ากลาง</button>
+            <button class="apple-tab ${this._activeHealthTab==='employee'?'active':''}" onclick="PAGES.dashboard.setHealthTab('employee')">คลังพนักงาน</button>
           </div>
         </div>
 
-        <div class="db-health-grid" id="db-health-grid-cards">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:16px; margin-bottom:24px;" id="db-health-grid-cards">
           <!-- Populated by JS -->
         </div>
 
-        <div class="card" style="box-shadow:none; border: 1px solid var(--border-light); border-radius:12px;">
-          <div class="card-title" id="db-health-detail-title">รายละเอียดสินค้า</div>
-          <div class="table-wrap" style="border:none;">
-            <table id="db-health-detail-table">
-              <!-- Populated by JS -->
-            </table>
-          </div>
+        <div class="apple-table-wrap">
+          <div class="apple-body-strong" style="padding:16px; border-bottom:1px solid var(--apple-hairline);" id="db-health-detail-title">รายละเอียดสินค้า</div>
+          <table id="db-health-detail-table">
+            <!-- Populated by JS -->
+          </table>
         </div>
       </div>
 
       <!-- Purchase Forecasting Section -->
-      <div class="db-chart-card mb-24">
-        <div class="db-chart-title">
-          <span><span class="material-icons" style="vertical-align:bottom;margin-right:6px">online_prediction</span>พยากรณ์การสั่งซื้อสินค้าล่วงหน้า 7 วัน (7-Day Ordering Forecast)</span>
-          <span style="font-size:0.85rem;font-weight:normal;color:var(--text-muted)">* อิงจากอัตราความเร็วการขายในรอบที่เลือก</span>
+      <div class="apple-store-utility-card" style="margin-bottom:32px;">
+        <div style="margin-bottom:20px;">
+          <div class="apple-body-strong" style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+            <span class="material-icons" style="color:var(--apple-ink-muted-48)">online_prediction</span>พยากรณ์การสั่งซื้อล่วงหน้า 7 วัน
+          </div>
+          <div class="apple-caption" style="color:var(--apple-ink-muted-80)">* อิงจากอัตราความเร็วการขายในรอบที่เลือก</div>
         </div>
-        <div class="table-wrap">
+        <div class="apple-table-wrap">
           <table>
             <thead>
               <tr>
                 <th>สินค้า</th>
                 <th>หมวดหมู่</th>
-                <th class="td-right">ยอดขายเฉลี่ย (ชิ้น/วัน)</th>
-                <th class="td-right">จำนวนคงเหลือปัจจุบัน</th>
-                <th class="td-right">ความต้องการ 7 วัน</th>
-                <th class="td-right">ควรสั่งซื้อเพิ่ม</th>
+                <th style="text-align:right;">ยอดขายเฉลี่ย (ชิ้น/วัน)</th>
+                <th style="text-align:right;">จำนวนคงเหลือปัจจุบัน</th>
+                <th style="text-align:right;">ความต้องการ 7 วัน</th>
+                <th style="text-align:right;">ควรสั่งซื้อเพิ่ม</th>
                 <th>สถานะสต็อก</th>
               </tr>
             </thead>
@@ -410,7 +395,7 @@ PAGES['dashboard'] = {
       series: [{ name: 'ยอดขาย', data: trendData.map(d=>d.y) }],
       xaxis: { categories: trendData.map(d=>d.x) },
       stroke: { curve: 'smooth', width: 3 },
-      colors: ['#1a73e8'],
+      colors: ['#0066cc'],
       dataLabels: { enabled: false },
       fill: {
         type: 'gradient',
@@ -432,7 +417,7 @@ PAGES['dashboard'] = {
       chart: { type: 'donut', height: 260, fontFamily: 'Sarabun, sans-serif' },
       series: contributionData.map(d => d.val),
       labels: contributionData.map(d => d.name),
-      colors: ['#1a73e8', '#34a853', '#fbbc05', '#ea4335', '#a142f4', '#24b6f7'],
+      colors: ['#0066cc', '#0071e3', '#2997ff', '#1d1d1f', '#333333', '#7a7a7a'],
       legend: { position: 'bottom' },
       dataLabels: { enabled: true, formatter: (val) => Math.round(val) + '%' },
       tooltip: { y: { formatter: (val) => '฿' + UI.currency(val, 0) } }
@@ -457,13 +442,13 @@ PAGES['dashboard'] = {
       series: [{
         name: 'จำนวนเงิน',
         data: [
-          { x: 'ยอดขายสินค้า', y: totalSales, fillColor: '#1a73e8' },
-          { x: 'คงเหลือสุทธิ', y: netEarning, fillColor: '#34a853' },
-          { x: 'ค่าหลอด', y: strawCost, fillColor: '#ea4335' },
-          { x: 'ค่าถุง', y: bagCost, fillColor: '#ea4335' },
-          { x: 'เงินฝากสะสม', y: savings, fillColor: '#fbbc05' },
-          { x: 'ค่าเช่ารถ', y: vehicleLease, fillColor: '#e37405' },
-          { x: 'ค่าหักอื่นๆ', y: otherExpenses, fillColor: '#7c7c7c' }
+          { x: 'ยอดขายสินค้า', y: totalSales, fillColor: '#0066cc' },
+          { x: 'คงเหลือสุทธิ', y: netEarning, fillColor: '#2997ff' },
+          { x: 'ค่าหลอด', y: strawCost, fillColor: '#1d1d1f' },
+          { x: 'ค่าถุง', y: bagCost, fillColor: '#333333' },
+          { x: 'เงินฝากสะสม', y: savings, fillColor: '#7a7a7a' },
+          { x: 'ค่าเช่ารถ', y: vehicleLease, fillColor: '#cccccc' },
+          { x: 'ค่าหักอื่นๆ', y: otherExpenses, fillColor: '#e0e0e0' }
         ]
       }],
       plotOptions: { bar: { distributed: true, borderRadius: 6, columnWidth: '55%' } },
@@ -483,8 +468,8 @@ PAGES['dashboard'] = {
     this._selectedHealthStatus = status;
     
     // Toggle active class on cards
-    document.querySelectorAll('.db-health-item').forEach(card => card.classList.remove('active'));
-    const activeCard = document.querySelector(`.db-health-item[data-status="${status}"]`);
+    document.querySelectorAll('.apple-health-card').forEach(card => card.classList.remove('active'));
+    const activeCard = document.querySelector(`.apple-health-card[data-status="${status}"]`);
     if (activeCard) activeCard.classList.add('active');
 
     this.renderHealthDetailTable();
@@ -540,25 +525,25 @@ PAGES['dashboard'] = {
 
     const gridEl = document.getElementById('db-health-grid-cards');
     gridEl.innerHTML = `
-      <div class="db-health-item ${this._selectedHealthStatus==='safe'?'active':''}" data-status="safe" onclick="PAGES.dashboard.setHealthStatus('safe')">
-        <div class="db-health-val" style="color:var(--success)">${safeCount}</div>
-        <div class="db-health-label">ระดับปกติ (Safe)</div>
+      <div class="apple-health-card ${this._selectedHealthStatus==='safe'?'active':''}" data-status="safe" onclick="PAGES.dashboard.setHealthStatus('safe')">
+        <div class="apple-health-card-val">${safeCount}</div>
+        <div class="apple-caption">ระดับปกติ (Safe)</div>
       </div>
-      <div class="db-health-item ${this._selectedHealthStatus==='lowStock'?'active':''}" data-status="lowStock" onclick="PAGES.dashboard.setHealthStatus('lowStock')">
-        <div class="db-health-val" style="color:var(--warning)">${lowCount}</div>
-        <div class="db-health-label">ใกล้หมด (Low)</div>
+      <div class="apple-health-card ${this._selectedHealthStatus==='lowStock'?'active':''}" data-status="lowStock" onclick="PAGES.dashboard.setHealthStatus('lowStock')">
+        <div class="apple-health-card-val">${lowCount}</div>
+        <div class="apple-caption">ใกล้หมด (Low)</div>
       </div>
-      <div class="db-health-item ${this._selectedHealthStatus==='outOfStock'?'active':''}" data-status="outOfStock" onclick="PAGES.dashboard.setHealthStatus('outOfStock')">
-        <div class="db-health-val" style="color:var(--danger)">${outCount}</div>
-        <div class="db-health-label">สินค้าหมด (Out)</div>
+      <div class="apple-health-card ${this._selectedHealthStatus==='outOfStock'?'active':''}" data-status="outOfStock" onclick="PAGES.dashboard.setHealthStatus('outOfStock')">
+        <div class="apple-health-card-val">${outCount}</div>
+        <div class="apple-caption">สินค้าหมด (Out)</div>
       </div>
-      <div class="db-health-item ${this._selectedHealthStatus==='expired'?'active':''}" data-status="expired" onclick="PAGES.dashboard.setHealthStatus('expired')">
-        <div class="db-health-val" style="color:#C62828">${expiredCount}</div>
-        <div class="db-health-label">หมดอายุแล้ว</div>
+      <div class="apple-health-card ${this._selectedHealthStatus==='expired'?'active':''}" data-status="expired" onclick="PAGES.dashboard.setHealthStatus('expired')">
+        <div class="apple-health-card-val">${expiredCount}</div>
+        <div class="apple-caption">หมดอายุแล้ว</div>
       </div>
-      <div class="db-health-item ${this._selectedHealthStatus==='expiring'?'active':''}" data-status="expiring" onclick="PAGES.dashboard.setHealthStatus('expiring')">
-        <div class="db-health-val" style="color:#FFB300">${expiringCount}</div>
-        <div class="db-health-label">ใกล้หมดอายุ (&lt;14วัน)</div>
+      <div class="apple-health-card ${this._selectedHealthStatus==='expiring'?'active':''}" data-status="expiring" onclick="PAGES.dashboard.setHealthStatus('expiring')">
+        <div class="apple-health-card-val">${expiringCount}</div>
+        <div class="apple-caption">ใกล้หมดอายุ (&lt;14วัน)</div>
       </div>
     `;
 
@@ -648,7 +633,7 @@ PAGES['dashboard'] = {
     document.getElementById('db-health-detail-title').textContent = `รายการสินค้าคลังที่อยู่ในสถิติ: ${status === 'safe' ? 'ระดับปกติ' : status === 'lowStock' ? 'สต็อกใกล้หมด' : status === 'outOfStock' ? 'หมดคลัง' : status === 'expired' ? 'หมดอายุ' : 'ใกล้หมดอายุ'} (${items.length} รายการ)`;
 
     if (!items.length) {
-      tbodyEl.innerHTML = `<tr><td colspan="5" class="td-center text-muted">ไม่มีข้อมูลสินค้าในกลุ่มนี้</td></tr>`;
+      tbodyEl.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--apple-ink-muted-80)">ไม่มีข้อมูลสินค้าในกลุ่มนี้</td></tr>`;
       return;
     }
 
@@ -657,23 +642,23 @@ PAGES['dashboard'] = {
 
     tbodyEl.innerHTML = `
       <thead>
-        <tr><th>สินค้า</th><th>หมวดหมู่</th><th>คลัง</th><th class="td-right">จำนวนคงเหลือ</th><th>วันหมดอายุ</th></tr>
+        <tr><th>สินค้า</th><th>หมวดหมู่</th><th>คลัง</th><th style="text-align:right;">จำนวนคงเหลือ</th><th>วันหมดอายุ</th></tr>
       </thead>
       <tbody>
         ${items.map(item => `
           <tr>
             <td>
-              <div style="display:flex; align-items:center; gap:10px;">
-                ${UI.image(item.imageUrl, 'product-img', 'width:36px; height:36px; border-radius:6px; object-fit:cover;')}
+              <div style="display:flex; align-items:center; gap:12px;">
+                ${UI.image(item.imageUrl, 'apple-product-shadow', 'width:44px; height:44px; border-radius:8px; object-fit:cover;')}
                 <div>
-                  <div class="td-bold">${item.name} <small style="font-weight:normal;color:var(--text-secondary)">${item.detailStr || ''}</small></div>
-                  <div style="font-size:0.75rem; color:var(--text-muted);">${item.code}</div>
+                  <div class="apple-body-strong">${item.name} <small style="font-weight:400;color:var(--apple-ink-muted-80)">${item.detailStr || ''}</small></div>
+                  <div class="apple-caption" style="color:var(--apple-ink-muted-80);">${item.code}</div>
                 </div>
               </div>
             </td>
             <td>${item.category}</td>
             <td>${item.whName}</td>
-            <td class="td-right td-bold">${UI.currency(item.qty, 0)} ${item.unit}</td>
+            <td class="apple-body-strong" style="text-align:right;">${UI.currency(item.qty, 0)} ${item.unit}</td>
             <td>${item.expiry}</td>
           </tr>
         `).join('')}
@@ -723,9 +708,9 @@ PAGES['dashboard'] = {
       
       let statusHtml = '';
       if (suggestedOrder > 0) {
-        statusHtml = `<span class="badge badge-red"><span class="material-icons" style="font-size:12px;vertical-align:middle;margin-right:2px">warning</span>ควรสั่งเพิ่ม</span>`;
+        statusHtml = `<span style="color:var(--apple-primary); font-weight:600;"><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px">warning</span>ควรสั่งเพิ่ม</span>`;
       } else {
-        statusHtml = `<span class="badge badge-green"><span class="material-icons" style="font-size:12px;vertical-align:middle;margin-right:2px">check_circle</span>สต็อกพอเพียง</span>`;
+        statusHtml = `<span style="color:var(--apple-ink-muted-80);"><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px">check_circle</span>สต็อกพอเพียง</span>`;
       }
 
       if (sold > 0 || currentStock > 0) {
@@ -745,26 +730,26 @@ PAGES['dashboard'] = {
     recommendations.sort((a,b) => a.productIndex - b.productIndex);
 
     if (!recommendations.length) {
-      tbodyEl.innerHTML = `<tr><td colspan="7" class="td-center text-muted">ไม่มีข้อมูลประวัติขายเพื่อประเมินการพยากรณ์</td></tr>`;
+      tbodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--apple-ink-muted-80)">ไม่มีข้อมูลประวัติขายเพื่อประเมินการพยากรณ์</td></tr>`;
       return;
     }
 
     tbodyEl.innerHTML = recommendations.map(rec => `
-      <tr class="${rec.suggestedOrder > 0 ? 'bg-danger-light' : ''}">
+      <tr>
         <td>
-          <div style="display:flex; align-items:center; gap:10px;">
-            ${UI.image(rec.p.imageUrl, 'product-img', 'width:36px; height:36px; border-radius:6px; object-fit:cover;')}
+          <div style="display:flex; align-items:center; gap:12px;">
+            ${UI.image(rec.p.imageUrl, 'apple-product-shadow', 'width:44px; height:44px; border-radius:8px; object-fit:cover;')}
             <div>
-              <div class="td-bold">${rec.p.name}</div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">${rec.p.code}</div>
+              <div class="apple-body-strong">${rec.p.name}</div>
+              <div class="apple-caption" style="color:var(--apple-ink-muted-80);">${rec.p.code}</div>
             </div>
           </div>
         </td>
         <td>${rec.p.category || '-'}</td>
-        <td class="td-right td-bold">${UI.currency(rec.dailyVelocity, 2)}</td>
-        <td class="td-right">${UI.currency(rec.currentStock, 0)} ${rec.p.unit}</td>
-        <td class="td-right td-bold">${UI.currency(rec.demand7Days, 0)}</td>
-        <td class="td-right td-bold text-danger">${rec.suggestedOrder > 0 ? UI.currency(rec.suggestedOrder, 0) + ' ' + rec.p.unit : '-'}</td>
+        <td class="apple-body-strong" style="text-align:right;">${UI.currency(rec.dailyVelocity, 2)}</td>
+        <td style="text-align:right;">${UI.currency(rec.currentStock, 0)} ${rec.p.unit}</td>
+        <td class="apple-body-strong" style="text-align:right;">${UI.currency(rec.demand7Days, 0)}</td>
+        <td class="apple-body-strong" style="text-align:right; color: ${rec.suggestedOrder > 0 ? 'var(--apple-primary)' : 'inherit'}">${rec.suggestedOrder > 0 ? UI.currency(rec.suggestedOrder, 0) + ' ' + rec.p.unit : '-'}</td>
         <td>${rec.statusHtml}</td>
       </tr>
     `).join('');
