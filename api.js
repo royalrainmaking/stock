@@ -90,7 +90,6 @@ const API = {
   updateReceiveHistory(data) {
     return this._post('updateReceiveHistory', data);
   },
-  scanBill(data) { return this._post('scanBill', data); },
   getMasterData() { return this._call('getMasterData'); },
   requestTransfer(data) { return this._post('requestTransfer', data); },
   getPickingTasks() { return this._call('getPickingTasks'); },

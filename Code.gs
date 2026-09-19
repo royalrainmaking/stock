@@ -30,9 +30,6 @@ function setupPermissions() {
   console.log("✅ ยืนยันสิทธิ์สำเร็จ! ระบบพร้อมใช้งานแล้ว");
 }
 
-// ── Gemini API Key ───────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AQ.Ab8RN6JNA3W-C0UmpDdYu6IG9TPTLTPrnTxlMd5Y';
-
 // Sheet names
 const SN = {
   USERS: 'Users',
@@ -147,7 +144,6 @@ function handleRequest(e) {
       case 'getReceiveHistoryDetail': result = getReceiveHistoryDetail(user, body || e.parameter); break;
       case 'updateReceiveHistory': result = updateReceiveHistory(user, body); break;
       case 'getMovementHistory': result = getMovementHistory(user, body || e.parameter); break;
-      case 'scanBill': result = scanBill(user, body); break;
       case 'getMasterData': result = getMasterData(user); break;
 
       // Billing
@@ -3009,74 +3005,6 @@ function saveCompanyInfo(user, data) {
   const info = { id: 'C1', ...data };
   appendRow(sheet, info);
   return { success: true, companyInfo: info };
-}
-
-// ── Authorization Helper ───────────────────────────────────────────────────
-function askForPermissions() {
-  // ฟังก์ชันนี้มีไว้เพื่อให้ผู้ใช้กด "เรียกใช้" (Run) จากหน้าต่าง Google Apps Script
-  // เพื่อให้ระบบแสดงหน้าต่าง "Review Permissions" สำหรับการใช้ UrlFetchApp
-  try {
-    UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
-    Logger.log('✅ ให้สิทธิ์สำเร็จ! ตอนนี้ระบบสามารถสแกนบิลด้วย Gemini ได้แล้ว');
-  } catch (e) {
-    Logger.log('❌ เกิดข้อผิดพลาด: ' + e.message);
-  }
-}
-
-// ── OCR Scan Bill ──────────────────────────────────────────────────────────
-function scanBill(user, data) {
-  requireRole(user, 'admin', 'stock');
-  if (!data.base64) throw new Error('ไม่พบข้อมูลรูปภาพ');
-
-  try {
-    let b64 = data.base64;
-    let mimeType = data.mimeType || 'image/jpeg';
-    if (b64.indexOf('base64,') > -1) {
-      const parts = b64.split('base64,');
-      mimeType = parts[0].replace('data:', '').replace(';', '');
-      b64 = parts[1];
-    }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`;
-    const payload = {
-      contents: [{
-        parts: [
-          { text: data.prompt },
-          { inline_data: { mime_type: mimeType, data: b64 } }
-        ]
-      }],
-      generationConfig: { 
-        temperature: 0, 
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json"
-      }
-    };
-
-    const options = {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'x-goog-api-key': GEMINI_API_KEY
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-
-    const response = UrlFetchApp.fetch(url, options);
-    const responseCode = response.getResponseCode();
-    const responseText = response.getContentText();
-    
-    if (responseCode !== 200) {
-      throw new Error(`API Error (${responseCode}): ${responseText}`);
-    }
-    
-    const json = JSON.parse(responseText);
-    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    
-    writeLog(user, 'scanBill', 'สแกนบิลรับสินค้าด้วย Gemini AI');
-    return { success: true, text: rawText };
-  } catch (e) {
-    throw new Error('การสแกนบิลล้มเหลว: ' + e.message);
-  }
 }
 
 // ── Batch Master Data ────────────────────────────────────────
