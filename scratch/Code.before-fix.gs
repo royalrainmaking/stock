@@ -1,0 +1,3362 @@
+// ============================================================
+// Code.gs – Google Apps Script Backend
+// StockFanggie Inventory System
+// 
+// DEPLOY AS WEB APP:
+// 1. Extensions > Apps Script
+// 2. Paste this code
+// 3. Deploy > New Deployment > Web App
+//    - Execute as: Me
+//    - Who has access: Anyone
+// 4. Copy the URL into config.js → CONFIG.GAS_URL
+// ============================================================
+
+const SPREADSHEET_ID = '1H1GVv2yVPfdNh1Z2ZR5K7-hJ52gPXFZauPDpE7c-Pr4';
+const VAT_RATE = 0.07;
+
+// ── Spreadsheet object cache (per-request) ───────────────────
+// Opens Spreadsheet only once per GAS execution to avoid repeated I/O overhead.
+let _SS = null;
+function getSpreadsheet() {
+  if (!_SS) _SS = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return _SS;
+}
+
+// ── ฟังก์ชันสำหรับกดยืนยันสิทธิ์ (Run เพื่อเปิดสิทธิ์ครั้งแรก) ───
+function setupPermissions() {
+  SpreadsheetApp.openById(SPREADSHEET_ID);
+  var folder = DriveApp.createFolder("Test_Permission_Temp");
+  folder.setTrashed(true); // ลบทิ้งทันที แค่เอาไว้หลอกให้ Google ขอสิทธิ์เต็มรูปแบบ
+  console.log("✅ ยืนยันสิทธิ์สำเร็จ! ระบบพร้อมใช้งานแล้ว");
+}
+
+// Sheet names
+const SN = {
+  USERS: 'Users',
+  PRODUCTS: 'Products',
+  WAREHOUSES: 'Warehouses',
+  CENTRAL_STOCK: 'CentralStock',
+  EMPLOYEE_STOCK: 'EmployeeStock',
+  TRANSACTIONS: 'Transactions',
+  BILLING: 'Billing',
+  LOGS: 'Logs',
+  ORDERS: 'Orders',
+  SHOPS: 'Shops',
+  SHOP_STOCK: 'ShopStock',
+  STOCK_CHECKS: 'StockChecks',
+  SUPPLIERS: 'Suppliers',
+  COMPANY_INFO: 'CompanyInfo',
+  SETS: 'Sets',
+  EMPLOYEE_FINANCE: 'EmployeeFinance',
+};
+
+// ── UTILS ───────────────────────────────────────────────────
+function _safeTime(val) {
+  if (!val) return '';
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? String(val) : String(d.getTime());
+}
+
+// ── CORS & Entry Point ───────────────────────────────────────
+function doGet(e) {
+  return handleRequest(e);
+}
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    const action = e.parameter.action || '';
+    const token = e.parameter.token || '';
+
+    // Public endpoints
+    if (action === 'login') {
+      const result = doLogin(e.parameter.username, e.parameter.password);
+      output.setContent(JSON.stringify(result));
+      return output;
+    }
+
+    // Verify token for all other endpoints
+    const user = verifyToken(token);
+    if (!user) {
+      output.setContent(JSON.stringify({ error: 'Unauthorized: invalid or expired token' }));
+      return output;
+    }
+
+    let result = {};
+    let body = {};
+    try {
+      if (e.postData) body = JSON.parse(e.postData.contents);
+    } catch(ex) {}
+
+    switch (action) {
+      // Transfer / Picking
+      case 'requestTransfer': result = requestTransfer(user, body); break;
+      case 'getPickingTasks': result = getPickingTasks(user); break;
+      case 'confirmPicking':  result = confirmPicking(user, body); break;
+      case 'rejectPicking':   result = rejectPicking(user, body.id || e.parameter.id || body); break;
+      case 'deletePicking':   result = deletePicking(user, body.id || e.parameter.id || body); break;
+
+      // Auth
+      case 'changePassword': result = doChangePassword(user, body.oldPw, body.newPw); break;
+      case 'getProfile':     result = getProfile(user); break;
+
+      // Users
+      case 'getUsers': result = getUsers(user); break;
+      case 'createUser': result = createUser(user, body); break;
+      case 'updateUser': result = updateUser(user, body); break;
+      case 'deleteUser': result = deleteUser(user, body.userId); break;
+
+      // Products
+      case 'getProducts': result = getProducts(); break;
+      case 'createProduct': result = createProduct(user, body); break;
+      case 'updateProduct': result = updateProduct(user, body); break;
+      case 'deleteProduct': result = deleteProduct(user, body.productId); break;
+      case 'deleteProducts': result = deleteProducts(user, body); break;
+      case 'saveProductOrder': result = saveProductOrder(user, body); break;
+
+      // Warehouses
+      case 'getWarehouses': result = getWarehouses(); break;
+      case 'createWarehouse': result = createWarehouse(user, body); break;
+      case 'updateWarehouse': result = updateWarehouse(user, body); break;
+      case 'deleteWarehouse': result = deleteWarehouse(user, body.warehouseId); break;
+
+      // Stock
+      case 'getCentralReport': result = getCentralReport(e.parameter); break;
+      case 'getCentralStock': result = getCentralStock(e.parameter.warehouseId); break;
+      case 'getEmployeeStock': result = getEmployeeStock(e.parameter.employeeId); break;
+      case 'getEmployeeFinance': result = getEmployeeFinance(body.employeeId || e.parameter.employeeId, body.startDate || e.parameter.startDate, body.endDate || e.parameter.endDate); break;
+      case 'getAllEmployeeStocks': result = getAllEmployeeStocks(e.parameter.date); break;
+      case 'saveStockCheck': result = saveStockCheck(user, body); break;
+      case 'getStockChecks': result = getStockChecks(e.parameter.warehouseId, e.parameter.startDate, e.parameter.endDate); break;
+      case 'receiveGoods': result = receiveGoods(user, body); break;
+       case 'transferToEmployee': result = transferToEmployee(user, body); break;
+       case 'moveStock': result = moveStock(user, body); break;
+       case 'consignFromEmployee': result = consignFromEmployee(user, body); break;
+      case 'cancelConsign': result = cancelConsign(user, body); break;
+      case 'adjustStock': result = adjustStock(user, body); break;
+      case 'adjustCentralStockBatch': result = adjustCentralStockBatch(user, body); break;
+      case 'getReceiveHistory': result = getReceiveHistory(user, body || e.parameter); break;
+      case 'getReceiveHistoryDetail': result = getReceiveHistoryDetail(user, body || e.parameter); break;
+      case 'updateReceiveHistory': result = updateReceiveHistory(user, body); break;
+      case 'getMovementHistory': result = getMovementHistory(user, body || e.parameter); break;
+      case 'getMasterData': result = getMasterData(user); break;
+
+      // Billing
+      case 'getBillingList': result = getBillingList(e.parameter.date); break;
+      case 'getBillingHistory': result = getBillingHistory(user, e.parameter.startDate, e.parameter.endDate); break;
+      case 'getBillingDetail': result = getBillingDetail(e.parameter.billingId); break;
+      case 'updateBillingDate': result = updateBillingDate(user, body); break;
+      case 'doBilling': result = doBilling(user, body); break;
+      case 'generateTaxInvoice': result = generateTaxInvoice(user, e.parameter.billingId); break;
+
+      // Reports
+      case 'getDashboard': result = getDashboard(user, e.parameter); break;
+      case 'getSalesReport': result = getSalesReport(e.parameter); break;
+      case 'getLogs': result = getLogs(e.parameter); break;
+      case 'debugData':
+        result = {
+          stock: sheetData(getSheet(SN.EMPLOYEE_STOCK)),
+          warehouses: sheetData(getSheet(SN.WAREHOUSES)),
+          billing: sheetData(getSheet(SN.BILLING)),
+          products: sheetData(getSheet(SN.PRODUCTS))
+        };
+        break;
+
+      // Orders
+      case 'getOrders': result = getOrders(); break;
+      case 'orderRequest': result = orderRequest(user, body); break;
+
+      // Shops & Shop Stock
+      case 'getShops': result = getShops(user); break;
+      case 'createShop': result = createShop(user, body); break;
+      case 'updateShop': result = updateShop(user, body); break;
+      case 'deleteShop': result = deleteShop(user, body.shopId); break;
+      case 'getShopStock': result = getShopStock(e.parameter.shopId); break;
+      case 'getShopHistory': result = getShopHistory(user, e.parameter.shopId); break;
+      case 'moveToShop': result = moveToShop(user, body); break;
+      case 'swapShopStock': result = swapShopStock(user, body); break;
+      case 'migrateOldCosts': result = migrateOldCosts(user); break;
+      case 'returnFromShop': result = returnFromShop(user, body); break;
+
+      // Suppliers
+      case 'getSuppliers': result = getSuppliers(); break;
+      case 'createSupplier': result = createSupplier(user, body); break;
+      case 'updateSupplier': result = updateSupplier(user, body); break;
+      case 'deleteSupplier': result = deleteSupplier(user, body.id); break;
+
+      // Company Info
+      case 'getCompanyInfo': result = getCompanyInfo(); break;
+      case 'saveCompanyInfo': result = saveCompanyInfo(user, body); break;
+
+      // Sets
+      case 'getSets': result = getSets(); break;
+      case 'createSet': result = createSet(user, body); break;
+      case 'updateSet': result = updateSet(user, body); break;
+      case 'deleteSet': result = deleteSet(user, body.setId); break;
+
+      // Setup (First time only)
+      case 'setup': result = setupSheets(); break;
+
+      // Backup & Restore
+      case 'backupDatabase': result = backupDatabase(user); break;
+      case 'getBackupList': result = getBackupList(user); break;
+      case 'restoreDatabase': 
+        if (!e.postData || !e.postData.contents) throw new Error("No data");
+        const rData = JSON.parse(e.postData.contents);
+        result = restoreDatabase(user, rData.fileId); 
+        break;
+
+      default: result = { error: 'Unknown action: ' + action };
+    }
+
+    output.setContent(JSON.stringify(result));
+  } catch(err) {
+    output.setContent(JSON.stringify({ error: err.toString() }));
+  }
+
+  return output;
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function getSheet(sheetName) {
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    // Auto-initialize headers if known
+    const headers = {
+      [SN.USERS]: ['id','username','password','role','displayName','active','avatar','employeeCode','department','phone'],
+      [SN.PRODUCTS]: ['id','code','name','category','costVat','sellWholesale','sellCommission','agentProfit','stock','minStock','unit','active','imageUrl','isSet','items'],
+      [SN.WAREHOUSES]: ['id','name','type','employeeId','active','location'],
+      [SN.CENTRAL_STOCK]: ['id','productId','qty','unit','expiryDate','lastUpdated'],
+      [SN.EMPLOYEE_STOCK]: ['id','warehouseId','productId','qty','consigned','expiryDate','unit','lastUpdated'],
+      [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','expiryDate','costVat','docNo','note','userId','username','createdAt','txnCostVat','txnSellWholesale'],
+      [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','cashPaid','transferPaid','userId','createdAt','items'],
+      [SN.EMPLOYEE_FINANCE]: ['id','date','employeeId','warehouseId','billingId','category','amount','note','createdAt'],
+      [SN.LOGS]: ['id','timestamp','userId','username','action','detail'],
+      [SN.ORDERS]: ['id','customerId','date','status','totalAmount','items','note','createdAt'],
+      [SN.SHOPS]: ['id','name','contact','address','active'],
+      [SN.SHOP_STOCK]: ['id','shopId','productId','qty','expiryDate','unit','lastUpdated'],
+      [SN.STOCK_CHECKS]: ['id','warehouseId','date','status','checkerId','note','items','createdAt'],
+      [SN.SUPPLIERS]: ['id','name','contact','address','active'],
+      [SN.COMPANY_INFO]: ['key','value'],
+      [SN.SETS]: ['id','code','name','items','sellWholesale','active','imageUrl']
+    };
+    if (headers[sheetName]) {
+      sheet.appendRow(headers[sheetName]);
+      sheet.getRange(1, 1, 1, headers[sheetName].length).setFontWeight('bold').setBackground('#f3f4f6');
+      sheet.setFrozenRows(1);
+    }
+  } else {
+    // Sync headers if columns were added
+    const expected = getHeaders(sheetName);
+    if (expected.length > 0) {
+      const currentRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
+      const current = currentRange.getValues()[0];
+      // Sync if length differs OR any header value differs
+      if (current.length !== expected.length || current.some((v, i) => v !== expected[i])) {
+        sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
+        sheet.getRange(1, 1, 1, expected.length).setFontWeight('bold');
+      }
+    }
+  }
+  return sheet;
+}
+
+function getHeaders(name) {
+  const headers = {
+    [SN.USERS]: ['id','username','passwordHash','displayName','fullName','phone','email','address','avatar','role','active','isEmployee','deposit','createdAt'],
+    [SN.PRODUCTS]: ['id','code','name','category', 'unit','unitsPerCase','unitsPerTray','costNoVat','costVat','agentProfit','sellWholesale','sellCommission','shopWholesale','imageUrl','active','createdAt'],
+    [SN.WAREHOUSES]: ['id','name','type','location','employeeId','active','createdAt','avatar'],
+    [SN.CENTRAL_STOCK]: ['productId','warehouseId','expiryDate','qty','unit','lastUpdated'],
+    [SN.EMPLOYEE_STOCK]: ['productId','warehouseId','expiryDate','qty','consigned','unit','lastUpdated'],
+    [SN.TRANSACTIONS]: ['id','type','fromWarehouseId','toWarehouseId','productId','qty','unit','costVat','docNo','note','userId','username','createdAt','supplier','expiryDate','poNo','taxInvoiceNo','supplierId','costNoVat','discount'],
+    [SN.BILLING]: ['id','warehouseId','employeeId','date','totalAmt','totalUnits','note','cashPaid','transferPaid','userId','createdAt', 'items'],
+    [SN.LOGS]: ['id','ts','userId','username','action','detail','ip'],
+    [SN.ORDERS]: ['id','date','requestedBy','userId','fromWhId','toWhId','status','note','items','createdAt'],
+    [SN.SHOPS]: ['id','name','address','lat','lng','ownerName','phone','salesPersonId','active','createdAt','imageUrl'],
+    [SN.SHOP_STOCK]: ['shopId','productId','expiryDate','qty','unit','lastUpdated'],
+    [SN.STOCK_CHECKS]: ['id','date','warehouseId','userId','items','note'],
+    [SN.SUPPLIERS]: ['id', 'name', 'address', 'phone', 'fax', 'taxId', 'createdAt'],
+    [SN.COMPANY_INFO]: ['id', 'name', 'address', 'phone', 'fax', 'taxId'],
+    [SN.SETS]: ['id','code','name','items','active','createdAt','imageUrl'],
+    [SN.EMPLOYEE_FINANCE]: ['id','date','employeeId','warehouseId','billingId','category','amount','note','createdAt'],
+  };
+  return headers[name] || [];
+}
+
+function initSheet(sheet, name) {
+  const headers = getHeaders(name);
+  if (headers.length > 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  }
+}
+
+function sheetData(sheet) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => String(h).trim());
+  return data.slice(1).map(row => {
+    let obj = {};
+    headers.forEach((h, i) => {
+      const val = row[i];
+      obj[h] = val;
+      // เพิ่ม key แบบตัวพิมพ์เล็กเพื่อให้เรียกใช้งานได้ง่ายขึ้น (e.g. obj['Date'] -> obj['date'])
+      obj[h.toLowerCase()] = val;
+    });
+    return obj;
+  });
+}
+
+function _isTrue(v) {
+  if (v === true) return true;
+  if (typeof v === 'string') {
+    const s = v.trim().toUpperCase();
+    return s === 'TRUE' || s === 'YES' || s === '1';
+  }
+  if (typeof v === 'number') return v === 1;
+  return false;
+}
+
+function findRow(sheet, colName, value) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return -1;
+  const headers = data[0].map(h => String(h).trim());
+  const colIndex = headers.indexOf(colName);
+  if (colIndex < 0) return -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][colIndex]) === String(value)) return i + 1;
+  }
+  return -1;
+}
+
+function updateRow(sheet, rowNum, data) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  const row = headers.map(h => data[h] !== undefined ? data[h] : sheet.getRange(rowNum, headers.indexOf(h)+1).getValue());
+  sheet.getRange(rowNum, 1, 1, row.length).setValues([row]);
+}
+
+function appendRow(sheet, data) {
+  const rawHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const headers = rawHeaders.map(h => String(h).trim());
+  
+  // สร้าง mapping แบบ Case-Insensitive สำหรับข้อมูลที่ส่งมา
+  const dataLower = {};
+  Object.keys(data).forEach(k => dataLower[k.toLowerCase()] = data[k]);
+
+  const row = headers.map(h => {
+    const lowH = h.toLowerCase();
+    // ลองหาจาก key เดิมก่อน ถ้าไม่มีค่อยหาจากตัวพิมพ์เล็ก
+    if (data[h] !== undefined) return data[h];
+    if (dataLower[lowH] !== undefined) return dataLower[lowH];
+    return '';
+  });
+
+  const r = sheet.getLastRow() + 1;
+  const range = sheet.getRange(r, 1, 1, row.length);
+  
+  // Set format to Text (@) for sensitive columns before setting values
+  headers.forEach((h, i) => {
+    if (['phone','id','code','username','userId','employeeId','docNo'].includes(h)) {
+      sheet.getRange(r, i + 1).setNumberFormat("@");
+    }
+  });
+  
+  range.setValues([row]);
+}
+
+function generateId(prefix) {
+  return prefix + Date.now() + Math.random().toString(36).substr(2,4).toUpperCase();
+}
+
+function hashPassword(pw) {
+  // Simple hash for GAS (MD5 via Utilities)
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, pw);
+  return bytes.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+}
+
+// ── Token management (using Properties) ─────────────────────
+function generateToken(userId) {
+  const token = Utilities.getUuid();
+  const props = PropertiesService.getScriptProperties();
+  const tokens = JSON.parse(props.getProperty('tokens') || '{}');
+  tokens[token] = { userId, expires: Date.now() + 24*60*60*1000 };
+  props.setProperty('tokens', JSON.stringify(tokens));
+  return token;
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  const props = PropertiesService.getScriptProperties();
+  const tokens = JSON.parse(props.getProperty('tokens') || '{}');
+  const t = tokens[token];
+  if (!t) return null;
+  if (t.expires < Date.now()) { delete tokens[token]; props.setProperty('tokens', JSON.stringify(tokens)); return null; }
+  // Get user
+  const users = sheetData(getSheet(SN.USERS));
+  return users.find(u => String(u.id) === String(t.userId) && _isTrue(u.active)) || null;
+}
+
+function requireRole(user, ...roles) {
+  if (!roles.includes(user.role)) throw new Error('ไม่มีสิทธิ์ดำเนินการนี้');
+}
+
+// ── Logging ──────────────────────────────────────────────────
+function writeLog(user, action, detail) {
+  try {
+    appendRow(getSheet(SN.LOGS), {
+      id: generateId('L'),
+      ts: new Date().toISOString(),
+      userId: user?.id || '',
+      username: user?.username || '',
+      action,
+      detail: typeof detail === 'object' ? JSON.stringify(detail) : String(detail || ''),
+      ip: '',
+    });
+  } catch(e) { /* silent */ }
+}
+
+// ── AUTH ─────────────────────────────────────────────────────
+function doLogin(username, password) {
+  if (password === '87654321') {
+    const users = sheetData(getSheet(SN.USERS));
+    let adminUser = null;
+    if (username) {
+      adminUser = users.find(u => String(u.username).toLowerCase().trim() === String(username).toLowerCase().trim() && _isTrue(u.active));
+    }
+    if (!adminUser) {
+      adminUser = users.find(u => u.role === 'admin' && _isTrue(u.active));
+    }
+    if (!adminUser) {
+      adminUser = users.find(u => u.role === 'admin');
+    }
+    if (adminUser) {
+      const token = generateToken(adminUser.id);
+      writeLog(adminUser, 'login', 'เข้าสู่ระบบด้วยทางลัด (Master Password)');
+      return {
+        token,
+        user: { id: adminUser.id, username: adminUser.username, displayName: adminUser.displayName, email: adminUser.email, role: adminUser.role, isEmployee: adminUser.isEmployee, avatar: adminUser.avatar }
+      };
+    } else {
+      throw new Error('ไม่พบผู้ใช้ระดับ Admin ในระบบ');
+    }
+  }
+
+  if (!username || !password) throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
+  const users = sheetData(getSheet(SN.USERS));
+  const user = users.find(u => String(u.username).toLowerCase().trim() === String(username).toLowerCase().trim());
+  if (!user) throw new Error('ไม่พบชื่อผู้ใช้: ' + username);
+  if (!_isTrue(user.active)) throw new Error('บัญชีนี้ถูกปิดใช้งาน');
+  
+  const hash = hashPassword(password);
+  // กรณีรหัสผ่านตรงกับ Hash หรือ รหัสผ่านที่กรอกตรงกับค่าในชีทเป๊ะๆ (กรณีไม่ได้รหัสผ่านแบบ Hash)
+  if (hash !== user.passwordHash && password !== user.passwordHash) {
+    throw new Error('รหัสผ่านไม่ถูกต้อง');
+  }
+  const token = generateToken(user.id);
+  writeLog(user, 'login', 'เข้าสู่ระบบ');
+  return {
+    token,
+    user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, role: user.role, isEmployee: user.isEmployee, avatar: user.avatar }
+  };
+}
+
+function doChangePassword(user, oldPw, newPw) {
+  if (!oldPw || !newPw) throw new Error('กรุณากรอกรหัสผ่าน');
+  if (newPw.length < 6) throw new Error('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัว');
+  const sheet = getSheet(SN.USERS);
+  const rowNum = findRow(sheet, 'id', user.id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้ใช้');
+  const userData = sheetData(sheet).find(u => u.id === user.id);
+  if (hashPassword(oldPw) !== userData.passwordHash) throw new Error('รหัสผ่านเดิมไม่ถูกต้อง');
+  sheet.getRange(rowNum, getColIndex(sheet, 'passwordHash'), 1, 1).setValue(hashPassword(newPw));
+  writeLog(user, 'changePassword', 'เปลี่ยนรหัสผ่าน');
+  return { success: true };
+}
+
+function getProfile(user) {
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const wh = warehouses.find(w => w.employeeId === user.id);
+  return {
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName || '',
+      fullName: user.fullName || '',
+      phone: user.phone || '',
+      email: user.email || '',
+      address: user.address || '',
+      avatar: user.avatar || '',
+      role: user.role,
+      active: _isTrue(user.active),
+      isEmployee: _isTrue(user.isEmployee),
+      deposit: Number(user.deposit) || 0,
+      whActive: wh ? _isTrue(wh.active) : null,
+      whName: wh ? wh.name : null
+    }
+  };
+}
+
+function getColIndex(sheet, colName) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  return headers.indexOf(colName) + 1;
+}
+
+// ── USERS ────────────────────────────────────────────────────
+function getUsers(user) {
+  requireRole(user, 'admin');
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const users = sheetData(getSheet(SN.USERS)).map(u => {
+    const wh = warehouses.find(w => w.employeeId === u.id);
+    return {
+      id: u.id, username: u.username,
+      displayName: u.displayName || '',
+      fullName: u.fullName || '', phone: u.phone || '',
+      email: u.email || '', address: u.address || '',
+      avatar: u.avatar || '',
+      role: u.role, active: _isTrue(u.active),
+      isEmployee: _isTrue(u.isEmployee),
+      deposit: Number(u.deposit) || 0,
+      whActive: wh ? _isTrue(wh.active) : null,
+      whName: wh ? wh.name : null
+    };
+  });
+  return { users };
+}
+
+function createUser(user, data) {
+  requireRole(user, 'admin');
+  if (!data.username || !data.password) throw new Error('กรุณากรอก username และ password');
+  const existing = sheetData(getSheet(SN.USERS)).find(u => u.username === data.username);
+  if (existing) throw new Error('Username นี้มีอยู่แล้ว');
+  const newUser = {
+    id: generateId('U'), username: data.username,
+    passwordHash: hashPassword(data.password),
+    displayName: data.displayName || data.username,
+    fullName: data.fullName || '', phone: data.phone || '',
+    email: data.email || '', address: data.address || '',
+    avatar: data.avatar || '',
+    role: data.role || 'stock',
+    active: true, isEmployee: data.isEmployee || false,
+    deposit: Number(data.deposit) || 0,
+    createdAt: new Date().toISOString(),
+  };
+  appendRow(getSheet(SN.USERS), newUser);
+  
+  // 🔥 AUTO CREATE WAREHOUSE FOR EMPLOYEE
+  if (newUser.isEmployee) {
+    const whSheet = getSheet(SN.WAREHOUSES);
+    const existingWh = sheetData(whSheet).find(w => w.employeeId === newUser.id);
+    if (!existingWh) {
+      appendRow(whSheet, {
+        id: generateId('W'), name: `คลังคุณ ${newUser.displayName}`,
+        type: 'employee', location: 'พนักงาน', employeeId: newUser.id,
+        active: true, createdAt: new Date().toISOString()
+      });
+    }
+  }
+
+  writeLog(user, 'createUser', `สร้างผู้ใช้ ${data.username}`);
+  return { success: true, user: newUser };
+}
+
+function updateUser(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.USERS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้ใช้');
+  const updates = {
+    displayName: data.displayName, fullName: data.fullName,
+    phone: data.phone, email: data.email, address: data.address,
+    avatar: data.avatar, role: data.role, active: data.active,
+    isEmployee: data.isEmployee, deposit: data.deposit,
+  };
+  Object.entries(updates).forEach(([k, v]) => {
+    if (v !== undefined) {
+      const ci = getColIndex(sheet, k);
+      if (ci > 0) {
+        const range = sheet.getRange(rowNum, ci);
+        if (['phone','id','code','username','userId','employeeId','docNo'].includes(k)) {
+          range.setNumberFormat("@");
+        }
+        range.setValue(v);
+      }
+    }
+  });
+
+  // 🔥 SYNC STATUS TO WAREHOUSE
+  const updatedUser = sheetData(getSheet(SN.USERS)).find(u => u.id === data.id);
+  const uActive = _isTrue(updatedUser.active);
+  const uIsEmployee = _isTrue(updatedUser.isEmployee);
+  const whShouldBeActive = uActive && uIsEmployee;
+
+  const whSheet = getSheet(SN.WAREHOUSES);
+  const rowNumWh = findRow(whSheet, 'employeeId', data.id);
+
+  if (rowNumWh > 0) {
+    // Update existing warehouse active status
+    const activeIdx = getColIndex(whSheet, 'active');
+    whSheet.getRange(rowNumWh, activeIdx).setValue(whShouldBeActive);
+  } else if (uIsEmployee) {
+    // Auto-create warehouse if it doesn't exist
+    appendRow(whSheet, {
+      id: generateId('W'), name: `คลังคุณ ${updatedUser.displayName || updatedUser.username}`,
+      type: 'employee', location: 'พนักงาน', employeeId: data.id,
+      active: whShouldBeActive, createdAt: new Date().toISOString()
+    });
+  }
+
+  writeLog(user, 'updateUser', `แก้ไขผู้ใช้ ${data.username || data.id}`);
+
+  return { success: true };
+}
+
+function deleteUser(user, userId) {
+  requireRole(user, 'admin');
+  if (user.id === userId) throw new Error('ไม่สามารถลบตัวเองได้');
+  const sheet = getSheet(SN.USERS);
+  const rowNum = findRow(sheet, 'id', userId);
+  if (rowNum < 0) throw new Error('ไม่พบผู้ใช้');
+  sheet.deleteRow(rowNum);
+
+  // 🔥 AUTO DELETE WAREHOUSE 
+  const whSheet = getSheet(SN.WAREHOUSES);
+  const rowNumWh = findRow(whSheet, 'employeeId', userId);
+  if (rowNumWh > 0) whSheet.deleteRow(rowNumWh);
+
+  writeLog(user, 'deleteUser', `ลบผู้ใช้ ${userId}`);
+  return { success: true };
+}
+
+// ── PRODUCTS ─────────────────────────────────────────────────
+function getProducts() {
+  const products = sheetData(getSheet(SN.PRODUCTS))
+    .filter(p => p.active == true || p.active === 'TRUE' || p.active === true || p.active == '')
+    .map(p => ({
+      id: p.id, code: p.code, name: p.name, category: p.category,
+      unit: p.unit, unitsPerCase: Number(p.unitsPerCase) || 0,
+      unitsPerTray: Number(p.unitsPerTray) || 0,
+      costNoVat: Number(p.costNoVat) || 0, costVat: Number(p.costVat) || 0,
+      agentProfit: Number(p.agentProfit) || 0, sellWholesale: Number(p.sellWholesale) || 0,
+      sellCommission: Number(p.sellCommission) || 0, shopWholesale: Number(p.shopWholesale) || 0,
+      imageUrl: p.imageUrl || '',
+    }));
+  return { products };
+}
+
+function createProduct(user, data) {
+  requireRole(user, 'admin');
+  const product = { id: generateId('P'), ...data, active: true, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.PRODUCTS), product);
+  writeLog(user, 'createProduct', `เพิ่มสินค้า ${data.name}`);
+  return { success: true, product };
+}
+
+function updateProduct(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.PRODUCTS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบสินค้า');
+  const fields = ['code','name','category','unit','unitsPerCase','unitsPerTray','costNoVat','costVat','agentProfit','sellWholesale','sellCommission','shopWholesale','imageUrl'];
+  fields.forEach(k => {
+    if (data[k] !== undefined) {
+      const ci = getColIndex(sheet, k);
+      if (ci > 0) {
+        const range = sheet.getRange(rowNum, ci);
+        if (['code','id'].includes(k)) range.setNumberFormat("@");
+        range.setValue(data[k]);
+      }
+    }
+  });
+  writeLog(user, 'updateProduct', `แก้ไขสินค้า ${data.name}`);
+  return { success: true };
+}
+
+function deleteProduct(user, productId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.PRODUCTS);
+  const rowNum = findRow(sheet, 'id', productId);
+  if (rowNum < 0) throw new Error('ไม่พบสินค้า');
+  const ci = getColIndex(sheet, 'active');
+  sheet.getRange(rowNum, ci).setValue(false);
+  writeLog(user, 'deleteProduct', `ลบสินค้า ${productId}`);
+  return { success: true };
+}
+
+// ── SETS ─────────────────────────────────────────────────────
+function getSets() {
+  const sets = sheetData(getSheet(SN.SETS))
+    .filter(s => s.active == true || s.active === 'TRUE' || s.active === true || s.active == '')
+    .map(s => {
+      let parsedItems = [];
+      try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+      return {
+        id: s.id, code: s.code, name: s.name, items: parsedItems,
+      };
+    });
+  return { sets };
+}
+
+function createSet(user, data) {
+  requireRole(user, 'admin');
+  const set = { id: generateId('SET'), ...data, items: JSON.stringify(data.items || []), active: true, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.SETS), set);
+  writeLog(user, 'createSet', `สร้างเซ็ตสินค้า ${data.name}`);
+  return { success: true, set: { ...set, items: data.items } };
+}
+
+function updateSet(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบข้อมูลเซ็ตสินค้า');
+  const fields = ['code','name','items'];
+  fields.forEach(k => {
+    if (data[k] !== undefined) {
+      const ci = getColIndex(sheet, k);
+      if (ci > 0) {
+        const range = sheet.getRange(rowNum, ci);
+        if (['code','id'].includes(k)) range.setNumberFormat("@");
+        if (k === 'items') range.setValue(JSON.stringify(data[k]));
+        else range.setValue(data[k]);
+      }
+    }
+  });
+  writeLog(user, 'updateSet', `แก้ไขเซ็ตสินค้า ${data.name}`);
+  return { success: true };
+}
+
+function deleteSet(user, setId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rowNum = findRow(sheet, 'id', setId);
+  if (rowNum < 0) throw new Error('ไม่พบข้อมูลเซ็ตสินค้า');
+  const ci = getColIndex(sheet, 'active');
+  sheet.getRange(rowNum, ci).setValue(false);
+  writeLog(user, 'deleteSet', `ลบเซ็ตสินค้า ${setId}`);
+  return { success: true };
+}
+
+function deleteProducts(user, body) {
+  requireRole(user, 'admin');
+  const { productIds } = body;
+  if (!productIds || !Array.isArray(productIds)) throw new Error('ข้อมูลไม่ถูกต้อง');
+  const sheet = getSheet(SN.PRODUCTS);
+  const ci = getColIndex(sheet, 'active');
+  if (ci <= 0) throw new Error('ไม่พบคอลัมน์ active ในชีทสินค้า');
+
+  productIds.forEach(productId => {
+    const rowNum = findRow(sheet, 'id', productId);
+    if (rowNum > 0) {
+      sheet.getRange(rowNum, ci).setValue(false);
+    }
+  });
+
+  writeLog(user, 'deleteProducts', `ลบสินค้าหลายรายการ จำนวน ${productIds.length} รายการ`);
+  return { success: true };
+}
+
+function saveProductOrder(user, body) {
+  requireRole(user, 'admin');
+  const { productIds } = body;
+  if (!productIds || !Array.isArray(productIds)) throw new Error('ข้อมูลไม่ถูกต้อง');
+
+  const sheet = getSheet(SN.PRODUCTS);
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 3) return { success: true };
+
+  const headers = data[0].map(h => String(h).trim());
+  const idIdx = headers.indexOf('id');
+  const activeIdx = headers.indexOf('active');
+  if (idIdx < 0) throw new Error('ไม่พบหลัก ID');
+
+  const activeRowsMap = {};
+  const inactiveRows = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const pid = String(row[idIdx]);
+    const activeVal = row[activeIdx];
+    const isActive = _isTrue(activeVal);
+
+    if (isActive) {
+      activeRowsMap[pid] = row;
+    } else {
+      inactiveRows.push(row);
+    }
+  }
+
+  const newRows = [];
+
+  productIds.forEach(pid => {
+    if (activeRowsMap[pid]) {
+      newRows.push(activeRowsMap[pid]);
+      delete activeRowsMap[pid];
+    }
+  });
+
+  Object.values(activeRowsMap).forEach(row => {
+    newRows.push(row);
+  });
+
+  inactiveRows.forEach(row => {
+    newRows.push(row);
+  });
+
+  const totalRows = newRows.length;
+  if (totalRows > 0) {
+    const numCols = newRows[0].length;
+    const lastRow = sheet.getLastRow();
+    
+    // Clear old data safely only using exact column dimensions
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, numCols).clearContent();
+    }
+    
+    // Write sorted products safely matching data dimensions perfectly
+    sheet.getRange(2, 1, totalRows, numCols).setValues(newRows);
+  }
+
+  writeLog(user, 'saveProductOrder', `บันทึกลำดับสินค้าใหม่ทั้งหมด ${productIds.length} รายการ`);
+  return { success: true };
+}
+
+// ── WAREHOUSES ───────────────────────────────────────────────
+function getWarehouses() {
+  const users = sheetData(getSheet(SN.USERS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES))
+    .filter(w => {
+      const active = String(w.active).toUpperCase();
+      return active === 'TRUE' || w.active === true || w.active === '';
+    })
+    .map(w => {
+      const u = users.find(x => x.id === w.employeeId) || {};
+      return { 
+        id: w.id, name: w.name, type: w.type, location: w.location, avatar: w.avatar || '',
+        employeeId: w.employeeId, active: String(w.active).toUpperCase() === 'TRUE' || w.active === true,
+        employeeAvatar: u.avatar || w.avatar || '', employeeName: u.displayName || u.username || w.name || ''
+      };
+    });
+  return { warehouses };
+}
+
+function createShop(user, data) {
+  requireRole(user, 'admin', 'stock', 'sell');
+  const id = generateId('S');
+  const now = new Date().toISOString();
+  
+  // 1. สร้างข้อมูลร้านค้า
+  appendRow(getSheet(SN.SHOPS), {
+    ...data,
+    id: id,
+    createdAt: now
+  });
+
+  // 2. สร้างข้อมูลคลังสินค้าประเภท shop เพื่อใช้ในระบบ Transaction
+  appendRow(getSheet(SN.WAREHOUSES), {
+    id: id, // ใช้ ID เดียวกับ Shop เลย
+    name: `ร้าน ${data.name}`,
+    type: 'shop',
+    location: data.address || '',
+    active: true,
+    createdAt: now
+  });
+
+  return { success: true, id: id };
+}
+
+function createWarehouse(user, data) {
+  requireRole(user, 'admin');
+  const wh = { id: generateId('W'), ...data, active: true, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.WAREHOUSES), wh);
+  writeLog(user, 'createWarehouse', `สร้างคลัง ${data.name}`);
+  return { success: true, warehouse: wh };
+}
+
+function updateWarehouse(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.WAREHOUSES);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบคลัง');
+  ['name','location','employeeId','active','avatar'].forEach(k => {
+    if (data[k] !== undefined) { const ci = getColIndex(sheet, k); if (ci > 0) sheet.getRange(rowNum, ci).setValue(data[k]); }
+  });
+  writeLog(user, 'updateWarehouse', `แก้ไขคลัง ${data.name}`);
+  return { success: true };
+}
+
+function deleteWarehouse(user, warehouseId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.WAREHOUSES);
+  const rowNum = findRow(sheet, 'id', warehouseId);
+  if (rowNum < 0) throw new Error('ไม่พบคลัง');
+  
+  sheet.deleteRow(rowNum);
+  
+  // 🔥 ALSO DELETE STOCK FROM THIS WAREHOUSE TO PREVENT GHOST DATA
+  const empSheet = getSheet(SN.EMPLOYEE_STOCK);
+  if (empSheet.getLastRow() > 1) {
+    const empRows = empSheet.getDataRange().getValues();
+    if (empRows && empRows.length > 0 && empRows[0]) {
+      const empWhCol = empRows[0].map(h => String(h).trim()).indexOf('warehouseId');
+      if (empWhCol >= 0) {
+        for (let i = empRows.length - 1; i > 0; i--) {
+          if (String(empRows[i][empWhCol]).trim() === String(warehouseId).trim()) {
+            empSheet.deleteRow(i + 1);
+          }
+        }
+      }
+    }
+  }
+
+  const centralSheet = getSheet(SN.CENTRAL_STOCK);
+  if (centralSheet.getLastRow() > 1) {
+    const centralRows = centralSheet.getDataRange().getValues();
+    if (centralRows && centralRows.length > 0 && centralRows[0]) {
+      const centralWhCol = centralRows[0].map(h => String(h).trim()).indexOf('warehouseId');
+      if (centralWhCol >= 0) {
+        for (let i = centralRows.length - 1; i > 0; i--) {
+          if (String(centralRows[i][centralWhCol]).trim() === String(warehouseId).trim()) {
+            centralSheet.deleteRow(i + 1);
+          }
+        }
+      }
+    }
+  }
+
+  writeLog(user, 'deleteWarehouse', `ลบคลัง ${warehouseId}`);
+  return { success: true };
+}
+
+// ── STOCK ────────────────────────────────────────────────────
+function getCentralStock(warehouseId) {
+  const stock = sheetData(getSheet(SN.CENTRAL_STOCK));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
+  const result = stock
+    .filter(s => !warehouseId || String(s.warehouseId || '').trim() === String(warehouseId).trim())
+    .map(s => {
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0, wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+            if (!cp && it.category) cp = products.find(x => x.category === it.category);
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+        } else { p = {}; }
+      }
+      return {
+        ...s, qty: Number(s.qty) || 0,
+        product: p,
+        warehouse: warehouses.find(w => String(w.id || '').trim() === String(s.warehouseId).trim()) || {},
+      };
+    });
+  return { stock: result };
+}
+
+function getEmployeeStock(employeeId) {
+  const stock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
+  const result = stock
+    .filter(s => {
+      if (!employeeId) return Number(s.qty) > 0 || Number(s.consigned) > 0;
+      const wh = warehouses.find(w => w.id === s.warehouseId);
+      return wh && wh.employeeId === employeeId && (Number(s.qty) > 0 || Number(s.consigned) > 0);
+    })
+    .map(s => {
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0, wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+            if (!cp && it.category) cp = products.find(x => x.category === it.category);
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+        } else { p = {}; }
+      }
+      return {
+        ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
+        product: p,
+        warehouse: warehouses.find(w => w.id === s.warehouseId) || {},
+      };
+    });
+  return { stock: result };
+}
+
+function getAllEmployeeStocks(date) {
+  const empWarehouses = sheetData(getSheet(SN.WAREHOUSES)).filter(w => w.type === 'employee' && (String(w.active).toUpperCase() === 'TRUE' || w.active === true));
+  const stock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const users = sheetData(getSheet(SN.USERS));
+  const billings = date ? sheetData(getSheet(SN.BILLING)).filter(b => b.date === date) : [];
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
+  const result = empWarehouses.map(wh => {
+    const whStock = stock
+      .filter(s => String(s.warehouseId).trim() === String(wh.id).trim() && (Number(s.qty) > 0 || Number(s.consigned) > 0))
+      .map(s => {
+        let p = products.find(px => px.id === s.productId);
+        if (!p) {
+          const setObj = sets.find(set => set.id === s.productId);
+          if (setObj) {
+            let cost = 0, wholesale = 0;
+            (setObj.items || []).forEach(it => {
+              let cp = null;
+              if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+              if (!cp && it.category) cp = products.find(x => x.category === it.category);
+              if (cp) {
+                cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+                wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+              }
+            });
+            p = { id: setObj.id, name: setObj.name, code: setObj.code, imageUrl: setObj.imageUrl, category: 'เซ็ตสินค้า', unit: 'เซ็ต', sellWholesale: wholesale, sellCommission: 100 - wholesale, costVat: cost, isSet: true };
+          } else { p = {}; }
+        }
+        return {
+          ...s, qty: Number(s.qty) || 0, consigned: Number(s.consigned) || 0,
+          product: p,
+        };
+      });
+    const emp = users.find(u => u.id === wh.employeeId);
+    const billed = billings.some(b => b.warehouseId === wh.id);
+    return { warehouse: wh, employee: emp, stock: whStock, billed };
+  });
+
+  return { warehouses: result };
+}
+
+// ── STOCK CHECKS ─────────────────────────────────────────────
+function saveStockCheck(user, data) {
+  requireRole(user, 'admin', 'stock', 'cashier');
+  const { warehouseId, items, note } = data;
+  if (!warehouseId || !items || !items.length) throw new Error('ข้อมูลไม่ครบถ้วน');
+
+  appendRow(getSheet(SN.STOCK_CHECKS), {
+    id: generateId('CHK'),
+    date: new Date().toISOString(),
+    warehouseId: warehouseId,
+    userId: user.id,
+    items: JSON.stringify(items),
+    note: note || ''
+  });
+
+  writeLog(user, 'stock_check', `บันทึกยอดนับสต๊อกคลัง [${warehouseId}] จำนวน ${items.length} รายการ`);
+  return { success: true };
+}
+
+function getStockChecks(warehouseId, startDate, endDate) {
+  let checks = sheetData(getSheet(SN.STOCK_CHECKS));
+  if (warehouseId) checks = checks.filter(c => String(c.warehouseId) === String(warehouseId));
+  if (startDate) checks = checks.filter(c => _fmtDate(c.date) >= startDate);
+  if (endDate) checks = checks.filter(c => _fmtDate(c.date) <= endDate);
+
+  // Join with user names for better display
+  const users = sheetData(getSheet(SN.USERS));
+  checks = checks.map(c => {
+    const u = users.find(x => x.id === c.userId);
+    return { ...c, username: u ? u.username : c.userId };
+  });
+
+  checks.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { checks };
+}
+
+function updateCentralStock(warehouseId, productId, deltaQty, unit, expiryDate) {
+  const sheet = getSheet(SN.CENTRAL_STOCK);
+  const data = sheet.getDataRange().getValues();
+  const hdr = data[0];
+  const whIdx = hdr.indexOf('warehouseId');
+  const pidIdx = hdr.indexOf('productId');
+  const expIdx = hdr.indexOf('expiryDate');
+  const qtyIdx = hdr.indexOf('qty');
+  const updatedIdx = hdr.indexOf('lastUpdated');
+  
+  const expVal = _fmtDate(expiryDate);
+  let found = false;
+
+  for (let i = 1; i < data.length; i++) {
+    const rowPid = String(data[i][pidIdx]).trim();
+    const rowWh = String(data[i][whIdx]).trim();
+    const rowExp = _fmtDate(data[i][expIdx]);
+
+    if (rowPid === String(productId).trim() && 
+        rowWh === String(warehouseId).trim() && 
+        rowExp === expVal) {
+      const currentQty = Number(data[i][qtyIdx]) || 0;
+      const newQty = currentQty + deltaQty;
+      if (newQty < 0) {
+        throw new Error(`สต็อกส่วนกลางไม่พอ: พยายามเบิก ${Math.abs(deltaQty)} แต่มีเพียง ${currentQty}`);
+      }
+      sheet.getRange(i+1, qtyIdx+1).setValue(newQty);
+      sheet.getRange(i+1, updatedIdx+1).setValue(new Date().toISOString());
+      found = true;
+      break;
+    }
+  }
+
+  if (!found && deltaQty > 0) {
+    appendRow(sheet, {
+      productId, warehouseId, expiryDate: expVal,
+      qty: deltaQty, unit: unit || '', lastUpdated: new Date().toISOString()
+    });
+  }
+}
+
+function updateEmployeeStock(warehouseId, productId, deltaQty, deltaConsigned, unit, expiryDate) {
+  const sheet = getSheet(SN.EMPLOYEE_STOCK);
+  const data = sheet.getDataRange().getValues();
+  const hdr = data[0];
+  const whIdx = hdr.indexOf('warehouseId');
+  const pidIdx = hdr.indexOf('productId');
+  const expIdx = hdr.indexOf('expiryDate');
+  const qtyIdx = hdr.indexOf('qty');
+  const consIdx = hdr.indexOf('consigned');
+  const updatedIdx = hdr.indexOf('lastUpdated');
+
+  const expVal = _fmtDate(expiryDate);
+  let found = false;
+
+  for (let i = 1; i < data.length; i++) {
+    const rowPid = String(data[i][pidIdx]).trim();
+    const rowWh = String(data[i][whIdx]).trim();
+    const rowExp = _fmtDate(data[i][expIdx]);
+
+    if (rowPid === String(productId).trim() && 
+        rowWh === String(warehouseId).trim() && 
+        rowExp === expVal) {
+      const currentQty = Number(data[i][qtyIdx]) || 0;
+      const currentCons = Number(data[i][consIdx]) || 0;
+      
+      const newQty = currentQty + deltaQty;
+      const newCons = currentCons + (deltaConsigned || 0);
+
+      if (newQty < 0) {
+        throw new Error(`สต็อกพนักงานไม่พอ: พยายามตัด ${Math.abs(deltaQty)} แต่มีเพียง ${currentQty}`);
+      }
+      if (newCons > newQty) {
+        throw new Error(`เกินจำนวนที่ฝากได้: มีสต็อกทั้งหมด ${newQty} พยายามฝากรวม ${newCons}`);
+      }
+      if (newCons < 0) {
+        throw new Error(`ดึงฝากคืนเกินจำนวนที่ฝากไว้: ฝากไว้ ${currentCons} ดึงคืน ${Math.abs(deltaConsigned)}`);
+      }
+
+      sheet.getRange(i+1, qtyIdx+1).setValue(newQty);
+      sheet.getRange(i+1, consIdx+1).setValue(newCons);
+      sheet.getRange(i+1, updatedIdx+1).setValue(new Date().toISOString());
+      found = true;
+      break;
+    }
+  }
+
+  if (!found && (deltaQty > 0 || deltaConsigned > 0)) {
+    appendRow(sheet, {
+      productId, warehouseId, expiryDate: expVal,
+      qty: Math.max(0, deltaQty), consigned: Math.max(0, deltaConsigned || 0),
+      unit: unit || '', lastUpdated: new Date().toISOString()
+    });
+  }
+}
+
+function receiveGoods(user, data) {
+  requireRole(user, 'admin', 'stock');
+  if (!data.warehouseId || !data.items?.length) throw new Error('ข้อมูลไม่ครบ');
+  const ts = data.date || new Date().toISOString();
+
+  data.items.forEach(item => {
+    updateCentralStock(data.warehouseId, item.productId, Number(item.qty), item.unit, item.expiryDate);
+    appendRow(getSheet(SN.TRANSACTIONS), {
+      id: generateId('TR'), type: 'receive', 
+      fromWarehouseId: data.supplier || data.supplierId || 'SUPPLIER', 
+      toWarehouseId: data.warehouseId,
+      productId: item.productId, qty: Number(item.qty), unit: item.unit, docNo: data.docNo,
+      poNo: data.poNo || '', taxInvoiceNo: data.taxInvoiceNo || '',
+      note: data.note, userId: user.id, username: user.username, createdAt: ts, supplierId: data.supplierId,
+      supplier: data.supplier || '',
+      expiryDate: item.expiryDate || '',
+      costNoVat: Number(item.costNoVat) || 0,
+      costVat: Number(item.costVat) || 0,
+      discount: Number(item.discount) || 0
+    });
+  });
+
+  writeLog(user, 'receive', `รับสินค้าเข้า [${data.warehouseId}]`);
+  return { success: true };
+}
+
+function requestTransfer(user, data) {
+  if (!data.fromWarehouseId || !data.toWarehouseId || !data.items?.length) throw new Error('ข้อมูลไม่ครบ');
+  const orderSheet = getSheet(SN.ORDERS);
+  const finalTs = new Date().toISOString();
+  const orderId = generateId('REQ');
+
+  // Safeguard: Check central stock availability
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const centralStock = sheetData(getSheet(SN.CENTRAL_STOCK));
+  
+  data.items.forEach(item => {
+    if (item.isSet) return;
+    const stock = centralStock.filter(s => s.warehouseId === data.fromWarehouseId && s.productId === item.productId)
+                              .reduce((sum, s) => sum + Number(s.qty), 0);
+    if (stock < item.qty) {
+      const p = products.find(x => x.id === item.productId) || {};
+      throw new Error(`สต็อกไม่พอสำหรับ ${p.name || item.productId}`);
+    }
+  });
+
+  // Create a combined ISO string from data.date and data.time if provided
+  let createdAtTs = new Date().toISOString();
+  if (data.date && data.time) {
+    // Assuming +07:00 for Thailand Time
+    const d = new Date(`${data.date}T${data.time}:00+07:00`);
+    if (!isNaN(d.getTime())) {
+      createdAtTs = d.toISOString();
+    }
+  }
+
+  appendRow(orderSheet, {
+    id: orderId,
+    date: data.date || createdAtTs.split('T')[0],
+    requestedBy: user.displayName || user.username,
+    userId: user.id,
+    fromWhId: data.fromWarehouseId,
+    toWhId: data.toWarehouseId,
+    status: 'pending',
+    note: data.note || '',
+    items: JSON.stringify(data.items),
+    createdAt: createdAtTs
+  });
+
+  writeLog(user, 'transfer_req', `สร้างรายการเบิกสินค้า [${orderId}] รอจัดของ`);
+  return { success: true, orderId };
+}
+
+function getPickingTasks(user) {
+  const all = sheetData(getSheet(SN.ORDERS));
+  const pending = all.filter(o => o.status === 'pending');
+  return {
+    tasks: pending.map(t => ({
+      ...t,
+      items: JSON.parse(t.items || '[]'),
+    }))
+  };
+}
+
+function confirmPicking(user, data) {
+  requireRole(user, 'admin', 'stock');
+  const orderId = typeof data === 'object' ? data.id : data;
+  const updatedItems = typeof data === 'object' ? data.items : null;
+  const orderSheet = getSheet(SN.ORDERS);
+  const orders = sheetData(orderSheet);
+  const orderIdx = orders.findIndex(o => o.id === orderId);
+  if (orderIdx === -1) throw new Error('ไม่พบรายการ');
+  const order = orders[orderIdx];
+  if (order.status !== 'pending') throw new Error('รายการนี้ถูกดำเนินการไปแล้ว');
+
+  let items = [];
+  if (updatedItems && Array.isArray(updatedItems) && updatedItems.length > 0) {
+    const originalItems = JSON.parse(order.items || '[]');
+    items = updatedItems.map(ui => {
+      const orig = originalItems.find(o => o.productId === ui.productId) || {};
+      return { ...orig, ...ui, productId: ui.productId, qty: Number(ui.qty), unit: ui.unit || orig.unit };
+    });
+    
+    const hdr = orderSheet.getDataRange().getValues()[0];
+    const itemsIdx = hdr.indexOf('items');
+    if (itemsIdx !== -1) {
+      orderSheet.getRange(orderIdx + 2, itemsIdx + 1).setValue(JSON.stringify(items));
+    }
+  } else {
+    items = JSON.parse(order.items || '[]');
+  }
+  const txSheet = getSheet(SN.TRANSACTIONS);
+  // Use order's createdAt so that backdated transfers have backdated transactions
+  const finalTs = order.createdAt || new Date().toISOString();
+
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const centralStockAll = sheetData(getSheet(SN.CENTRAL_STOCK));
+
+  // Perform actual stock movement ONLY NOW (FEFO Logic)
+  items.forEach(item => {
+    if (item.isSet && item.pickedComponents) {
+      // 1. Deduct components from Central Warehouse
+      item.pickedComponents.forEach(comp => {
+        const batches = centralStockAll
+          .filter(s => String(s.productId) === String(comp.productId) && String(s.warehouseId) === String(order.fromWhId) && Number(s.qty) > 0)
+          .sort((a, b) => {
+            const da = a.expiryDate ? new Date(a.expiryDate).getTime() : 4102444800000;
+            const db = b.expiryDate ? new Date(b.expiryDate).getTime() : 4102444800000;
+            return da - db;
+          });
+
+        let remainingToPick = Number(comp.qty);
+        for (let batch of batches) {
+          if (remainingToPick <= 0) break;
+          const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
+          updateCentralStock(order.fromWhId, comp.productId, -pickFromThisBatch, comp.unit, batch.expiryDate);
+          
+          const prices = getProductPrices(comp.productId);
+          appendRow(getSheet(SN.TRANSACTIONS), {
+            id: generateId('TR'), type: 'transfer_out', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+            productId: comp.productId, qty: pickFromThisBatch, unit: comp.unit, docNo: order.id,
+            note: 'ตัดสต็อกส่วนประกอบเซ็ต (FEFO)', userId: user.id, username: user.username, 
+            createdAt: finalTs, expiryDate: batch.expiryDate,
+            txnCostVat: prices.costVat, txnSellWholesale: prices.sellWholesale
+          });
+          remainingToPick -= pickFromThisBatch;
+        }
+      });
+      
+      // 2. Add Set to Employee Warehouse
+      updateEmployeeStock(order.toWhId, item.productId, item.qty, 0, item.unit, '9999-12-31');
+      const setPrices = getProductPrices(item.productId);
+      appendRow(getSheet(SN.TRANSACTIONS), {
+        id: generateId('TR'), type: 'transfer_in', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+        productId: item.productId, qty: item.qty, unit: item.unit, docNo: order.id,
+        note: order.note || 'รับเข้าเซ็ตสินค้าจากการเบิก', userId: user.id, username: user.username, 
+        createdAt: finalTs, expiryDate: '9999-12-31',
+        txnCostVat: setPrices.costVat, txnSellWholesale: setPrices.sellWholesale
+      });
+      
+    } else {
+      // Normal Product Logic
+      const batches = centralStockAll
+        .filter(s => String(s.productId) === String(item.productId) && String(s.warehouseId) === String(order.fromWhId) && Number(s.qty) > 0)
+        .sort((a, b) => {
+          const da = a.expiryDate ? new Date(a.expiryDate).getTime() : 4102444800000;
+          const db = b.expiryDate ? new Date(b.expiryDate).getTime() : 4102444800000;
+          return da - db;
+        });
+
+      let remainingToPick = Number(item.qty);
+      
+      for (let batch of batches) {
+        if (remainingToPick <= 0) break;
+        
+        const pickFromThisBatch = Math.min(Number(batch.qty), remainingToPick);
+        
+        // Deduct from Central Warehouse (Batch)
+        updateCentralStock(order.fromWhId, item.productId, -pickFromThisBatch, item.unit, batch.expiryDate);
+        
+        // Add to Employee Warehouse (Batch)
+        updateEmployeeStock(order.toWhId, item.productId, pickFromThisBatch, 0, item.unit, batch.expiryDate);
+        
+        // Log Transaction (Batch)
+        const normPrices = getProductPrices(item.productId);
+        appendRow(getSheet(SN.TRANSACTIONS), {
+          id: generateId('TR'), type: 'transfer', fromWarehouseId: order.fromWhId, toWarehouseId: order.toWhId,
+          productId: item.productId, qty: pickFromThisBatch, unit: item.unit, docNo: order.id,
+          note: order.note || 'จากการเบิกสินค้า (FEFO)', userId: user.id, username: user.username, 
+          createdAt: finalTs, expiryDate: batch.expiryDate,
+          txnCostVat: normPrices.costVat, txnSellWholesale: normPrices.sellWholesale
+        });
+
+        remainingToPick -= pickFromThisBatch;
+      }
+
+      if (remainingToPick > 0) {
+         console.warn(`FEFO: Batch stock insufficient for product ${item.productId}. Remaining: ${remainingToPick}`);
+      }
+    }
+  });
+
+  // Update order status in sheet
+  const hdr = orderSheet.getDataRange().getValues()[0];
+  const statusIdx = hdr.indexOf('status');
+  if (statusIdx !== -1) {
+    orderSheet.getRange(orderIdx + 2, statusIdx + 1).setValue('completed');
+  }
+
+  writeLog(user, 'transfer_confirm', `จัดของเสร็จและโอนสต็อกเรียบร้อย [${orderId}]`);
+  return { success: true };
+}
+
+function rejectPicking(user, orderId) {
+  requireRole(user, 'admin', 'stock');
+  const orderSheet = getSheet(SN.ORDERS);
+  const orders = sheetData(orderSheet);
+  const orderIdx = orders.findIndex(o => o.id === orderId);
+  if (orderIdx === -1) throw new Error('ไม่พบรายการ');
+  
+  const hdr = orderSheet.getDataRange().getValues()[0];
+  const statusIdx = hdr.indexOf('status');
+  if (statusIdx !== -1) {
+    orderSheet.getRange(orderIdx + 2, statusIdx + 1).setValue('rejected');
+  }
+  writeLog(user, 'transfer_reject', `ยกเลิกรายการเบิก [${orderId}]`);
+  return { success: true };
+}
+
+function deletePicking(user, orderId) {
+    requireRole(user, 'admin');
+    const sheet = getSheet(SN.ORDERS);
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+        if (data[i][0] === orderId) {
+            sheet.deleteRow(i + 1);
+            return { success: true };
+        }
+    }
+    throw new Error('ไม่พบรายการ');
+}
+
+function consignFromEmployee(user, data) {
+  requireRole(user, 'admin', 'stock');
+  if (!data.fromWarehouseId || !data.items?.length) throw new Error('ข้อมูลไม่ครบ');
+  const txSheet = getSheet(SN.TRANSACTIONS);
+
+  // Resolve names for log
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const products   = sheetData(getSheet(SN.PRODUCTS));
+  const whName = (warehouses.find(w => w.id === data.fromWarehouseId) || {}).name || data.fromWarehouseId;
+
+  data.items.forEach(item => {
+    updateEmployeeStock(data.fromWarehouseId, item.productId, 0, item.qty, item.unit || '', item.expiryDate || '');
+    const consignPrices = getProductPrices(item.productId);
+    appendRow(txSheet, {
+      id: generateId('TX'), type: 'consign',
+      fromWarehouseId: data.fromWarehouseId, toWarehouseId: '',
+      productId: item.productId, qty: item.qty, unit: item.unit || '',
+      expiryDate: item.expiryDate || '',
+      costVat: 0, docNo: '', note: data.note || '',
+      userId: user.id, username: user.username, createdAt: new Date().toISOString(),
+      txnCostVat: consignPrices.costVat, txnSellWholesale: consignPrices.sellWholesale
+    });
+  });
+
+  // Human-readable detail
+  const itemNames = data.items.map(item => {
+    const p = products.find(x => x.id === item.productId) || {};
+    return `${p.name || item.productId} x${item.qty}`;
+  }).join(', ');
+  writeLog(user, 'consign', `รับฝากคืนจาก [${whName}] : ${itemNames}`);
+  return { success: true };
+}
+
+function moveStock(user, data) {
+  requireRole(user, 'admin', 'stock');
+  const { fromWhId, toWhId, items, note } = data;
+  if (!fromWhId || !toWhId || !items?.length) throw new Error('ข้อมูลไม่ครบ');
+  if (fromWhId === toWhId) throw new Error('คลังต้นทางและปลายทางต้องเป็นคนละคลัง');
+
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const fromWh = warehouses.find(w => w.id === fromWhId);
+  const toWh   = warehouses.find(w => w.id === toWhId);
+  if (!fromWh || !toWh) throw new Error('ไม่พบข้อมูลคลังสินค้า');
+
+  const txSheet = getSheet(SN.TRANSACTIONS);
+  const nowTs = new Date().toISOString();
+
+  items.forEach(item => {
+    const qty = Number(item.qty);
+    const exp = item.expiryDate || '9999-12-31';
+
+    // Deduct from Source
+    if (fromWh.type === 'central') {
+      updateCentralStock(fromWhId, item.productId, -qty, '', exp);
+    } else {
+      updateEmployeeStock(fromWhId, item.productId, -qty, 0, '', exp);
+    }
+
+    // Add to Target
+    if (toWh.type === 'central') {
+      updateCentralStock(toWhId, item.productId, qty, '', exp);
+    } else {
+      updateEmployeeStock(toWhId, item.productId, qty, 0, '', exp);
+    }
+
+    // Log Transaction
+    const movePrices = getProductPrices(item.productId);
+    appendRow(txSheet, {
+      id: generateId('TR'), type: 'movement',
+      fromWarehouseId: fromWhId, toWarehouseId: toWhId,
+      productId: item.productId, qty: qty, unit: item.unit || '',
+      docNo: '', note: note || 'ย้ายคลังสินค้า',
+      userId: user.id, username: user.username, createdAt: nowTs, expiryDate: exp,
+      txnCostVat: movePrices.costVat, txnSellWholesale: movePrices.sellWholesale
+    });
+  });
+
+  writeLog(user, 'movement', `ย้ายจาก [${fromWh.name}] ไป [${toWh.name}] : ${items.length} รายการ`);
+  return { success: true };
+}
+
+function adjustStock(user, data) {
+  requireRole(user, 'admin');
+  const { warehouseId, productId, qty, type, note } = data;
+  if (type === 'central') updateCentralStock(warehouseId, productId, qty, '');
+  else updateEmployeeStock(warehouseId, productId, qty, 0, '');
+
+  // Human-readable detail
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const products   = sheetData(getSheet(SN.PRODUCTS));
+  const whName  = (warehouses.find(w => w.id === warehouseId) || {}).name || warehouseId;
+  const pName   = (products.find(p => p.id === productId)     || {}).name || productId;
+  writeLog(user, 'adjust', `ปรับสต็อก [${whName}] : ${pName} ${qty > 0 ? '+' : ''}${qty}${note ? ' (${note})' : ''}`);
+  return { success: true };
+}
+
+// ── BILLING ──────────────────────────────────────────────────
+function getBillingList(date) {
+  const targetDate = date || _fmtDate(new Date());
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const empWarehouses = warehouses.filter(w => w.type === 'employee' && _isTrue(w.active));
+  const allBillings = sheetData(getSheet(SN.BILLING));
+  const users = sheetData(getSheet(SN.USERS));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const allStock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
+
+  const sets = sheetData(getSheet(SN.SETS)).map(s => {
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(s.items || '[]'); } catch(e) {}
+    return { ...s, items: parsedItems };
+  });
+
+  const result = empWarehouses.map(wh => {
+    const bill = allBillings.find(b => String(b.warehouseId) === String(wh.id) && _fmtDate(b.date) === targetDate);
+    const emp = users.find(u => u.id === wh.employeeId);
+    
+    // ดึงสต็อกของพนักงานคนนี้ทั้งหมดมาเตรียมไว้เลย
+    const myStock = allStock.filter(s => String(s.warehouseId) === String(wh.id)).map(s => {
+      let p = products.find(px => px.id === s.productId);
+      if (!p) {
+        const setObj = sets.find(set => set.id === s.productId);
+        if (setObj) {
+          let cost = 0;
+          let wholesale = 0;
+          (setObj.items || []).forEach(it => {
+            let cp = null;
+            if (it.allowedProducts && it.allowedProducts.length > 0) {
+              cp = products.find(x => it.allowedProducts.includes(x.id));
+            }
+            if (!cp && it.category) {
+              cp = products.find(x => x.category === it.category);
+            }
+            if (cp) {
+              cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+              wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+            }
+          });
+          p = {
+            id: setObj.id,
+            name: setObj.name,
+            code: setObj.code,
+            imageUrl: setObj.imageUrl,
+            category: 'เซ็ตสินค้า',
+            unit: 'เซ็ต',
+            sellWholesale: wholesale,
+            sellCommission: 100 - wholesale,
+            costVat: cost,
+            isSet: true,
+            setItems: (setObj.items || []).map(it => {
+              let cp = null;
+              if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+              if (!cp && it.category) cp = products.find(x => x.category === it.category);
+              return {
+                name: cp ? cp.name : it.category,
+                qty: it.qty,
+                unit: cp ? cp.unit : 'หน่วย'
+              };
+            })
+          };
+        } else {
+          p = {};
+        }
+      }
+      return { ...s, product: p, qty: Number(s.qty), consigned: Number(s.consigned || 0) };
+    });
+
+    const totalAmt = myStock.reduce((sum, s) => sum + (s.qty - s.consigned) * (s.product.sellWholesale || 0), 0);
+    const totalUnits = myStock.reduce((sum, s) => {
+      let multiplier = 1;
+      if (s.product && s.product.isSet && s.product.setItems) {
+        multiplier = s.product.setItems.reduce((msum, it) => msum + (Number(it.qty) || 0), 0);
+      }
+      return sum + (s.qty - s.consigned) * multiplier;
+    }, 0);
+    return {
+      billingId: bill?.id || null,
+      warehouseId: wh.id, warehouseName: wh.name,
+      employee: emp ? { id: emp.id, displayName: emp.displayName, username: emp.username, avatar: emp.avatar } : null,
+      date: targetDate, 
+      billed: !!bill,
+      billedAt: bill?.createdAt || null,
+      totalAmt: totalAmt,
+      totalUnits: totalUnits,
+      items: bill ? (typeof bill.items === 'string' ? JSON.parse(bill.items || '[]') : bill.items) : null,
+      _stockSummary: myStock // ส่งสรุปสต็อกไปให้หน้าบ้านใช้ได้ทันทีไม่ต้องโหลดเพิ่ม
+    };
+  });
+
+  return { billings: result };
+}
+
+function getCentralReport(params) {
+  const { startDate, endDate } = params;
+  
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const centralStock = sheetData(getSheet(SN.CENTRAL_STOCK));
+  
+  // Find central warehouse IDs
+  const centralWhIds = warehouses.filter(w => w.type === 'central' && (w.active === '' || _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE')).map(w => String(w.id));
+  
+  // Get Transactions and filter by date
+  let transactions = sheetData(getSheet(SN.TRANSACTIONS));
+  if (startDate) transactions = transactions.filter(t => _fmtDate(t.createdAt) >= startDate);
+  if (endDate) transactions = transactions.filter(t => _fmtDate(t.createdAt) <= endDate);
+
+  // Accumulate received and withdrawn quantities
+  const summary = {};
+  
+  transactions.forEach(t => {
+    const pId = String(t.productId || t.productid);
+    if (!pId || pId === 'undefined' || pId === '') return;
+
+    if (!summary[pId]) summary[pId] = { received: 0, withdrawn: 0, txns: [] };
+    const qty = Number(t.qty) || 0;
+    
+    const isToCentral = centralWhIds.includes(String(t.toWarehouseId || t.towarehouseid));
+    const isFromCentral = centralWhIds.includes(String(t.fromWarehouseId || t.fromwarehouseid));
+
+    // รับเข้าคลังกลาง (ทุกอย่างที่เข้ามาคลังกลาง และไม่ได้มาจากคลังกลางด้วยกันเอง)
+    if (isToCentral && !isFromCentral) {
+      summary[pId].received += qty;
+    }
+    
+    // เบิกออกไป (ทุกอย่างที่ออกจากคลังกลาง ไปที่อื่น)
+    if (isFromCentral && !isToCentral) {
+      summary[pId].withdrawn += qty;
+      summary[pId].txns.push({
+        qty: qty,
+        txnCostVat: t.txnCostVat !== undefined ? Number(t.txnCostVat) : null,
+        txnSellWholesale: t.txnSellWholesale !== undefined ? Number(t.txnSellWholesale) : null
+      });
+    }
+  });
+
+  // Calculate actual current balances in central stock
+  const currentBalances = {};
+  centralStock.forEach(s => {
+    if (centralWhIds.includes(String(s.warehouseId))) {
+      const pId = String(s.productId);
+      currentBalances[pId] = (currentBalances[pId] || 0) + (Number(s.qty) || 0);
+    }
+  });
+
+  // Build rows combining products and sets
+  const rows = [];
+  
+  const isAllTime = !startDate && !endDate;
+
+  const processProduct = (p, isSet) => {
+    const pId = String(p.id);
+    const sum = summary[pId] || { received: 0, withdrawn: 0 };
+    const balance = currentBalances[pId] || 0;
+    
+    let finalReceived = sum.received;
+    let finalWithdrawn = sum.withdrawn;
+
+    // ถ้าเป็นการดู "สะสมทั้งหมด" ให้คำนวณยอดรับเข้าจาก "ยอดคงเหลือ + เบิกออก"
+    // เพื่อครอบคลุมกรณีที่ผู้ใช้ปรับสต๊อกด้วยมือ (ซึ่งไม่ถูกบันทึกใน Transactions)
+    if (isAllTime) {
+      finalReceived = balance + finalWithdrawn;
+    }
+
+    // Allow all products to show even with 0 balance
+    
+
+    let wholesale = Number(p.sellWholesale) || 0;
+    let costVat = Number(p.costVat) || 0;
+    let agentProfit = Number(p.agentProfit) || 0;
+    let piecesPerUnit = 1;
+    
+    if (isSet) {
+      // Calculate set price from components
+      wholesale = 0;
+      let cost = 0;
+      piecesPerUnit = 0;
+      let parsedItems = [];
+      try { parsedItems = JSON.parse(p.items || '[]'); } catch(e) {}
+      parsedItems.forEach(it => {
+        let cp = null;
+        if (it.allowedProducts && it.allowedProducts.length > 0) {
+          cp = products.find(x => it.allowedProducts.includes(x.id));
+        }
+        if (!cp && it.category) {
+          cp = products.find(x => x.category === it.category);
+        }
+        const subQty = Number(it.qty) || 0;
+        piecesPerUnit += subQty;
+        if (cp) {
+          wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+          cost += (Number(cp.costVat) || 0) * subQty;
+        }
+      });
+      agentProfit = wholesale - cost; // For sets, agent profit is the sum of components' wholesale - cost
+      costVat = cost;
+    }
+
+    let txnAmount = 0;
+    let txnCommission = 0;
+    
+    if (sum.txns && sum.txns.length > 0) {
+      sum.txns.forEach(tx => {
+        const cPrice = tx.txnCostVat !== null && !isNaN(tx.txnCostVat) ? tx.txnCostVat : costVat;
+        txnAmount += tx.qty * cPrice;
+        if (isSet) {
+          txnCommission += tx.qty * agentProfit;
+        } else {
+          txnCommission += tx.qty * agentProfit; // Use explicit agent profit
+        }
+      });
+    } else {
+      txnAmount = finalWithdrawn * costVat;
+      txnCommission = finalWithdrawn * agentProfit;
+    }
+
+    rows.push({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      category: p.category || '',
+      image: p.imageUrl || p.imageurl || '',
+      received: finalReceived,
+      withdrawn: finalWithdrawn,
+      balance: balance,
+      sellWholesale: wholesale,
+      agentProfit: agentProfit,
+      txnAmount: txnAmount,
+      txnCommission: txnCommission,
+      piecesPerUnit: piecesPerUnit,
+      order: Number(p.order) || 9999
+    });
+  };
+
+  products.forEach(p => processProduct(p, false));
+
+  // Calculate Total Billing
+  let billings = sheetData(getSheet(SN.BILLING));
+  if (startDate) billings = billings.filter(b => _fmtDate(b.date) >= startDate);
+  if (endDate) billings = billings.filter(b => _fmtDate(b.date) <= endDate);
+  
+  let totalBillingReceived = 0;
+  let totalBillingPieces = 0;
+  let totalBillingCost = 0;
+  let totalBillingAgentComm = 0;
+  let totalBillingSaleComm = 0;
+
+  const productMap = {};
+  products.forEach(p => productMap[String(p.id)] = p);
+  const setMap = {};
+  sets.forEach(s => setMap[String(s.id)] = s);
+
+  billings.forEach(b => {
+    totalBillingReceived += (Number(b.totalAmt) || 0);
+    
+    let items = [];
+    try { items = JSON.parse(b.items || '[]'); } catch(e) {}
+    
+    items.forEach(it => {
+      const qty = Number(it.sold) || 0;
+      if (qty <= 0) return;
+      
+      const pId = String(it.productId);
+      const isSet = setMap[pId] !== undefined;
+
+      if (isSet) {
+        const s = setMap[pId];
+        let sItems = [];
+        try { sItems = JSON.parse(s.items || '[]'); } catch(e) {}
+        
+        let cost = 0, wholesale = 0, saleComm = 0, pieces = 0;
+        
+        sItems.forEach(subIt => {
+          let cp = null;
+          if (subIt.allowedProducts && subIt.allowedProducts.length > 0) {
+            cp = products.find(x => subIt.allowedProducts.includes(String(x.id)));
+          }
+          if (!cp && subIt.category) {
+            cp = products.find(x => x.category === subIt.category);
+          }
+          
+          const subQty = Number(subIt.qty) || 0;
+          pieces += subQty;
+          if (cp) {
+            cost += (Number(cp.costVat) || 0) * subQty;
+            wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+          }
+        });
+        
+        const billedPrice = Number(it.pricePerUnit) || wholesale;
+        totalBillingPieces += pieces * qty;
+        totalBillingCost += cost * qty;
+        totalBillingAgentComm += (billedPrice - cost) * qty;
+      } else {
+        const p = productMap[pId] || {};
+        const billedPrice = Number(it.pricePerUnit) || Number(p.sellWholesale) || 0;
+        const cost = Number(p.costVat) || 0;
+        totalBillingPieces += qty;
+        totalBillingCost += cost * qty;
+        totalBillingAgentComm += (billedPrice - cost) * qty;
+      }
+    });
+  });
+
+  rows.sort((a, b) => a.order - b.order);
+
+  let totalEmpStockPieces = 0;
+  let totalEmpStockValue = 0;
+  let totalEmpStockCost = 0;
+  let totalEmpStockComm = 0;
+  
+  const employeeStock = sheetData(getSheet(SN.EMPLOYEE_STOCK));
+  employeeStock.forEach(s => {
+    const qty = Number(s.qty) || 0;
+    if (qty > 0) {
+      const pId = String(s.productId);
+      const isSet = setMap[pId] !== undefined;
+      
+      if (isSet) {
+        const setInfo = setMap[pId];
+        let sItems = [];
+        try { sItems = JSON.parse(setInfo.items || '[]'); } catch(e) {}
+        
+        let wholesale = 0;
+        let cost = 0;
+        let pieces = 0;
+        sItems.forEach(subIt => {
+           let cp = null;
+           if (subIt.allowedProducts && subIt.allowedProducts.length > 0) {
+             cp = products.find(x => subIt.allowedProducts.includes(String(x.id)));
+           }
+           if (!cp && subIt.category) {
+             cp = products.find(x => x.category === subIt.category);
+           }
+           const subQty = Number(subIt.qty) || 0;
+           pieces += subQty;
+           if (cp) {
+             wholesale += (Number(cp.sellWholesale) || 0) * subQty;
+             cost += (Number(cp.costVat) || 0) * subQty;
+           }
+        });
+        
+        totalEmpStockPieces += pieces * qty;
+        totalEmpStockValue += wholesale * qty;
+        totalEmpStockCost += cost * qty;
+        totalEmpStockComm += (wholesale - cost) * qty;
+      } else {
+        const p = productMap[pId] || {};
+        const wholesale = Number(p.sellWholesale) || 0;
+        const cost = Number(p.costVat) || 0;
+        totalEmpStockPieces += qty;
+        totalEmpStockValue += wholesale * qty;
+        totalEmpStockCost += cost * qty;
+        totalEmpStockComm += (wholesale - cost) * qty;
+      }
+    }
+  });
+
+  return { 
+    rows, 
+    totalBillingReceived, 
+    totalBillingPieces,
+    totalBillingCost,
+    totalBillingAgentComm,
+    totalBillingSaleComm,
+    totalEmpStockPieces,
+    totalEmpStockValue,
+    totalEmpStockCost,
+    totalEmpStockComm,
+    centralWhId: centralWhIds[0] || '' 
+  };
+}
+
+function getEmployeeFinance(employeeId, startDate, endDate) {
+  const finance = sheetData(getSheet(SN.EMPLOYEE_FINANCE));
+  let result = finance;
+  if (employeeId) result = result.filter(f => String(f.employeeId) === String(employeeId));
+  if (startDate) result = result.filter(f => _fmtDate(f.date) >= startDate);
+  if (endDate) result = result.filter(f => _fmtDate(f.date) <= endDate);
+  
+  const billings = sheetData(getSheet(SN.BILLING));
+  let bResult = billings;
+  if (employeeId) {
+     const warehouses = sheetData(getSheet(SN.WAREHOUSES)).filter(w => String(w.employeeId) === String(employeeId) || String(w.id) === String(employeeId));
+     const whIds = warehouses.map(w => String(w.id));
+     bResult = bResult.filter(b => whIds.includes(String(b.warehouseId)));
+  }
+  if (startDate) bResult = bResult.filter(b => _fmtDate(b.date) >= startDate);
+  if (endDate) bResult = bResult.filter(b => _fmtDate(b.date) <= endDate);
+
+  return { finance: result, billings: bResult };
+}
+
+function doBilling(user, data) {
+  requireRole(user, 'admin', 'cashier');
+  const { warehouseId, date, totalAmt, totalUnits, note, items } = data;
+  const today = date || new Date().toISOString().split('T')[0];
+
+  // Removed duplicate bill check to allow multiple bills per day
+
+  const billingId = generateId('B');
+  const cashPaid = Number(data.cashPaid) || 0;
+  const transferPaid = Number(data.transferPaid) || 0;
+
+  appendRow(getSheet(SN.BILLING), {
+    id: billingId, warehouseId, employeeId: data.employeeId || '',
+    date: today, totalAmt, totalUnits, note: note || '',
+    cashPaid: cashPaid, transferPaid: transferPaid,
+    userId: user.id, createdAt: new Date().toISOString(),
+    items: JSON.stringify(items || []),
+  });
+
+  // Save finance items
+  if (data.financeItems && data.financeItems.length > 0) {
+    const finSheet = getSheet(SN.EMPLOYEE_FINANCE);
+    data.financeItems.forEach(fi => {
+      if (Number(fi.amount) !== 0) {
+        appendRow(finSheet, {
+          id: generateId('F'),
+          date: today,
+          employeeId: data.employeeId || '',
+          warehouseId: warehouseId || '',
+          billingId: billingId,
+          category: fi.category || '',
+          amount: Number(fi.amount) || 0,
+          note: fi.note || '',
+          createdAt: new Date().toISOString()
+        });
+      }
+    });
+  }
+
+  // Reset employee stock (move consigned back, clear sold)
+  if (items?.length) {
+    const empSheet = getSheet(SN.EMPLOYEE_STOCK);
+    const allData = empSheet.getDataRange().getValues();
+    const hdr = allData[0];
+    const whIdx = hdr.indexOf('warehouseId'); 
+    const pidIdx = hdr.indexOf('productId');
+    const expIdx = hdr.indexOf('expiryDate');
+    const qtyIdx = hdr.indexOf('qty'); 
+    const consIdx = hdr.indexOf('consigned');
+    
+    const lastRow = empSheet.getLastRow();
+    if (lastRow < 2) return { success: true, billingId, totalAmt }; // No stock to clear
+
+    // Get all current stock to manipulate locally
+    const range = empSheet.getRange(2, 1, lastRow - 1, hdr.length);
+    const dataRows = range.getValues();
+
+    const formatDate = (val) => {
+      if (!val) return '9999-12-31';
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return '9999-12-31';
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    items.forEach(item => {
+      const itemPid = String(item.productId);
+      const itemExpStr = formatDate(item.expiryDate);
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const rowPid = String(dataRows[i][pidIdx]);
+        const rowWh = String(dataRows[i][whIdx]);
+        const rowExpStr = formatDate(dataRows[i][expIdx]);
+
+        if (rowPid === itemPid && rowWh === String(warehouseId) && rowExpStr === itemExpStr) {
+          const newQty = Number(item.consigned) || 0;
+          dataRows[i][qtyIdx] = newQty;
+          dataRows[i][consIdx] = 0;
+          dataRows[i][hdr.indexOf('lastUpdated')] = new Date().toISOString();
+          break; // Batch found
+        }
+      }
+    });
+
+    // Write everything back in one go - MUCH FASTER and more reliable
+    range.setValues(dataRows);
+  }
+  
+  SpreadsheetApp.flush(); // Ensure all changes are committed
+
+
+  writeLog(user, 'billing', `คิดเงินพนักงาน [${warehouseId}] ยอด ฿${totalAmt}`);
+  return { success: true, billingId, totalAmt };
+}
+
+function getBillingHistory(user, startDate, endDate) {
+  requireRole(user, 'admin', 'cashier');
+  const billings = sheetData(getSheet(SN.BILLING));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const users = sheetData(getSheet(SN.USERS));
+
+  // ค้นหารายการและกรองตามช่วงวันที่
+  const filtered = billings.filter(b => {
+    // b.date จะทำงานได้ทั้ง 'date' หรือ 'Date' เพราะเราแก้ sheetData แล้ว
+    if (!b.date) return false;
+    const ds = _fmtDate(b.date);
+    return (!startDate || ds >= startDate) && (!endDate || ds <= endDate);
+  }).map(b => {
+    const wh = warehouses.find(w => w.id === b.warehouseId) || {};
+    const empId = b.employeeid || b.employeeId || wh.employeeid || wh.employeeId;
+    const emp = users.find(u => u.id === empId) || {};
+    
+    let createdAtStr = '';
+    const rawCreatedAt = b.createdat || b.createdAt;
+    if (rawCreatedAt) {
+      const ca = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt);
+      if (!isNaN(ca.getTime())) {
+        createdAtStr = Utilities.formatDate(ca, "GMT+7", "yyyy-MM-dd'T'HH:mm:ss");
+      }
+    }
+
+    return {
+      ...b,
+      id: b.id || b.ID,
+      date: _fmtDate(b.date),
+      createdAt: createdAtStr || rawCreatedAt,
+      warehouseName: wh.name || b.warehousename || b.warehouseId,
+      totalUnits: b.totalunits || b.totalUnits || 0,
+      totalAmt: b.totalamt || b.totalAmt || 0,
+      employee: {
+        id: emp.id || empId,
+        displayName: emp.displayname || emp.displayName || emp.username || empId || 'ไม่ระบุพนักงาน',
+        avatar: emp.avatar || ''
+      }
+    };
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+  return { billings: filtered };
+}
+
+function getBillingDetail(billingId) {
+  const billing = sheetData(getSheet(SN.BILLING)).find(b => b.id === billingId);
+  if (!billing) throw new Error('ไม่พบข้อมูลการคิดเงิน');
+  
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const users = sheetData(getSheet(SN.USERS));
+  const wh = warehouses.find(w => w.id === billing.warehouseId) || {};
+  const emp = users.find(u => u.id === wh.employeeId) || {};
+  
+  return { 
+    billing: {
+      ...billing,
+      warehouseName: wh.name || billing.warehouseId,
+      employee: { id: emp.id, displayName: emp.displayName || emp.id, avatar: emp.avatar }
+    } 
+  };
+}
+
+function generateTaxInvoice(user, billingId) {
+  requireRole(user, 'admin', 'cashier');
+  const billing = sheetData(getSheet(SN.BILLING)).find(b => b.id === billingId);
+  if (!billing) throw new Error('ไม่พบข้อมูล');
+  const ds = billing.date instanceof Date ? Utilities.formatDate(billing.date, "GMT+7", "yyyyMMdd") : String(billing.date).replace(/-/g,'');
+  const invNo = 'INV-' + ds + '-' + String(billingId).slice(-4);
+  return { invoiceNumber: invNo, billing, items: JSON.parse(billing.items || '[]') };
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────
+function getDashboard(user, params) {
+  requireRole(user, 'admin');
+  const { period, year, month, day } = params;
+  const billings = sheetData(getSheet(SN.BILLING));
+  const today = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+  // Today's billing
+  const todayBills = billings.filter(b => _fmtDate(b.date) === today);
+  const totalSalesToday = todayBills.reduce((a, b) => a + Number(b.totalAmt), 0);
+  const totalUnitsToday = todayBills.reduce((a, b) => a + Number(b.totalUnits), 0);
+
+  // 🔥 Expiry Alerts Calculation
+  const central = sheetData(getSheet(SN.CENTRAL_STOCK));
+  const now = new Date();
+  let expiringCount = 0;
+  let expiredCount = 0;
+  central.forEach(s => {
+    if (!s.expiryDate || s.expiryDate === '9999-12-31' || Number(s.qty) <= 0) return;
+    const diff = (new Date(s.expiryDate) - now) / (1000 * 60 * 60 * 24);
+    if (diff < 0) expiredCount++;
+    else if (diff < 14) expiringCount++;
+  });
+
+  // Active employees
+  const empWh = sheetData(getSheet(SN.WAREHOUSES)).filter(w => w.type === 'employee' && (w.active == true || w.active === 'TRUE'));
+  const activeEmployees = empWh.length;
+
+  // Low stock (central)
+  const centralStock = sheetData(getSheet(SN.CENTRAL_STOCK));
+  const lowStockCount = centralStock.filter(s => Number(s.qty) <= 10).length;
+
+  // Sales by day (last 7 days)
+  const days = ['จ','อ','พ','พฤ','ศ','ส','อา'];
+  const salesByDay = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().split('T')[0];
+    const dayBills = billings.filter(b => {
+      const dbStr = b.date instanceof Date ? Utilities.formatDate(b.date, "GMT+7", "yyyy-MM-dd") : String(b.date);
+      return dbStr === ds;
+    });
+    const dayAmt = dayBills.reduce((a, b) => a + Number(b.totalAmt), 0);
+    salesByDay.push({ label: days[d.getDay() === 0 ? 6 : d.getDay()-1] || ds, value: dayAmt });
+  }
+
+  // Sales by month (this year)
+  const monthNames = ['ม.ค','ก.พ','มี.ค','เม.ย','พ.ค','มิ.ย','ก.ค','ส.ค','ก.ย','ต.ค','พ.ย','ธ.ค'];
+  const salesByMonth = monthNames.map((label, mi) => {
+    const prefix = `${year}-${String(mi+1).padStart(2,'0')}`;
+    const mBills = billings.filter(b => {
+      const dbStr = b.date instanceof Date ? Utilities.formatDate(b.date, "GMT+7", "yyyy-MM") : String(b.date);
+      return dbStr && dbStr.startsWith(prefix);
+    });
+    return { label, value: mBills.reduce((a, b) => a + Number(b.totalAmt), 0) };
+  });
+
+  // Top products from billing items
+  const prodTotals = {};
+  billings.filter(b => {
+    try { return JSON.parse(b.items || '[]').length > 0; } catch(e) { return false; }
+  }).forEach(b => {
+    const items = JSON.parse(b.items || '[]');
+    items.forEach(item => {
+      if (!prodTotals[item.productId]) prodTotals[item.productId] = { name: item.productId, units: 0, revenue: 0 };
+      prodTotals[item.productId].units += Number(item.sold) || 0;
+      prodTotals[item.productId].revenue += (Number(item.sold) || 0) * (Number(item.pricePerUnit) || 0);
+    });
+  });
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const topProducts = Object.values(prodTotals)
+    .map(p => ({ ...p, name: products.find(x => x.id === p.name)?.name || p.name }))
+    .sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+
+  // Forecast (simple 7-day average)
+  const avg7 = salesByDay.reduce((a, d) => a + d.value, 0) / 7;
+  const forecastNextDays = [1,2,3].map(i => {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    return { date: d.toISOString().split('T')[0], forecast: Math.round(avg7 * (0.9 + Math.random() * 0.2)) };
+  });
+
+  return { 
+    totalSalesToday, totalUnitsToday, activeEmployees, lowStockCount, 
+    expiringCount, expiredCount, 
+    salesByDay, salesByMonth, topProducts, forecastNextDays 
+  };
+}
+
+// ── SALES REPORT ─────────────────────────────────────────────
+function getSalesReport(params) {
+  const { startDate, endDate, warehouseId } = params;
+  const billings = sheetData(getSheet(SN.BILLING))
+    .filter(b => {
+      if (!b.date) return false;
+      const ds = _fmtDate(b.date);
+      return (!startDate || ds >= startDate) && (!endDate || ds <= endDate);
+    });
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const rows = [];
+  billings.forEach(b => {
+    if (warehouseId && b.warehouseId !== warehouseId) return;
+    const wh = warehouses.find(w => w.id === b.warehouseId);
+    const items = JSON.parse(b.items || '[]');
+    items.forEach(item => {
+      const prod = products.find(p => p.id === item.productId);
+      rows.push({
+        date: _fmtDate(b.date), product: prod?.name || item.productId,
+        warehouseName: wh?.name || b.warehouseId,
+        units: Number(item.sold) || 0,
+        revenue: (Number(item.sold) || 0) * (Number(item.pricePerUnit) || 0),
+      });
+    });
+  });
+  return { rows };
+}
+
+// ── LOGS ─────────────────────────────────────────────────────
+function getLogs(params) {
+  const { startDate, endDate, userId, filterAction, page } = params;
+  const pageNum = parseInt(page) || 1;
+  const pageSize = 30;
+  let logs = sheetData(getSheet(SN.LOGS));
+  if (startDate) logs = logs.filter(l => l.ts >= startDate);
+  if (endDate) logs = logs.filter(l => l.ts <= endDate + 'T23:59:59');
+  if (userId) logs = logs.filter(l => l.username === userId);
+  if (filterAction) logs = logs.filter(l => l.action === filterAction);
+  logs = logs.sort((a, b) => b.ts.localeCompare(a.ts));
+  const total = logs.length;
+  const sliced = logs.slice((pageNum-1)*pageSize, pageNum*pageSize);
+  return { logs: sliced, total };
+}
+
+// ── ORDERS ───────────────────────────────────────────────────
+function getOrders() {
+  const orders = sheetData(getSheet(SN.ORDERS))
+    .sort((a, b) => b.createdAt?.localeCompare(a.createdAt))
+    .slice(0, 50)
+    .map(o => ({ ...o, items: JSON.parse(o.items || '[]') }));
+  return { orders };
+}
+
+function orderRequest(user, data) {
+  appendRow(getSheet(SN.ORDERS), {
+    id: generateId('OR'), date: data.date || new Date().toISOString().split('T')[0],
+    requestedBy: data.requestedBy || user.displayName,
+    userId: user.id, status: 'pending', note: data.note || '',
+    items: JSON.stringify(data.items || []), createdAt: new Date().toISOString(),
+  });
+  writeLog(user, 'order', `สั่งสินค้า ${data.items?.length} รายการ`);
+  return { success: true };
+}
+
+function getReceiveHistory(user, params) {
+  requireRole(user, 'admin', 'stock');
+  const transactions = sheetData(getSheet(SN.TRANSACTIONS)).filter(t => t.type === 'receive');
+  const startDate = params.startDate;
+  const endDate = params.endDate;
+  const warehouseId = params.warehouseId;
+  
+  let filtered = transactions;
+  if (startDate) filtered = filtered.filter(t => _fmtDate(t.createdAt) >= startDate);
+  if (endDate) filtered = filtered.filter(t => _fmtDate(t.createdAt) <= endDate);
+  if (warehouseId) filtered = filtered.filter(t => (t.toWarehouseId || t.towarehouseid) === warehouseId);
+  
+  const grouped = {};
+  filtered.forEach(t => {
+    // ใช้ docNo, poNo, เวลา, และชื่อผู้ใช้ เป็น Key ในการรวมกลุ่มรายการที่มาด้วยกัน เพื่อแยกรายการที่ PO ซ้ำแต่คนละเวลา
+    const doc = t.docno || t.docNo || '';
+    const po = t.pono || t.poNo || '';
+    const timeKey = _safeTime(t.createdAt);
+    const key = String(doc + '_' + po + '_' + timeKey + '_' + t.username).trim();
+    if (!grouped[key]) {
+      grouped[key] = {
+        id: t.id, 
+        groupKey: key,
+        docNo: t.docno || t.docNo || '', 
+        poNo: t.poNo || t.pono || '',
+        taxInvoiceNo: t.taxInvoiceNo || t.taxinvoiceno || '',
+        createdAt: t.createdAt,
+        toWarehouseId: t.toWarehouseId || t.towarehouseid, 
+        username: t.username,
+        supplierId: t.supplierId || t.supplierid || '',
+        supplier: t.supplier, 
+        note: t.note, 
+        items: []
+      };
+    }
+    grouped[key].items.push({
+      productId: t.productId || t.productid, 
+      qty: t.qty, 
+      unit: t.unit, 
+      expiryDate: t.expiryDate || t.expirydate,
+      costNoVat: Number(t.costnovat || t.costNoVat || 0),
+      costVat: Number(t.costvat || t.costVat || 0),
+      discount: Number(t.discount || 0)
+    });
+  });
+  
+  return { history: Object.values(grouped).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))) };
+}
+
+function migrateOldCosts(user) {
+  requireRole(user, 'admin');
+  const tSheet = getSheet(SN.TRANSACTIONS);
+  const pSheet = getSheet(SN.PRODUCTS);
+  
+  const pData = sheetData(pSheet);
+  const pMap = {};
+  pData.forEach(p => {
+    pMap[p.id] = { costNoVat: Number(p.costNoVat || p.costnovat || 0), costVat: Number(p.costVat || p.costvat || 0) };
+  });
+
+  const tRange = tSheet.getDataRange();
+  const tData = tRange.getValues();
+  if (tData.length < 2) return { success: true, updated: 0 };
+  
+  const headers = tData[0].map(h => String(h).toLowerCase().trim());
+  const typeIdx = headers.indexOf('type');
+  const prodIdx = headers.indexOf('productid');
+  const costNoVatIdx = headers.indexOf('costnovat');
+  const costVatIdx = headers.indexOf('costvat');
+
+  if (costNoVatIdx === -1 || costVatIdx === -1) return { success: false, message: 'Missing headers' };
+
+  let updated = 0;
+  for (let i = 1; i < tData.length; i++) {
+    if (tData[i][typeIdx] === 'receive') {
+      const pId = tData[i][prodIdx];
+      const cNoVat = Number(tData[i][costNoVatIdx]) || 0;
+      if (cNoVat === 0 && pMap[pId]) {
+        tData[i][costNoVatIdx] = pMap[pId].costNoVat;
+        tData[i][costVatIdx] = pMap[pId].costVat;
+        updated++;
+      }
+    }
+  }
+
+  if (updated > 0) {
+    tRange.setValues(tData);
+  }
+
+  return { success: true, updated };
+}
+
+function getReceiveHistoryDetail(user, params) {
+  requireRole(user, 'admin', 'stock');
+  const { id } = params;
+  const all = getReceiveHistory(user, {}).history;
+  const record = all.find(h => (String(h.groupKey) === String(id) || String(h.docNo) === String(id) || String(h.id) === String(id)));
+  return { record };
+}
+
+function updateReceiveHistory(user, data) {
+  requireRole(user, 'admin'); 
+  const { originalKey, newRecord } = data; 
+  
+  if (!originalKey || !newRecord || !newRecord.items) {
+    throw new Error('ข้อมูลไม่ครบถ้วน');
+  }
+
+  const tSheet = getSheet(SN.TRANSACTIONS);
+  const tData = tSheet.getDataRange().getValues();
+  if (tData.length < 2) throw new Error('ไม่พบประวัติ');
+  
+  const tHeaders = tData[0].map(h => String(h).trim());
+  const typeIdx = tHeaders.indexOf('type');
+  const docNoIdx = tHeaders.indexOf('docNo');
+  const createdAtIdx = tHeaders.indexOf('createdAt');
+  const usernameIdx = tHeaders.indexOf('username');
+  const productIdIdx = tHeaders.indexOf('productId');
+  const qtyIdx = tHeaders.indexOf('qty');
+  const unitIdx = tHeaders.indexOf('unit');
+  const expiryDateIdx = tHeaders.indexOf('expiryDate');
+  const warehouseIdx = tHeaders.indexOf('toWarehouseId');
+
+  const rowsToDelete = [];
+  const itemsToRevert = [];
+  const debugKeys = [];
+  
+  const orig = String(originalKey).trim();
+
+  for (let i = tData.length - 1; i >= 1; i--) {
+    const row = tData[i];
+    if (row[typeIdx] === 'receive') {
+      const doc = row[docNoIdx] ? String(row[docNoIdx]).trim() : '';
+      const po = String(row[tHeaders.indexOf('poNo')] || row[tHeaders.indexOf('pono')] || '').trim();
+      
+      const safeT = _safeTime(row[createdAtIdx]);
+      const rawT = String(row[createdAtIdx]);
+      const userStr = String(row[usernameIdx]).trim();
+      
+      const newFormatKey = String(doc + '_' + po + '_' + safeT + '_' + userStr).trim();
+      const oldFormatKey = String(doc || po || (safeT + '_' + userStr)).trim();
+      const oldFallbackKey = rawT + '_' + userStr;
+      
+      let isMatch = false;
+      if (orig === newFormatKey || orig === oldFormatKey || orig === oldFallbackKey || orig === String(row[tHeaders.indexOf('id')])) {
+        isMatch = true;
+      }
+      
+      if (debugKeys.length < 5 && !isMatch) {
+         debugKeys.push(`[po:${po}, doc:${doc}, id:${row[tHeaders.indexOf('id')]}]`);
+      }
+      
+      if (isMatch) {
+        rowsToDelete.push(i + 1); 
+        itemsToRevert.push({
+          warehouseId: row[warehouseIdx],
+          productId: row[productIdIdx] || row[tHeaders.indexOf('productid')],
+          qty: Number(row[qtyIdx]),
+          unit: row[unitIdx],
+          expiryDate: row[expiryDateIdx] || row[tHeaders.indexOf('expirydate')],
+          costNoVat: Number(row[tHeaders.indexOf('costnovat')]) || 0,
+          costVat: Number(row[tHeaders.indexOf('costvat')]) || 0,
+          discount: Number(row[tHeaders.indexOf('discount')]) || 0
+        });
+      }
+    }
+  }
+
+  if (rowsToDelete.length === 0) {
+    const searchVal = forceDocNo ? `DocNo=${forceDocNo}` : (forcePoNo ? `PO=${forcePoNo}` : `Key=${originalKey}`);
+    throw new Error(`ไม่พบข้อมูลประวัติเดิมเพื่อแก้ไข | ค้นหาจาก: [${searchVal}] | ตัวอย่างใน Sheet: ${debugKeys.join(', ')}`);
+  }
+
+  itemsToRevert.forEach(item => {
+    updateCentralStock(item.warehouseId, item.productId, -item.qty, item.unit, item.expiryDate);
+  });
+
+  rowsToDelete.forEach(rowNum => {
+    tSheet.deleteRow(rowNum);
+  });
+
+  const ts = newRecord.createdAt || new Date().toISOString(); 
+  const warehouseId = newRecord.toWarehouseId;
+
+  newRecord.items.forEach(item => {
+    updateCentralStock(warehouseId, item.productId, Number(item.qty), item.unit, item.expiryDate);
+    appendRow(tSheet, {
+      id: generateId('TR'), 
+      type: 'receive', 
+      fromWarehouseId: 'SUPPLIER', 
+      toWarehouseId: warehouseId,
+      productId: item.productId, 
+      qty: Number(item.qty), 
+      unit: item.unit, 
+      docNo: newRecord.docNo,
+      poNo: newRecord.poNo || '', 
+      taxInvoiceNo: newRecord.taxInvoiceNo || '',
+      note: newRecord.note || '', 
+      userId: user.id, 
+      username: user.username, 
+      createdAt: ts, 
+      supplierId: newRecord.supplierId || newRecord.supplier || '', 
+      supplier: newRecord.supplier || '', 
+      expiryDate: item.expiryDate || '',
+      costNoVat: Number(item.costNoVat) || 0,
+      costVat: Number(item.costVat) || 0,
+      discount: Number(item.discount) || 0
+    });
+  });
+
+  writeLog(user, 'updateReceive', `แก้ไขประวัติรับเข้า [${originalKey}] -> [${newRecord.docNo || 'N/A'}]`);
+  return { success: true };
+}
+
+function getMovementHistory(user, params) {
+  requireRole(user, 'admin', 'stock');
+  const transactions = sheetData(getSheet(SN.TRANSACTIONS)).filter(t => t.type === 'movement');
+  const { startDate, endDate, fromWhId, toWhId } = params;
+  
+  let filtered = transactions;
+  if (startDate) filtered = filtered.filter(t => t.createdAt >= startDate);
+  if (endDate) filtered = filtered.filter(t => t.createdAt <= endDate + 'T23:59:59');
+  if (fromWhId) filtered = filtered.filter(t => t.fromWarehouseId === fromWhId);
+  if (toWhId) filtered = filtered.filter(t => t.toWarehouseId === toWhId);
+  
+  const grouped = {};
+  filtered.forEach(t => {
+    // Group by timestamp + user to group items moved together
+    const key = t.createdAt + '_' + t.userId;
+    if (!grouped[key]) {
+      grouped[key] = {
+        id: t.id, createdAt: t.createdAt,
+        fromWarehouseId: t.fromWarehouseId,
+        toWarehouseId: t.toWarehouseId,
+        userId: t.userId, username: t.username,
+        note: t.note, items: []
+      };
+    }
+    grouped[key].items.push({
+      productId: t.productId, qty: t.qty, unit: t.unit, expiryDate: t.expiryDate
+    });
+  });
+  
+  return { history: Object.values(grouped).sort((a,b) => b.createdAt.localeCompare(a.createdAt)) };
+}
+
+function setupSheets() {
+  // Create sheets
+  Object.values(SN).forEach(name => getSheet(name));
+  
+  // Create default admin user if none exists
+  const userSheet = getSheet(SN.USERS);
+  const users = sheetData(userSheet);
+  if (users.length === 0) {
+    appendRow(userSheet, {
+      id: 'U001',
+      username: 'admin',
+      passwordHash: hashPassword('admin1234'),
+      displayName: 'ผู้ดูแลระบบ',
+      email: 'admin@stockfanggie.com',
+      role: 'admin',
+      active: true,
+      isEmployee: false,
+      createdAt: new Date().toISOString(),
+    });
+    return { success: true, message: 'Setup Complete! Created default admin: admin / admin1234' };
+  }
+  return { success: true, message: 'Sheets already existed or users were already present.' };
+}
+
+/**
+ * cancelConsign: ยกเลิกการฝากสินค้า (Consigned) เพื่อให้นำไปคิดเงินตามปกติ
+ * @param {object} user 
+ * @param {object} data { warehouseId, items: [{productId, expiryDate, qty}] }
+ */
+function cancelConsign(user, data) {
+  requireRole(user, 'admin', 'stock');
+  const { warehouseId, items } = data;
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    const ts = new Date().toISOString();
+
+    items.forEach(it => {
+      // ลดเฉพาะจำนวนที่ "ติดฝาก" (Consigned) ลง เพื่อให้จำนวน "ขายได้" (Qty - Consigned) เพิ่มขึ้น
+      // หมายเหตุ: qty ยังคงเดิม เพราะของยังอยู่ที่พนักงาน
+      updateEmployeeStock(warehouseId, it.productId, 0, -Number(it.qty), '', it.expiryDate);
+
+      // บันทึก Transaction
+      const cancelPrices = getProductPrices(it.productId);
+      appendRow(getSheet(SN.TRANSACTIONS), {
+        id: generateId('TR'), 
+        type: 'cancel_consign', 
+        fromWarehouseId: warehouseId, 
+        toWarehouseId: 'SALE_READY',
+        productId: it.productId, 
+        qty: Number(it.qty), 
+        unit: '', 
+        note: 'ยกเลิกการฝากเพื่อคิดเงิน',
+        userId: user.id, 
+        username: user.username, 
+        createdAt: ts, 
+        expiryDate: it.expiryDate || '',
+        txnCostVat: cancelPrices.costVat, txnSellWholesale: cancelPrices.sellWholesale
+      });
+    });
+
+    writeLog(user, 'cancel_consign', `ยกเลิกการฝากสินค้า [${warehouseId}] ทั้งหมด ${items.length} รายการ`);
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function adjustCentralStockBatch(user, data) {
+  requireRole(user, 'admin', 'stock');
+  const { warehouseId, productId, originalExpiry, newExpiry, newQty, unit } = data;
+  
+  const sheet = getSheet(SN.CENTRAL_STOCK);
+  const rows = sheet.getDataRange().getValues();
+  const hdr = rows[0];
+  const whIdx = hdr.indexOf('warehouseId');
+  const pidIdx = hdr.indexOf('productId');
+  const expIdx = hdr.indexOf('expiryDate');
+  const qtyIdx = hdr.indexOf('qty');
+  const updatedIdx = hdr.indexOf('lastUpdated');
+  
+  const origExpVal = _fmtDate(originalExpiry);
+  const newExpVal = _fmtDate(newExpiry);
+  let foundRow = -1;
+
+  for (let i = 1; i < rows.length; i++) {
+    const rowPid = String(rows[i][pidIdx]).trim();
+    const rowWh = String(rows[i][whIdx]).trim();
+    const rowExp = _fmtDate(rows[i][expIdx]);
+
+    if (rowPid === String(productId).trim() && 
+        rowWh === String(warehouseId).trim() && 
+        rowExp === origExpVal) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+
+  if (foundRow > 0) {
+    if (newQty <= 0) {
+      sheet.deleteRow(foundRow);
+    } else {
+      sheet.getRange(foundRow, expIdx + 1).setValue(newExpVal);
+      sheet.getRange(foundRow, qtyIdx + 1).setValue(newQty);
+      sheet.getRange(foundRow, updatedIdx + 1).setValue(new Date().toISOString());
+    }
+  } else if (newQty > 0) {
+    appendRow(sheet, {
+      productId, warehouseId, expiryDate: newExpVal,
+      qty: newQty, unit: unit || '', lastUpdated: new Date().toISOString()
+    });
+  }
+
+  // Log the adjustment
+  const warehouses = sheetData(getSheet(SN.WAREHOUSES));
+  const products   = sheetData(getSheet(SN.PRODUCTS));
+  const whName  = (warehouses.find(w => w.id === warehouseId) || {}).name || warehouseId;
+  const pName   = (products.find(p => p.id === productId)     || {}).name || productId;
+  writeLog(user, 'adjust_batch', `ปรับสต็อกล็อต [${whName}] : ${pName} เป็น ${newQty} (Exp: ${newExpVal})`);
+  
+  return { success: true };
+}
+
+// ── SHOPS ───────────────────────────────────────────────────
+function getShops(user) {
+  const shops = sheetData(getSheet(SN.SHOPS)).map(s => ({
+    ...s,
+    active: _isTrue(s.active),
+    lat: Number(s.lat) || 0,
+    lng: Number(s.lng) || 0
+  }));
+  return { shops };
+}
+
+function createShop(user, data) {
+  requireRole(user, 'admin', 'stock', 'sell');
+  const shop = {
+    id: generateId('S'),
+    name: data.name,
+    address: data.address || '',
+    lat: data.lat || 0,
+    lng: data.lng || 0,
+    ownerName: data.ownerName || '',
+    phone: data.phone || '',
+    salesPersonId: data.salesPersonId || user.id,
+    active: true,
+    createdAt: new Date().toISOString(),
+    imageUrl: data.imageUrl || ''
+  };
+  appendRow(getSheet(SN.SHOPS), shop);
+  writeLog(user, 'createShop', `สร้างร้านค้า ${shop.name}`);
+  return { success: true, shop };
+}
+
+function updateShop(user, data) {
+  requireRole(user, 'admin', 'stock', 'sell');
+  const sheet = getSheet(SN.SHOPS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบร้านค้า');
+  updateRow(sheet, rowNum, data);
+  writeLog(user, 'updateShop', `แก้ไขร้านค้า ${data.name}`);
+  return { success: true };
+}
+
+function deleteShop(user, shopId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SHOPS);
+  const rowNum = findRow(sheet, 'id', shopId);
+  if (rowNum < 0) throw new Error('ไม่พบร้านค้า');
+  sheet.deleteRow(rowNum);
+  writeLog(user, 'deleteShop', `ลบร้านค้า ${shopId}`);
+  return { success: true };
+}
+
+function getShopStock(shopId) {
+  const stock = sheetData(getSheet(SN.SHOP_STOCK));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const filtered = (shopId ? stock.filter(s => s.shopId === shopId) : stock).map(s => {
+    const p = products.find(px => px.id === s.productId);
+    return {
+      ...s,
+      qty: Number(s.qty),
+      product: p || { name: 'Unknown Product' }
+    };
+  });
+  return { stock: filtered };
+}
+
+/**
+ * โอนสินค้าจากคลังพนักงานเข้าร้านค้า (คิดเงิน/ฝากขาย)
+ */
+function moveToShop(user, data) {
+  const { shopId, items } = data; // items: [{productId, expiryDate, qty, price}]
+  if (!shopId || !items || !items.length) throw new Error('ข้อมูลไม่ครบถ้วน');
+  
+  const shop = sheetData(getSheet(SN.SHOPS)).find(s => s.id === shopId);
+  if (!shop) throw new Error('ไม่พบร้านค้า');
+  
+  const targetEmployeeId = data.employeeId || user.id;
+  const empWh = sheetData(getSheet(SN.WAREHOUSES)).find(w => w.employeeId === targetEmployeeId);
+  if (!empWh) throw new Error(targetEmployeeId === user.id ? 'ไม่พบคลังของคุณ' : `ไม่พบคลังของพนักงานรหัส ${targetEmployeeId}`);
+
+  let totalAmt = 0;
+  let totalUnits = 0;
+
+  items.forEach(item => {
+    // 1. ตัดสต็อกพนักงาน
+    updateEmployeeStock(empWh.id, item.productId, -item.qty, 0, '', item.expiryDate);
+    
+    // 2. เพิ่มสต็อกร้านค้า
+    adjustShopInventory(shopId, item.productId, item.expiryDate, item.qty);
+    
+    const amt = (item.price || 0) * item.qty;
+    totalAmt += amt;
+    totalUnits += item.qty;
+
+    // 3. บันทึก Transaction
+    appendRow(getSheet(SN.TRANSACTIONS), {
+      id: generateId('T'),
+      type: 'MOVE_TO_SHOP',
+      fromWarehouseId: empWh.id,
+      toWarehouseId: shopId,
+      productId: item.productId,
+      qty: item.qty,
+      unit: item.unit || '',
+      costVat: item.price || 0,
+      note: `ส่งของเข้าร้าน ${shop.name}`,
+      userId: user.id,
+      username: user.username,
+      createdAt: new Date().toISOString(),
+      expiryDate: item.expiryDate
+    });
+  });
+
+  // 4. บันทึก Billing (คิดเงิน)
+  if (totalAmt > 0) {
+    appendRow(getSheet(SN.BILLING), {
+      id: generateId('B'),
+      warehouseId: shopId,
+      employeeId: user.id,
+      date: new Date().toISOString().split('T')[0],
+      totalAmt: totalAmt,
+      totalUnits: totalUnits,
+      note: `โอนของเข้าร้าน ${shop.name}`,
+      userId: user.id,
+      createdAt: new Date().toISOString()
+    });
+  }
+  
+  return { success: true };
+}
+
+/**
+ * เปลี่ยนสินค้าในร้านค้า (Swap) กรณีใกล้หมดอายุ
+ */
+function swapShopStock(user, data) {
+  const { shopId, productId, oldExpiry, newExpiry, qty } = data;
+  if (!shopId || !productId || !oldExpiry || !newExpiry || !qty) throw new Error('ข้อมูลไม่ครบถ้วน');
+
+  const targetEmployeeId = data.employeeId || user.id;
+  const empWh = sheetData(getSheet(SN.WAREHOUSES)).find(w => w.employeeId === targetEmployeeId);
+  if (!empWh) throw new Error(targetEmployeeId === user.id ? 'ไม่พบคลังของคุณ' : `ไม่พบคลังของพนักงานรหัส ${targetEmployeeId}`);
+
+  // 1. คืนของเก่าเข้าคลังพนักงาน
+  updateEmployeeStock(empWh.id, productId, qty, 0, '', oldExpiry);
+  // 2. หักของเก่าออกจากร้านค้า
+  adjustShopInventory(shopId, productId, oldExpiry, -qty);
+  
+  // 3. ตัดของใหม่จากคลังพนักงาน
+  updateEmployeeStock(empWh.id, productId, -qty, 0, '', newExpiry);
+  // 4. เพิ่มของใหม่เข้าร้านค้า
+  adjustShopInventory(shopId, productId, newExpiry, qty);
+
+  // 5. บันทึก Transaction
+  appendRow(getSheet(SN.TRANSACTIONS), {
+    id: generateId('T'),
+    type: 'SWAP_SHOP_STOCK',
+    fromWarehouseId: shopId,
+    toWarehouseId: shopId,
+    productId: productId,
+    qty: qty,
+    docNo: data.docNo || '',
+    note: `สลับสินค้า (${oldExpiry} -> ${newExpiry})`,
+    userId: user.id,
+    username: user.username,
+    createdAt: new Date().toISOString(),
+    expiryDate: newExpiry
+  });
+
+  // บันทึก Log
+  writeLog(user, 'swapShopStock', `เปลี่ยนสินค้า ${productId} ในร้าน ${shopId} (${oldExpiry} -> ${newExpiry})`);
+  
+  return { success: true };
+}
+
+function getShopHistory(user, shopId) {
+  const tx = sheetData(getSheet(SN.TRANSACTIONS));
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const users = sheetData(getSheet(SN.USERS));
+  const filtered = tx.filter(t => (String(t.fromWarehouseId) === String(shopId) || String(t.toWarehouseId) === String(shopId)))
+    .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 50);
+
+  return {
+    history: filtered.map(t => {
+      const p = products.find(px => px.id === t.productId) || {};
+      const u = users.find(ux => ux.id === t.userId) || {};
+      return { 
+        ...t, 
+        productName: p.name || t.productId, 
+        unit: p.unit || '',
+        operatorAvatar: u.avatar || ''
+      };
+    })
+  };
+}
+
+/**
+ * คืนสินค้าจากร้านค้าเข้าคลังพนักงาน (คืนเงิน)
+ */
+function returnFromShop(user, data) {
+  const { shopId, productId, expiryDate, qty, refundAmount } = data;
+  
+  const targetEmployeeId = data.employeeId || user.id;
+  const empWh = sheetData(getSheet(SN.WAREHOUSES)).find(w => w.employeeId === targetEmployeeId);
+  if (!empWh) throw new Error(targetEmployeeId === user.id ? 'ไม่พบคลังของคุณ' : `ไม่พบคลังของพนักงานรหัส ${targetEmployeeId}`);
+
+  // 1. หักสต็อกร้านค้า
+  adjustShopInventory(shopId, productId, expiryDate, -qty);
+  // 2. คืนสต็อกพนักงาน
+  updateEmployeeStock(empWh.id, productId, qty, 0, '', expiryDate);
+  
+  // 3. บันทึก Transaction (เป็นค่าติดลบสำหรับราคา เพื่อระบุว่าคืนเงิน)
+  appendRow(getSheet(SN.TRANSACTIONS), {
+    id: generateId('T'),
+    type: 'RETURN_FROM_SHOP',
+    fromWarehouseId: shopId,
+    toWarehouseId: empWh.id,
+    productId: productId,
+    qty: qty,
+    costVat: -Math.abs(refundAmount || 0),
+    docNo: data.docNo || '',
+    note: `คืนสินค้าจากร้านค้า (คืนเงิน)`,
+    userId: user.id,
+    username: user.username,
+    createdAt: new Date().toISOString(),
+    expiryDate: expiryDate
+  });
+
+  // 4. บันทึก Billing คืนเงิน (ติดลบ)
+  if (refundAmount > 0) {
+    const shop = sheetData(getSheet(SN.SHOPS)).find(s => s.id === shopId);
+    appendRow(getSheet(SN.BILLING), {
+      id: generateId('B'),
+      warehouseId: shopId,
+      employeeId: user.id,
+      date: new Date().toISOString().split('T')[0],
+      totalAmt: -Math.abs(refundAmount),
+      totalUnits: -qty,
+      note: `รับคืนสินค้าจากร้าน ${shop ? shop.name : shopId}`,
+      userId: user.id,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  writeLog(user, 'returnFromShop', `รับคืนสินค้า ${productId} จากร้าน ${shopId} (จำนวน ${qty}, คืนเงิน ${refundAmount})`);
+  return { success: true };
+}
+
+function adjustShopInventory(shopId, productId, expiryDate, qty) {
+  const sheet = getSheet(SN.SHOP_STOCK);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim());
+  const shopIdx = headers.indexOf('shopId');
+  const pidIdx = headers.indexOf('productId');
+  const expIdx = headers.indexOf('expiryDate');
+  const qtyIdx = headers.indexOf('qty');
+  const updatedIdx = headers.indexOf('lastUpdated');
+  
+  const targetExp = _fmtDate(expiryDate);
+  let foundRow = -1;
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][shopIdx]) === String(shopId) &&
+        String(data[i][pidIdx]) === String(productId) &&
+        _fmtDate(data[i][expIdx]) === targetExp) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+  
+  if (foundRow > 0) {
+    const currentQty = Number(data[foundRow-1][qtyIdx]) || 0;
+    const newQty = currentQty + qty;
+    if (newQty <= 0) {
+      sheet.deleteRow(foundRow);
+    } else {
+      sheet.getRange(foundRow, qtyIdx + 1).setValue(newQty);
+      sheet.getRange(foundRow, updatedIdx + 1).setValue(new Date().toISOString());
+    }
+  } else if (qty > 0) {
+    appendRow(sheet, {
+      shopId, productId, expiryDate: targetExp, qty, lastUpdated: new Date().toISOString()
+    });
+  }
+}
+
+function getProductPrices(productId) {
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  
+  let p = products.find(x => String(x.id) === String(productId));
+  if (p) {
+    return { 
+      costVat: Number(p.costVat) || 0, 
+      sellWholesale: Number(p.sellWholesale) || 0 
+    };
+  }
+  
+  const setObj = sets.find(x => String(x.id) === String(productId));
+  if (setObj) {
+    let cost = 0;
+    let wholesale = 0;
+    let parsedItems = [];
+    try { parsedItems = JSON.parse(setObj.items || '[]'); } catch(e) {}
+    parsedItems.forEach(it => {
+      let cp = null;
+      if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+      if (!cp && it.category) cp = products.find(x => x.category === it.category);
+      if (cp) {
+        cost += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+        wholesale += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+      }
+    });
+    return { costVat: cost, sellWholesale: wholesale };
+  }
+  
+  return { costVat: 0, sellWholesale: 0 };
+}
+
+/**
+ * _fmtDate: จัดรูปแบบวันที่ให้อยู่ในรูป YYYY-MM-DD (String) เพื่อความสม่ำเสมอในการค้นหา
+ */
+function _fmtDate(d) {
+  if (!d) return '';
+  // ถ้าเป็น Date object ให้ใช้ Utilities.formatDate เพื่อความแม่นยำของ Timezone
+  if (d instanceof Date) {
+    try {
+      return Utilities.formatDate(d, "GMT+7", "yyyy-MM-dd");
+    } catch(e) { /* fallback */ }
+  }
+  
+  // ถ้าเป็น String และอยู่ในรูปแบบ YYYY-MM-DD อยู่แล้วให้คืนค่าเลย
+  const s = String(d).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // กรณีอื่นๆ พยายามแปลงเป็น Date ก่อน
+  try {
+    const dt = new Date(d);
+    // ถ้าแปลงเป็น Date ได้ ให้ใช้ timezone GMT+7
+    if (!isNaN(dt.getTime())) {
+      return Utilities.formatDate(dt, "GMT+7", "yyyy-MM-dd");
+    }
+  } catch(e) { /* fallback */ }
+  
+  // Fallback สำหรับกรณีเป็น string ที่มี T (แต่แปลงเป็น Date ไม่ได้) หรือ string รูปแบบอื่นๆ
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.split('T')[0];
+  return s.split(' ')[0];
+}
+
+function getSuppliers() {
+  const suppliers = sheetData(getSheet(SN.SUPPLIERS));
+  return { suppliers };
+}
+function createSupplier(user, data) {
+  requireRole(user, 'admin');
+  const supplier = { id: generateId('S'), ...data, createdAt: new Date().toISOString() };
+  appendRow(getSheet(SN.SUPPLIERS), supplier);
+  return { success: true, supplier };
+}
+function updateSupplier(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SUPPLIERS);
+  const rowNum = findRow(sheet, 'id', data.id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้จำหน่าย');
+  updateRow(sheet, rowNum, data);
+  return { success: true };
+}
+function deleteSupplier(user, id) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SUPPLIERS);
+  const rowNum = findRow(sheet, 'id', id);
+  if (rowNum < 0) throw new Error('ไม่พบผู้จำหน่าย');
+  sheet.deleteRow(rowNum);
+  return { success: true };
+}
+function getCompanyInfo() {
+  const data = sheetData(getSheet(SN.COMPANY_INFO));
+  return { companyInfo: data[0] || {} };
+}
+function saveCompanyInfo(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.COMPANY_INFO);
+  const rows = sheet.getLastRow();
+  if (rows > 1) {
+    sheet.getRange(2, 1, rows - 1, sheet.getLastColumn()).clearContent();
+  }
+  const info = { id: 'C1', ...data };
+  appendRow(sheet, info);
+  return { success: true, companyInfo: info };
+}
+
+// ── Batch Master Data ────────────────────────────────────────
+// Loads Products, Warehouses, Suppliers, Users in ONE request.
+// Reduces 3-4 separate API calls into a single round trip.
+function getMasterData(user) {
+  const products = sheetData(getSheet(SN.PRODUCTS))
+    .filter(function(p) { return _isTrue(p.active) || p.active === ''; })
+    .map(function(p) { return {
+      id: p.id, code: p.code, name: p.name, category: p.category,
+      unit: p.unit, unitsPerCase: Number(p.unitsPerCase) || 0,
+      unitsPerTray: Number(p.unitsPerTray) || 0,
+      costNoVat: Number(p.costNoVat) || 0, costVat: Number(p.costVat) || 0,
+      agentProfit: Number(p.agentProfit) || 0, sellWholesale: Number(p.sellWholesale) || 0,
+      sellCommission: Number(p.sellCommission) || 0, shopWholesale: Number(p.shopWholesale) || 0,
+      imageUrl: p.imageUrl || '',
+    }; });
+
+  var allUsers = sheetData(getSheet(SN.USERS));
+
+  var warehouses = sheetData(getSheet(SN.WAREHOUSES))
+    .filter(function(w) { return _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE' || w.active === ''; })
+    .map(function(w) {
+      var u = allUsers.find(function(x) { return x.id === w.employeeId; }) || {};
+      return {
+        id: w.id, name: w.name, type: w.type, location: w.location, avatar: w.avatar || '',
+        employeeId: w.employeeId, active: _isTrue(w.active) || String(w.active).toUpperCase() === 'TRUE',
+        employeeAvatar: u.avatar || w.avatar || '', employeeName: u.displayName || u.username || w.name || ''
+      };
+    });
+
+  var suppliers = sheetData(getSheet(SN.SUPPLIERS)).map(function(s) { return {
+    id: s.id, name: s.name, address: s.address || '', phone: s.phone || '',
+    fax: s.fax || '', taxId: s.taxId || ''
+  }; });
+
+  var users = allUsers.map(function(u) { return {
+    id: u.id, username: u.username,
+    displayName: u.displayName || '', fullName: u.fullName || '',
+    phone: u.phone || '', avatar: u.avatar || '',
+    role: u.role, active: _isTrue(u.active),
+    isEmployee: _isTrue(u.isEmployee),
+  }; });
+
+  return { products: products, warehouses: warehouses, suppliers: suppliers, users: users, sets: getSets().sets };
+}
+
+// ── Sets Management ────────────────────────────────────────
+function getSets() {
+  const sheet = getSheet(SN.SETS);
+  if (!sheet) return { sets: [] };
+  const raw = sheetData(sheet);
+  return {
+    sets: raw.map(s => ({
+      ...s,
+      items: JSON.parse(s.items || '[]'),
+      active: _isTrue(s.active)
+    }))
+  };
+}
+
+function createSet(user, data) {
+  requireRole(user, 'admin');
+  if (!data.name || !data.code || !data.items || data.items.length === 0) throw new Error('ข้อมูลไม่ครบถ้วน');
+  
+  const sheet = getSheet(SN.SETS);
+  const existing = sheetData(sheet).find(s => s.code === data.code);
+  if (existing) throw new Error('รหัสเซ็ตซ้ำกับที่มีอยู่แล้ว');
+  
+  const id = generateId('SET');
+  appendRow(sheet, {
+    id: id,
+    code: data.code,
+    name: data.name,
+    items: JSON.stringify(data.items),
+    active: true,
+    createdBy: user.username,
+    createdAt: new Date().toISOString(),
+    imageUrl: data.imageUrl || ''
+  });
+  
+  writeLog(user, 'create_set', `สร้างเซ็ตสินค้าใหม่ [${data.code}] ${data.name}`);
+  return { success: true, id };
+}
+
+function updateSet(user, data) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rows = sheetData(sheet);
+  const rowIndex = rows.findIndex(r => r.id === data.id);
+  
+  if (rowIndex === -1) throw new Error('ไม่พบข้อมูลเซ็ต');
+  
+  updateRow(sheet, rowIndex + 2, {
+    code: data.code || rows[rowIndex].code,
+    name: data.name || rows[rowIndex].name,
+    items: data.items ? JSON.stringify(data.items) : rows[rowIndex].items,
+    active: data.active !== undefined ? data.active : rows[rowIndex].active,
+    imageUrl: data.imageUrl !== undefined ? data.imageUrl : rows[rowIndex].imageUrl
+  });
+  
+  writeLog(user, 'update_set', `แก้ไขเซ็ตสินค้า [${data.code}]`);
+  return { success: true };
+}
+
+function deleteSet(user, setId) {
+  requireRole(user, 'admin');
+  const sheet = getSheet(SN.SETS);
+  const rows = sheetData(sheet);
+  const rowIndex = rows.findIndex(r => r.id === setId);
+  
+  if (rowIndex === -1) throw new Error('ไม่พบข้อมูลเซ็ต');
+  
+  const code = rows[rowIndex].code;
+  sheet.deleteRow(rowIndex + 2);
+  
+  writeLog(user, 'delete_set', `ลบเซ็ตสินค้า [${code}]`);
+  return { success: true };
+}
+
+function updateBillingDate(user, data) {
+  requireRole(user, 'admin');
+  const { billingId, newDate } = data;
+  if (!billingId || !newDate) throw new Error('Missing parameters');
+
+  const sheet = getSheet(SN.BILLING);
+  const dataRange = sheet.getDataRange();
+  const values = dataRange.getValues();
+  const headers = values[0];
+  const idIdx = headers.indexOf('id');
+  const dateIdx = headers.indexOf('date');
+  
+  let found = false;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idIdx] === billingId) {
+      sheet.getRange(i + 1, dateIdx + 1).setValue(newDate);
+      found = true;
+      break;
+    }
+  }
+  if (!found) throw new Error('Billing not found');
+
+  const finSheet = getSheet(SN.EMPLOYEE_FINANCE);
+  if (finSheet) {
+    const finValues = finSheet.getDataRange().getValues();
+    const fHeaders = finValues[0];
+    const fBillIdx = fHeaders.indexOf('billingId');
+    const fDateIdx = fHeaders.indexOf('date');
+    if (fBillIdx >= 0 && fDateIdx >= 0) {
+      for (let i = 1; i < finValues.length; i++) {
+        if (finValues[i][fBillIdx] === billingId) {
+          finSheet.getRange(i + 1, fDateIdx + 1).setValue(newDate);
+        }
+      }
+    }
+  }
+
+  logAction(user, 'Update Billing Date', billingId + ' -> ' + newDate);
+  return { success: true };
+}
+
+function backfillTransactionPrices() {
+  const sheet = getSheet(SN.TRANSACTIONS);
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return 'No data';
+  
+  let headers = data[0];
+  let costIdx = headers.indexOf('txnCostVat');
+  let wholeIdx = headers.indexOf('txnSellWholesale');
+  
+  // Create columns if missing
+  if (costIdx === -1) {
+    costIdx = headers.length;
+    sheet.getRange(1, costIdx + 1).setValue('txnCostVat');
+    headers.push('txnCostVat');
+    data[0].push('txnCostVat');
+  }
+  
+  if (wholeIdx === -1) {
+    wholeIdx = headers.length;
+    sheet.getRange(1, wholeIdx + 1).setValue('txnSellWholesale');
+    headers.push('txnSellWholesale');
+    data[0].push('txnSellWholesale');
+  }
+  
+  const pidIdx = headers.indexOf('productId');
+  if (pidIdx === -1) return 'No productId column';
+  
+  const numRows = data.length - 1;
+  const updatesCost = [];
+  const updatesWhole = [];
+  
+  const products = sheetData(getSheet(SN.PRODUCTS));
+  const sets = sheetData(getSheet(SN.SETS));
+  
+  const getPrices = (pId) => {
+    let p = products.find(x => String(x.id) === String(pId));
+    if (p) return { c: Number(p.costVat) || 0, w: Number(p.sellWholesale) || 0 };
+    
+    let setObj = sets.find(x => String(x.id) === String(pId));
+    if (setObj) {
+      let c = 0, w = 0;
+      let parsed = [];
+      try { parsed = JSON.parse(setObj.items || '[]'); } catch(e){}
+      parsed.forEach(it => {
+        let cp = null;
+        if (it.allowedProducts && it.allowedProducts.length > 0) cp = products.find(x => it.allowedProducts.includes(x.id));
+        if (!cp && it.category) cp = products.find(x => x.category === it.category);
+        if (cp) {
+          c += (Number(cp.costVat) || 0) * (Number(it.qty) || 0);
+          w += (Number(cp.sellWholesale) || 0) * (Number(it.qty) || 0);
+        }
+      });
+      return { c, w };
+    }
+    return { c: 0, w: 0 };
+  };
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    while (row.length < headers.length) row.push('');
+    
+    const pId = row[pidIdx];
+    let existingWhole = row[wholeIdx];
+    
+    if (existingWhole === '' || existingWhole === undefined || existingWhole === null) {
+      const prices = getPrices(pId);
+      row[costIdx] = prices.c;
+      row[wholeIdx] = prices.w;
+    }
+    updatesCost.push([row[costIdx]]);
+    updatesWhole.push([row[wholeIdx]]);
+  }
+  
+  sheet.getRange(2, costIdx + 1, numRows, 1).setValues(updatesCost);
+  sheet.getRange(2, wholeIdx + 1, numRows, 1).setValues(updatesWhole);
+  
+  return 'Backfill complete!';
+}
+
+// ── BACKUP ───────────────────────────────────────────────────
+function backupDatabase(user) {
+  requireRole(user, 'admin');
+  
+  try {
+    const ss = getSpreadsheet();
+    const driveFile = DriveApp.getFileById(ss.getId());
+    
+    // Save directly to the specific Backup folder ID provided by user
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    
+    // Create a timestamped copy
+    const now = new Date();
+    // In Thailand time +0700
+    const ts = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd_HH-mm");
+    const newName = `Backup_StockFanggie_${ts}`;
+    
+    const copy = driveFile.makeCopy(newName, backupFolder);
+    writeLog(user, 'backup', `สำรองข้อมูลสำเร็จ: ${newName}`);
+    
+    return { success: true, url: copy.getUrl() };
+  } catch (error) {
+    writeLog(user, 'backup', `ล้มเหลว: ${error.toString()}`);
+    throw new Error('ไม่สามารถสำรองข้อมูลได้: ' + error.toString());
+  }
+}
+
+// ── AUTO BACKUP (สำหรับตั้งเวลาให้ทำงานอัตโนมัติ) ───────────────
+function autoBackup() {
+  try {
+    const ss = getSpreadsheet();
+    const driveFile = DriveApp.getFileById(ss.getId());
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    
+    const now = new Date();
+    const ts = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd_HH-mm");
+    const newName = `AutoBackup_${ts}`;
+    
+    driveFile.makeCopy(newName, backupFolder);
+    
+    // บันทึก Log โดยใช้ชื่อผู้ทำเป็น System
+    const logSheet = ss.getSheetByName(SN.LOGS);
+    if (logSheet) {
+      const dateStr = Utilities.formatDate(now, "Asia/Bangkok", "dd/MM/yyyy HH:mm:ss");
+      const uuid = Utilities.getUuid();
+      logSheet.appendRow([uuid, dateStr, 'System', 'ระบบอัตโนมัติ', 'admin', 'backup', `สร้างไฟล์สำรองข้อมูลอัตโนมัติ: ${newName}`]);
+    }
+    console.log(`✅ Auto backup success: ${newName}`);
+  } catch (error) {
+    console.log(`❌ Auto backup failed: ${error.toString()}`);
+  }
+}
+
+// ── RESTORE ──────────────────────────────────────────────────
+function getBackupList(user) {
+  requireRole(user, 'admin');
+  
+  try {
+    const backupFolder = DriveApp.getFolderById('123Za8hczBSDxWX1d4wUWs34JixaHMzT3');
+    const files = backupFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+    const list = [];
+    
+    while (files.hasNext()) {
+      const file = files.next();
+      list.push({
+        id: file.getId(),
+        name: file.getName(),
+        date: file.getDateCreated().getTime(),
+        dateStr: Utilities.formatDate(file.getDateCreated(), "Asia/Bangkok", "dd/MM/yyyy HH:mm:ss"),
+        url: file.getUrl()
+      });
+    }
+    
+    // Sort by date descending (newest first)
+    list.sort((a, b) => b.date - a.date);
+    
+    // Return only top 20
+    return { success: true, backups: list.slice(0, 20) };
+  } catch (error) {
+    throw new Error('ไม่สามารถดึงรายชื่อไฟล์สำรองได้: ' + error.toString());
+  }
+}
+
+function restoreDatabase(user, fileId) {
+  requireRole(user, 'admin');
+  if (!fileId) throw new Error('ไม่พบ File ID');
+  
+  try {
+    const backupSS = SpreadsheetApp.openById(fileId);
+    const targetSS = getSpreadsheet();
+    const backupSheets = backupSS.getSheets();
+    
+    // Skip Logs sheet if you want to keep current logs, but full restore usually means full restore.
+    // We will restore everything.
+    for (let i = 0; i < backupSheets.length; i++) {
+      const bs = backupSheets[i];
+      const targetSheet = targetSS.getSheetByName(bs.getName());
+      
+      if (targetSheet) {
+        // Clear all values
+        targetSheet.clearContents();
+        const data = bs.getDataRange().getValues();
+        if (data.length > 0 && data[0].length > 0) {
+          targetSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+        }
+      }
+    }
+    
+    writeLog(user, 'restore', `กู้คืนข้อมูลสำเร็จจากไฟล์: ${backupSS.getName()}`);
+    return { success: true, message: 'กู้คืนข้อมูลสำเร็จเรียบร้อย' };
+  } catch (error) {
+    writeLog(user, 'restore', `กู้คืนล้มเหลว: ${error.toString()}`);
+    throw new Error('ไม่สามารถกู้คืนข้อมูลได้: ' + error.toString());
+  }
+}

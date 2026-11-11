@@ -50,6 +50,16 @@ const SN = {
   EMPLOYEE_FINANCE: 'EmployeeFinance',
 };
 
+// [FIX] คำสั่งที่แก้ไขสต็อก/ธุรกรรม — จะถูกล็อกให้ทำทีละรายการ
+// (cancelConsign มี lock ภายในฟังก์ชันอยู่แล้ว จึงไม่ใส่ซ้ำ)
+const WRITE_ACTIONS = [
+  'receiveGoods','updateReceiveHistory','adjustStock','adjustCentralStockBatch',
+  'requestTransfer','confirmPicking','rejectPicking','deletePicking',
+  'transferToEmployee','moveStock','consignFromEmployee','doBilling',
+  'moveToShop','swapShopStock','returnFromShop','saveStockCheck',
+  'deleteWarehouse','rebuildCentralStock','restoreDatabase'
+];
+
 // ── UTILS ───────────────────────────────────────────────────
 function _safeTime(val) {
   if (!val) return '';
@@ -93,6 +103,13 @@ function handleRequest(e) {
       if (e.postData) body = JSON.parse(e.postData.contents);
     } catch(ex) {}
 
+    // 🔒 [FIX] ล็อกทุกคำสั่งที่เขียนข้อมูลสต็อก ป้องกันกดซ้ำ/บันทึกพร้อมกันแล้วแถวทับกันจนยอดหาย
+    const needLock = WRITE_ACTIONS.indexOf(action) !== -1;
+    const lock = needLock ? LockService.getScriptLock() : null;
+    if (lock && !lock.tryLock(30000)) {
+      throw new Error('ระบบกำลังบันทึกรายการอื่นอยู่ กรุณาลองใหม่อีกครั้ง');
+    }
+    try {
     switch (action) {
       // Transfer / Picking
       case 'requestTransfer': result = requestTransfer(user, body); break;
@@ -211,7 +228,14 @@ function handleRequest(e) {
         result = restoreDatabase(user, rData.fileId); 
         break;
 
+      // [FIX] เครื่องมือตรวจสอบ/กู้ยอดคลังกลาง (admin)
+      case 'diagCentralStock': result = diagCentralStock(user); break;
+      case 'rebuildCentralStock': result = rebuildCentralStock(user, body); break;
+
       default: result = { error: 'Unknown action: ' + action };
+    }
+    } finally {
+      if (lock) { SpreadsheetApp.flush(); lock.releaseLock(); }
     }
 
     output.setContent(JSON.stringify(result));
@@ -254,14 +278,22 @@ function getSheet(sheetName) {
     }
   } else {
     // Sync headers if columns were added
+    // [FIX] เดิมเขียนทับหัวคอลัมน์ทั้งแถวทุกครั้งที่ไม่ตรง (และทำงานทุก request
+    // เพราะ Transactions มีคอลัมน์เกิน) — เสี่ยงทำให้หัวคอลัมน์เลื่อนไม่ตรงกับข้อมูล
+    // ตอนนี้: เพิ่มเฉพาะคอลัมน์ที่ "ขาด" ต่อท้าย ไม่แตะหัวคอลัมน์เดิม
     const expected = getHeaders(sheetName);
     if (expected.length > 0) {
-      const currentRange = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1));
-      const current = currentRange.getValues()[0];
-      // Sync if length differs OR any header value differs
-      if (current.length !== expected.length || current.some((v, i) => v !== expected[i])) {
-        sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
-        sheet.getRange(1, 1, 1, expected.length).setFontWeight('bold');
+      const lastCol = Math.max(sheet.getLastColumn(), 1);
+      const current = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
+      const isEmptyHeader = current.every(h => h === '');
+      if (isEmptyHeader) {
+        sheet.getRange(1, 1, 1, expected.length).setValues([expected]).setFontWeight('bold');
+      } else {
+        const missing = expected.filter(h => current.indexOf(h) === -1);
+        if (missing.length) {
+          const startCol = lastCol + 1;
+          sheet.getRange(1, startCol, 1, missing.length).setValues([missing]).setFontWeight('bold');
+        }
       }
     }
   }
@@ -1100,9 +1132,16 @@ function getStockChecks(warehouseId, startDate, endDate) {
 }
 
 function updateCentralStock(warehouseId, productId, deltaQty, unit, expiryDate) {
+  deltaQty = Number(deltaQty);
+  if (!warehouseId || !productId || isNaN(deltaQty)) {
+    throw new Error(`updateCentralStock: ข้อมูลไม่ครบ (wh=${warehouseId}, pid=${productId}, qty=${deltaQty})`);
+  }
   const sheet = getSheet(SN.CENTRAL_STOCK);
   const data = sheet.getDataRange().getValues();
-  const hdr = data[0];
+  const hdr = data[0].map(h => String(h).trim());
+  ['warehouseId','productId','expiryDate','qty','lastUpdated'].forEach(h => {
+    if (hdr.indexOf(h) === -1) throw new Error(`ชีต ${SN.CENTRAL_STOCK} ไม่มีคอลัมน์ "${h}" — ตรวจหัวตารางแถวที่ 1`);
+  });
   const whIdx = hdr.indexOf('warehouseId');
   const pidIdx = hdr.indexOf('productId');
   const expIdx = hdr.indexOf('expiryDate');
@@ -1132,11 +1171,22 @@ function updateCentralStock(warehouseId, productId, deltaQty, unit, expiryDate) 
     }
   }
 
+  if (!found && deltaQty < 0) {
+    throw new Error(`สต็อกส่วนกลางไม่พอ: ไม่พบสินค้า ${productId} (ล็อต ${expVal || '-'}) ในคลัง ${warehouseId}`);
+  }
   if (!found && deltaQty > 0) {
     appendRow(sheet, {
       productId, warehouseId, expiryDate: expVal,
       qty: deltaQty, unit: unit || '', lastUpdated: new Date().toISOString()
     });
+    // [FIX] ตรวจซ้ำว่าเขียนลงชีตจริง — ถ้าหายจะ error ทันที ไม่ปล่อยให้ "สำเร็จ" ทั้งที่ยอดไม่เข้า
+    SpreadsheetApp.flush();
+    const lr = sheet.getLastRow();
+    const check = sheet.getRange(lr, 1, 1, hdr.length).getValues()[0];
+    if (String(check[pidIdx]).trim() !== String(productId).trim() ||
+        String(check[whIdx]).trim() !== String(warehouseId).trim()) {
+      throw new Error(`บันทึกสต็อกคลังกลางไม่สำเร็จ (ชีต ${SN.CENTRAL_STOCK} แถว ${lr}) — ตรวจชีต/ตัวกรอง/การป้องกันชีต`);
+    }
   }
 }
 
@@ -1199,6 +1249,12 @@ function receiveGoods(user, data) {
   requireRole(user, 'admin', 'stock');
   if (!data.warehouseId || !data.items?.length) throw new Error('ข้อมูลไม่ครบ');
   const ts = data.date || new Date().toISOString();
+
+  // [FIX] ตรวจทุกรายการก่อนเริ่มเขียน ป้องกันบันทึกครึ่งๆ กลางๆ
+  data.items.forEach((item, i) => {
+    if (!item.productId) throw new Error(`รายการที่ ${i + 1}: ไม่มีรหัสสินค้า`);
+    if (!(Number(item.qty) > 0)) throw new Error(`รายการที่ ${i + 1}: จำนวนต้องมากกว่า 0`);
+  });
 
   data.items.forEach(item => {
     updateCentralStock(data.warehouseId, item.productId, Number(item.qty), item.unit, item.expiryDate);
@@ -1529,7 +1585,7 @@ function adjustStock(user, data) {
   const products   = sheetData(getSheet(SN.PRODUCTS));
   const whName  = (warehouses.find(w => w.id === warehouseId) || {}).name || warehouseId;
   const pName   = (products.find(p => p.id === productId)     || {}).name || productId;
-  writeLog(user, 'adjust', `ปรับสต็อก [${whName}] : ${pName} ${qty > 0 ? '+' : ''}${qty}${note ? ' (${note})' : ''}`);
+  writeLog(user, 'adjust', `ปรับสต็อก [${whName}] : ${pName} ${qty > 0 ? '+' : ''}${qty}${note ? ` (${note})` : ''}`);
   return { success: true };
 }
 
@@ -2418,7 +2474,7 @@ function updateReceiveHistory(user, data) {
   }
 
   if (rowsToDelete.length === 0) {
-    const searchVal = forceDocNo ? `DocNo=${forceDocNo}` : (forcePoNo ? `PO=${forcePoNo}` : `Key=${originalKey}`);
+    const searchVal = `Key=${originalKey}`;
     throw new Error(`ไม่พบข้อมูลประวัติเดิมเพื่อแก้ไข | ค้นหาจาก: [${searchVal}] | ตัวอย่างใน Sheet: ${debugKeys.join(', ')}`);
   }
 
@@ -3359,4 +3415,92 @@ function restoreDatabase(user, fileId) {
     writeLog(user, 'restore', `กู้คืนล้มเหลว: ${error.toString()}`);
     throw new Error('ไม่สามารถกู้คืนข้อมูลได้: ' + error.toString());
   }
+}
+
+
+// ============================================================
+// [FIX] เครื่องมือตรวจสอบและกู้ยอดคลังกลาง (CentralStock)
+// ============================================================
+
+/** อ่านอย่างเดียว: บอกว่า backend กำลังใช้ Spreadsheet/ชีตไหน */
+function diagCentralStock(user) {
+  requireRole(user, 'admin');
+  const ss = getSpreadsheet();
+  const sh = ss.getSheetByName(SN.CENTRAL_STOCK);
+  const tx = ss.getSheetByName(SN.TRANSACTIONS);
+  return {
+    spreadsheetId: ss.getId(),
+    spreadsheetName: ss.getName(),
+    configuredId: SPREADSHEET_ID,
+    centralSheet: sh ? {
+      name: sh.getName(), sheetId: sh.getSheetId(),
+      lastRow: sh.getLastRow(), lastColumn: sh.getLastColumn(),
+      headers: sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0],
+      hasFilter: !!sh.getFilter()
+    } : null,
+    transactionsLastRow: tx ? tx.getLastRow() : null,
+    sheets: ss.getSheets().map(s => s.getName())
+  };
+}
+
+/**
+ * คำนวณยอดคลังกลางใหม่จาก Transactions
+ *   body.apply !== true → แค่พรีวิว (ไม่เขียนอะไร)
+ *   body.apply === true → เขียนทับชีต CentralStock ด้วยยอดที่คำนวณได้
+ * กฎ: receive +ปลายทาง | transfer/transfer_out −ต้นทาง | movement −ต้นทาง +ปลายทาง
+ * หมายเหตุ: adjustStock/adjustCentralStockBatch ไม่บันทึก Transaction
+ *           ถ้าเคยปรับยอดด้วยมือ ยอดที่คำนวณจะไม่รวมส่วนนั้น
+ */
+function rebuildCentralStock(user, body) {
+  requireRole(user, 'admin');
+  body = body || {};
+  const whs = sheetData(getSheet(SN.WAREHOUSES));
+  const central = {};
+  whs.filter(w => w.type === 'central').forEach(w => central[String(w.id).trim()] = true);
+
+  const map = {};
+  const add = (wh, t, sign) => {
+    wh = String(wh || '').trim();
+    if (!central[wh]) return;
+    const exp = _fmtDate(t.expiryDate);
+    const k = [String(t.productId).trim(), wh, exp].join('|');
+    if (!map[k]) map[k] = { productId: String(t.productId).trim(), warehouseId: wh, expiryDate: exp, qty: 0, unit: t.unit || '' };
+    map[k].qty += sign * (Number(t.qty) || 0);
+    if (!map[k].unit && t.unit) map[k].unit = t.unit;
+  };
+
+  sheetData(getSheet(SN.TRANSACTIONS)).forEach(t => {
+    const type = String(t.type || '').trim();
+    if (type === 'receive') add(t.toWarehouseId, t, +1);
+    else if (type === 'transfer' || type === 'transfer_out') add(t.fromWarehouseId, t, -1);
+    else if (type === 'movement') { add(t.fromWarehouseId, t, -1); add(t.toWarehouseId, t, +1); }
+  });
+
+  const rows = Object.values(map).filter(r => r.qty !== 0);
+  const negatives = rows.filter(r => r.qty < 0);
+  const current = sheetData(getSheet(SN.CENTRAL_STOCK)).filter(r => r.productId);
+
+  if (body.apply !== true) {
+    return { preview: true, rows, totalQty: rows.reduce((a, r) => a + r.qty, 0), negatives, currentRows: current.length };
+  }
+  if (negatives.length) throw new Error('มียอดติดลบ ' + negatives.length + ' รายการ — ตรวจ Transactions ก่อน');
+  if (current.length && body.overwrite !== true) {
+    throw new Error('CentralStock มีข้อมูลอยู่ ' + current.length + ' แถว — ส่ง overwrite:true ถ้าต้องการเขียนทับ');
+  }
+
+  const sh = getSheet(SN.CENTRAL_STOCK);
+  const hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(h => String(h).trim());
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, hdr.length).clearContent();
+  const now = new Date().toISOString();
+  if (rows.length) {
+    const values = rows.map(r => hdr.map(h => {
+      if (h === 'lastUpdated') return now;
+      return r[h] !== undefined ? r[h] : '';
+    }));
+    sh.getRange(2, 1, values.length, hdr.length).setValues(values);
+  }
+  SpreadsheetApp.flush();
+  const after = sheetData(sh).filter(r => r.productId).length;
+  writeLog(user, 'rebuild_central', `คำนวณยอดคลังกลางใหม่จาก Transactions: ${rows.length} แถว`);
+  return { success: true, written: rows.length, verifiedRows: after };
 }
